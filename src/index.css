@@ -1,0 +1,207 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Car Wash Management System Design System */
+
+@layer base {
+  :root {
+    /* Professional business color palette */
+    --background: 0 0% 100%;
+    --foreground: 215 28% 17%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 215 28% 17%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 28% 17%;
+
+    /* Primary blue - professional and trustworthy */
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 217 91% 55%;
+
+    /* Secondary gray - clean and modern */
+    --secondary: 210 17% 95%;
+    --secondary-foreground: 215 28% 17%;
+
+    /* Muted backgrounds */
+    --muted: 214 32% 91%;
+    --muted-foreground: 215 16% 47%;
+
+    /* Accent colors */
+    --accent: 210 17% 95%;
+    --accent-foreground: 215 28% 17%;
+
+    /* Success green for positive metrics */
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+    --success-light: 142 76% 96%;
+
+    /* Warning orange for attention */
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --warning-light: 38 92% 96%;
+
+    /* Destructive red */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Borders and inputs */
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 217 91% 60%;
+
+    /* Financial highlight - warm gold */
+    --financial: 45 93% 47%;
+    --financial-foreground: 0 0% 100%;
+    --financial-light: 45 93% 96%;
+
+    /* Radius */
+    --radius: 0.75rem;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* Unique variables from index (2).css not present above */
+    --foreground-alt: 222.2 84% 4.9%;
+    --primary-alt: 222.2 47.4% 11.2%;
+    --primary-foreground-alt: 210 40% 98%;
+    --secondary-alt: 210 40% 96.1%;
+    --secondary-foreground-alt: 222.2 47.4% 11.2%;
+    --muted-alt: 210 40% 96.1%;
+    --muted-foreground-alt: 215.4 16.3% 46.9%;
+    --accent-alt: 210 40% 96.1%;
+    --accent-foreground-alt: 222.2 47.4% 11.2%;
+    --destructive-alt: 0 84.2% 60.2%;
+    --destructive-foreground-alt: 210 40% 98%;
+    --border-alt: 214.3 31.8% 91.4%;
+    --input-alt: 214.3 31.8% 91.4%;
+    --ring-alt: 222.2 84% 4.9%;
+    --radius-alt: 0.5rem;
+  }
+
+  .dark {
+    --background: 215 28% 6%;
+    --foreground: 0 0% 95%;
+
+    --card: 215 28% 8%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 215 28% 8%;
+    --popover-foreground: 0 0% 95%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 217 91% 55%;
+
+    --secondary: 215 28% 12%;
+    --secondary-foreground: 0 0% 95%;
+
+    --muted: 215 28% 12%;
+    --muted-foreground: 215 16% 65%;
+
+    --accent: 215 28% 12%;
+    --accent-foreground: 0 0% 95%;
+
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+    --success-light: 142 76% 8%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --warning-light: 38 92% 8%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 215 28% 15%;
+    --input: 215 28% 15%;
+    --ring: 217 91% 60%;
+
+    --financial: 45 93% 47%;
+    --financial-foreground: 0 0% 100%;
+    --financial-light: 45 93% 8%;
+
+    --sidebar-background: 215 28% 8%;
+    --sidebar-foreground: 0 0% 95%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 215 28% 12%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 215 28% 15%;
+    --sidebar-ring: 217 91% 60%;
+
+    /* Unique dark variables from index (2).css not present above */
+    --background-alt: 222.2 84% 4.9%;
+    --foreground-alt: 210 40% 98%;
+    --card-alt: 222.2 84% 4.9%;
+    --card-foreground-alt: 210 40% 98%;
+    --popover-alt: 222.2 84% 4.9%;
+    --popover-foreground-alt: 210 40% 98%;
+    --primary-alt: 210 40% 98%;
+    --primary-foreground-alt: 222.2 47.4% 11.2%;
+    --secondary-alt: 217.2 32.6% 17.5%;
+    --secondary-foreground-alt: 210 40% 98%;
+    --muted-alt: 217.2 32.6% 17.5%;
+    --muted-foreground-alt: 215 20.2% 65.1%;
+    --accent-alt: 217.2 32.6% 17.5%;
+    --accent-foreground-alt: 210 40% 98%;
+    --destructive-alt: 0 62.8% 30.6%;
+    --destructive-foreground-alt: 210 40% 98%;
+    --border-alt: 217.2 32.6% 17.5%;
+    --input-alt: 217.2 32.6% 17.5%;
+    --ring-alt: 212.7 26.8% 83.9%;
+    --sidebar-background-alt: 240 5.9% 10%;
+    --sidebar-foreground-alt: 240 4.8% 95.9%;
+    --sidebar-primary-alt: 224.3 76.3% 48%;
+    --sidebar-primary-foreground-alt: 0 0% 100%;
+    --sidebar-accent-alt: 240 3.7% 15.9%;
+    --sidebar-accent-foreground-alt: 240 4.8% 95.9%;
+    --sidebar-border-alt: 240 3.7% 15.9%;
+    --sidebar-ring-alt: 217.2 91.2% 59.8%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-inter;
+  }
+}
+
+@layer components {
+  /* Custom component styles using design system tokens */
+  .metric-card {
+    @apply bg-card border border-border rounded-xl p-6 shadow-sm hover:shadow-md transition-all duration-200;
+  }
+  
+  .metric-card-financial {
+    @apply bg-gradient-to-br from-financial-light to-card border-financial/20;
+  }
+  
+  .metric-card-success {
+    @apply bg-gradient-to-br from-success-light to-card border-success/20;
+  }
+  
+  .data-table {
+    @apply bg-card border border-border rounded-lg overflow-hidden;
+  }
+  
+  .nav-item-active {
+    @apply bg-primary text-primary-foreground;
+  }
+  
+  .nav-item-inactive {
+    @apply text-muted-foreground hover:text-foreground hover:bg-accent;
+  }
+}
