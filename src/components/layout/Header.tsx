@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MapPin, User, LogOut, ChevronDown } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useAuth } from "@/contexts/AuthContext";
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/lib/supabaseClient";
 
 const locations = [
   { id: "1", name: "Main Branch - Downtown", address: "123 Main St" },
@@ -29,8 +30,27 @@ interface HeaderProps {
 export function Header({ selectedLocation, onLocationChange }: HeaderProps) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const currentLocation = locations.find(loc => loc.id === selectedLocation) || locations[0];
+  const [managerLocation, setManagerLocation] = useState<{ name: string; address: string } | null>(null);
   const isManager = user?.role === 'manager';
+  const currentLocation = locations.find(loc => loc.id === selectedLocation) || locations[0];
+
+  useEffect(() => {
+    const fetchLocation = async () => {
+      if (isManager && user?.assigned_location) {
+        const { data, error } = await supabase
+          .from('locations')
+          .select('name, address')
+          .eq('id', user.assigned_location)
+          .single();
+        if (!error && data) {
+          setManagerLocation({ name: data.name, address: data.address });
+        } else {
+          setManagerLocation(null);
+        }
+      }
+    };
+    fetchLocation();
+  }, [isManager, user?.assigned_location]);
 
   const handleLogout = async () => {
     await logout();
@@ -44,8 +64,8 @@ export function Header({ selectedLocation, onLocationChange }: HeaderProps) {
           <SidebarTrigger className="h-8 w-8" />
           {isManager ? (
             <div className="flex flex-col items-start min-w-64 border rounded px-4 py-2 bg-white">
-              <span className="font-medium text-sm">{currentLocation.name}</span>
-              <span className="text-xs text-muted-foreground">{currentLocation.address}</span>
+              <span className="font-medium text-sm">{managerLocation ? managerLocation.name : 'Loading...'}</span>
+              <span className="text-xs text-muted-foreground">{managerLocation ? managerLocation.address : ''}</span>
             </div>
           ) : (
             <DropdownMenu>

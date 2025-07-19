@@ -115,28 +115,42 @@ const DashboardManager = () => {
 
           <Card>
             <CardHeader>
-              <CardTitle>System Status</CardTitle>
+              <CardTitle>Recent Vehicle Entries</CardTitle>
               <CardDescription>
-                Current system health and performance
+                Latest vehicles that entered your facility
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Camera System</span>
-                  <Badge className="bg-green-100 text-green-800">Online</Badge>
+                <div className="flex items-center space-x-4">
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <Car className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">ABC-123</p>
+                    <p className="text-xs text-gray-500">2 minutes ago</p>
+                  </div>
+                  <Badge variant="secondary">Entry</Badge>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Database</span>
-                  <Badge className="bg-green-100 text-green-800">Healthy</Badge>
+                <div className="flex items-center space-x-4">
+                  <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                    <Car className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">XYZ-789</p>
+                    <p className="text-xs text-gray-500">5 minutes ago</p>
+                  </div>
+                  <Badge variant="secondary">Entry</Badge>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">AI Processing</span>
-                  <Badge className="bg-green-100 text-green-800">Active</Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Storage</span>
-                  <Badge className="bg-yellow-100 text-yellow-800">75% Full</Badge>
+                <div className="flex items-center space-x-4">
+                  <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                    <Car className="w-5 h-5 text-orange-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">DEF-456</p>
+                    <p className="text-xs text-gray-500">8 minutes ago</p>
+                  </div>
+                  <Badge variant="secondary">Entry</Badge>
                 </div>
               </div>
             </CardContent>

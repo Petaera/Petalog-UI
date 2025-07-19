@@ -1,5 +1,6 @@
 
 import React, { createContext, useContext, useState } from 'react';
+import { supabase } from '../lib/supabaseClient';
 
 interface User {
   id: string;
@@ -32,19 +33,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, password: string) => {
     setLoading(true);
-    // Mock login: accept any credentials, assign owner role
-    setUser({ id: '1', email, role: 'owner' });
-    setLoading(false);
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+      if (authError || !authData.user) throw authError || new Error('No user returned');
+      // Fetch user data from users table
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', authData.user.id)
+        .single();
+      if (userError || !userData) throw userError || new Error('User not found in users table');
+      setUser({
+        id: userData.id,
+        email: userData.email,
+        role: userData.role,
+        assigned_location: userData.assigned_location,
+      });
+    } catch (error) {
+      setUser(null);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
   };
 
   const signup = async (email: string, password: string, role: string, location?: string) => {
     setLoading(true);
-    // Mock signup: accept any credentials, assign given role
-    setUser({ id: '1', email, role, assigned_location: location });
-    setLoading(false);
+    try {
+      // Create user in Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({ email, password });
+      if (authError || !authData.user) throw authError || new Error('No user returned');
+      // Insert into users table
+      const { error: userError } = await supabase.from('users').insert([
+        {
+          id: authData.user.id,
+          email,
+          role,
+          assigned_location: role === 'manager' ? location : null,
+        },
+      ]);
+      if (userError) throw userError;
+      setUser({
+        id: authData.user.id,
+        email,
+        role,
+        assigned_location: role === 'manager' ? location : undefined,
+      });
+    } catch (error) {
+      setUser(null);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
   };
 
   const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
   };
 

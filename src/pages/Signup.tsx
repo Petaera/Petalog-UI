@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -9,12 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Car, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
-
-const locations = [
-  { id: "1", name: "Main Branch - Downtown" },
-  { id: "2", name: "North Branch" },
-  { id: "3", name: "West Side Center" },
-];
+import { supabase } from '../lib/supabaseClient';
 
 export default function Signup() {
   const [email, setEmail] = useState('');
@@ -23,8 +18,23 @@ export default function Signup() {
   const [role, setRole] = useState<'owner' | 'manager' | ''>('');
   const [assignedLocation, setAssignedLocation] = useState('');
   const [loading, setLoading] = useState(false);
+  const [locations, setLocations] = useState<{ id: string; name: string }[]>([]);
   const { signup } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (role === 'manager') {
+      const fetchLocations = async () => {
+        const { data, error } = await supabase.from('locations').select('id, name');
+        if (!error && data) {
+          setLocations(data);
+        } else {
+          setLocations([]);
+        }
+      };
+      fetchLocations();
+    }
+  }, [role]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
