@@ -1,7 +1,9 @@
+import React from "react";
 import { useState } from "react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import { Header } from "./Header";
+import Dashboard from '@/pages/Dashboard';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -22,7 +24,9 @@ export function Layout({ children }: LayoutProps) {
           />
           
           <main className="flex-1 overflow-auto">
-            {children}
+            {React.isValidElement(children) && children.type === Dashboard
+              ? React.cloneElement(children, { selectedLocation })
+              : children}
           </main>
         </div>
       </div>

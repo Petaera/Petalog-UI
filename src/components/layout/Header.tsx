@@ -16,12 +16,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/lib/supabaseClient";
 
-const locations = [
-  { id: "1", name: "Main Branch - Downtown", address: "123 Main St" },
-  { id: "2", name: "North Branch", address: "456 North Ave" },
-  { id: "3", name: "West Side Center", address: "789 West Blvd" },
-];
-
 interface HeaderProps {
   selectedLocation: string;
   onLocationChange: (locationId: string) => void;
@@ -32,6 +26,24 @@ export function Header({ selectedLocation, onLocationChange }: HeaderProps) {
   const navigate = useNavigate();
   const [managerLocation, setManagerLocation] = useState<{ name: string; address: string } | null>(null);
   const isManager = user?.role === 'manager';
+
+  // Move these inside the component
+  const [locations, setLocations] = useState<{ id: string; name: string; address: string }[]>([]);
+  useEffect(() => {
+    // Only fetch locations for owner
+    if (!isManager) {
+      const fetchLocations = async () => {
+        const { data, error } = await supabase.from('locations').select('id, name, address');
+        if (!error && data) {
+          setLocations(data);
+        } else {
+          setLocations([]);
+        }
+      };
+      fetchLocations();
+    }
+  }, [isManager]);
+
   const currentLocation = locations.find(loc => loc.id === selectedLocation) || locations[0];
 
   useEffect(() => {
@@ -73,8 +85,8 @@ export function Header({ selectedLocation, onLocationChange }: HeaderProps) {
                 <Button variant="outline" className="flex items-center gap-2 min-w-64">
                   <MapPin className="h-4 w-4 text-primary" />
                   <div className="flex flex-col items-start">
-                    <span className="font-medium text-sm">{currentLocation.name}</span>
-                    <span className="text-xs text-muted-foreground">{currentLocation.address}</span>
+                    <span className="font-medium text-sm">{currentLocation ? currentLocation.name : 'Select Location'}</span>
+                    <span className="text-xs text-muted-foreground">{currentLocation ? currentLocation.address : ''}</span>
                   </div>
                   <ChevronDown className="h-4 w-4 ml-auto" />
                 </Button>

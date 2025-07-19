@@ -1,10 +1,44 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Camera, Clock, Database, Gauge, Gift, Download, Zap, Eye, BarChart3, Car, Truck, Building, Warehouse, Shield, Users, Timer, FileText } from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from '@/contexts/AuthContext';
 
-const Dashboard = () => {
+// Accept selectedLocation as a prop
+const Dashboard = ({ selectedLocation }: { selectedLocation: string }) => {
+  const { user } = useAuth();
+  const [manualLogs, setManualLogs] = useState<any[]>([]);
+  const [autoLogs, setAutoLogs] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchLogs = async () => {
+      let manQuery = supabase
+        .from('logs-man')
+        .select('id, entry_time, location_id, vehicle_id, vehicles(number_plate)')
+        .order('entry_time', { ascending: false })
+        .limit(3);
+      let autoQuery = supabase
+        .from('logs-auto')
+        .select('id, entry_time, location_id, vehicle_id, vehicles(number_plate)')
+        .order('entry_time', { ascending: false })
+        .limit(3);
+      if (user?.role === 'manager' && user?.assigned_location) {
+        manQuery = manQuery.eq('location_id', user.assigned_location);
+        autoQuery = autoQuery.eq('location_id', user.assigned_location);
+      } else if (user?.role === 'owner' && selectedLocation) {
+        manQuery = manQuery.eq('location_id', selectedLocation);
+        autoQuery = autoQuery.eq('location_id', selectedLocation);
+      }
+      const { data: manData } = await manQuery;
+      setManualLogs(manData || []);
+      const { data: autoData } = await autoQuery;
+      setAutoLogs(autoData || []);
+    };
+    fetchLogs();
+  }, [user?.assigned_location, user?.role, selectedLocation]);
+
   return (
     <Layout>
       <div className="p-6">
@@ -72,72 +106,53 @@ const Dashboard = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Recent Vehicle Entries</CardTitle>
+              <CardTitle>Manual Logged Entries</CardTitle>
               <CardDescription>
-                Latest vehicles that entered your facility
+                Vehicles entered manually by staff
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="flex items-center space-x-4">
-                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <Car className="w-5 h-5 text-blue-600" />
+                {manualLogs.length === 0 && <div className="text-muted-foreground text-sm">No manual entries found.</div>}
+                {manualLogs.map((entry, idx) => (
+                  <div key={idx} className="flex items-center space-x-4">
+                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <Car className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{entry.vehicles?.number_plate || 'Unknown'}</p>
+                      <p className="text-xs text-gray-500">{new Date(entry.entry_time).toLocaleString()}</p>
+                      {/* Optionally show location name here if needed */}
+                    </div>
+                    <Badge variant="secondary">Entry</Badge>
                   </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">ABC-123</p>
-                    <p className="text-xs text-gray-500">2 minutes ago</p>
-                  </div>
-                  <Badge variant="secondary">Entry</Badge>
-                </div>
-                <div className="flex items-center space-x-4">
-                  <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                    <Car className="w-5 h-5 text-green-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">XYZ-789</p>
-                    <p className="text-xs text-gray-500">5 minutes ago</p>
-                  </div>
-                  <Badge variant="secondary">Entry</Badge>
-                </div>
-                <div className="flex items-center space-x-4">
-                  <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-                    <Car className="w-5 h-5 text-orange-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">DEF-456</p>
-                    <p className="text-xs text-gray-500">8 minutes ago</p>
-                  </div>
-                  <Badge variant="secondary">Entry</Badge>
-                </div>
+                ))}
               </div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>System Status</CardTitle>
+              <CardTitle>Auto Logged Entries</CardTitle>
               <CardDescription>
-                Current system health and performance
+                Vehicles automatically logged by the system
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Camera System</span>
-                  <Badge className="bg-green-100 text-green-800">Online</Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Database</span>
-                  <Badge className="bg-green-100 text-green-800">Healthy</Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">AI Processing</span>
-                  <Badge className="bg-green-100 text-green-800">Active</Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Storage</span>
-                  <Badge className="bg-yellow-100 text-yellow-800">75% Full</Badge>
-                </div>
+                {autoLogs.length === 0 && <div className="text-muted-foreground text-sm">No auto entries found.</div>}
+                {autoLogs.map((entry, idx) => (
+                  <div key={idx} className="flex items-center space-x-4">
+                    <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                      <Car className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{entry.vehicles?.number_plate || 'Unknown'}</p>
+                      <p className="text-xs text-gray-500">{new Date(entry.entry_time).toLocaleString()}</p>
+                    </div>
+                    <Badge variant="secondary">Entry</Badge>
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>
