@@ -30,10 +30,11 @@ export function Header({ selectedLocation, onLocationChange }: HeaderProps) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const currentLocation = locations.find(loc => loc.id === selectedLocation) || locations[0];
+  const isManager = user?.role === 'manager';
 
-  const handleLogout = () => {
-    logout();
-    navigate('/');
+  const handleLogout = async () => {
+    await logout();
+    window.location.href = '/'; // Full reload to ensure session is cleared
   };
 
   return (
@@ -41,34 +42,39 @@ export function Header({ selectedLocation, onLocationChange }: HeaderProps) {
       <div className="flex h-full items-center justify-between px-4">
         <div className="flex items-center gap-4">
           <SidebarTrigger className="h-8 w-8" />
-          
-          {/* Location Selector */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="flex items-center gap-2 min-w-64">
-                <MapPin className="h-4 w-4 text-primary" />
-                <div className="flex flex-col items-start">
-                  <span className="font-medium text-sm">{currentLocation.name}</span>
-                  <span className="text-xs text-muted-foreground">{currentLocation.address}</span>
-                </div>
-                <ChevronDown className="h-4 w-4 ml-auto" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-64">
-              <DropdownMenuLabel>Select Location</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {locations.map((location) => (
-                <DropdownMenuItem
-                  key={location.id}
-                  onClick={() => onLocationChange(location.id)}
-                  className="flex flex-col items-start p-3"
-                >
-                  <span className="font-medium">{location.name}</span>
-                  <span className="text-xs text-muted-foreground">{location.address}</span>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {isManager ? (
+            <div className="flex flex-col items-start min-w-64 border rounded px-4 py-2 bg-white">
+              <span className="font-medium text-sm">{currentLocation.name}</span>
+              <span className="text-xs text-muted-foreground">{currentLocation.address}</span>
+            </div>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="flex items-center gap-2 min-w-64">
+                  <MapPin className="h-4 w-4 text-primary" />
+                  <div className="flex flex-col items-start">
+                    <span className="font-medium text-sm">{currentLocation.name}</span>
+                    <span className="text-xs text-muted-foreground">{currentLocation.address}</span>
+                  </div>
+                  <ChevronDown className="h-4 w-4 ml-auto" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-64">
+                <DropdownMenuLabel>Select Location</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {locations.map((location) => (
+                  <DropdownMenuItem
+                    key={location.id}
+                    onClick={() => onLocationChange(location.id)}
+                    className="flex flex-col items-start p-3"
+                  >
+                    <span className="font-medium">{location.name}</span>
+                    <span className="text-xs text-muted-foreground">{location.address}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
 
         {/* User Profile */}

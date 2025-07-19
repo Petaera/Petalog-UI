@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -13,29 +13,27 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const navigate = useNavigate();
+
+  // Redirect after login
+  useEffect(() => {
+    if (user) {
+      if (user.role === 'owner') navigate('/dashboard');
+      else if (user.role === 'manager') navigate('/manager-portal');
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!email || !password) {
       toast.error('Please fill in all fields');
       return;
     }
-
+    setLoading(true);
     try {
-      setLoading(true);
       await login(email, password);
-      
-      // Role-based redirection will be handled by the app router
-      const userData = JSON.parse(localStorage.getItem('user') || '{}');
-      if (userData.role === 'owner') {
-        navigate('/dashboard');
-      } else if (userData.role === 'manager') {
-        navigate('/manager-portal');
-      }
-      
+      // Do not redirect here!
       toast.success('Login successful!');
     } catch (error) {
       toast.error('Login failed. Please check your credentials.');

@@ -12,7 +12,7 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 
 // Owner pages
-import Index from "./pages/Index";
+import Index from "./pages/Index.tsx";
 import Dashboard from "./pages/Dashboard";
 import AutomaticLogs from "./pages/AutomaticLogs";
 import ManualLogs from "./pages/ManualLogs";
@@ -25,6 +25,7 @@ import OwnerEntry from "./pages/OwnerEntry";
 
 // Manager pages
 import ManagerPortal from "./pages/ManagerPortal";
+import DashboardManager from "./pages/DashboardManager";
 
 import NotFound from "./pages/NotFound";
 
@@ -48,7 +49,7 @@ const App = () => (
               path="/manager-portal" 
               element={
                 <ProtectedRoute requiredRole="manager">
-                  <ManagerPortal />
+                  <DashboardManager />
                 </ProtectedRoute>
               } 
             />
