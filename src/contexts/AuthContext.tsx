@@ -1,6 +1,5 @@
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import React, { createContext, useContext, useState } from 'react';
 
 interface User {
   id: string;
@@ -13,7 +12,7 @@ interface AuthContextType {
   user: User | null;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, role: string, location?: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   loading: boolean;
 }
 
@@ -29,77 +28,23 @@ export const useAuth = () => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  // Helper to fetch user profile from users table
-  const fetchUserProfile = async (userId: string, email: string) => {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', userId)
-      .single();
-    if (data) {
-      setUser(data as User);
-    } else {
-      // fallback: set user with just id/email, role unknown
-      setUser({ id: userId, email, role: 'unknown' });
-    }
-  };
-
-  useEffect(() => {
-    // Listen for auth state changes
-    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        await fetchUserProfile(session.user.id, session.user.email || '');
-      } else {
-        setUser(null);
-      }
-    });
-    // Check initial session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        await fetchUserProfile(session.user.id, session.user.email || '');
-      }
-      setLoading(false);
-    });
-    return () => {
-      listener.subscription.unsubscribe();
-    };
-  }, []);
+  const [loading, setLoading] = useState(false);
 
   const login = async (email: string, password: string) => {
     setLoading(true);
-    const { error, data } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    // After login, fetch user profile
-    if (data.user) {
-      await fetchUserProfile(data.user.id, data.user.email || '');
-    }
+    // Mock login: accept any credentials, assign owner role
+    setUser({ id: '1', email, role: 'owner' });
     setLoading(false);
   };
 
   const signup = async (email: string, password: string, role: string, location?: string) => {
     setLoading(true);
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) throw error;
-    // Insert user profile into users table
-    if (data.user) {
-      await supabase.from('users').insert([
-        {
-          id: data.user.id,
-          email,
-          role,
-          assigned_location: location || null,
-        },
-      ]);
-      await fetchUserProfile(data.user.id, email);
-    }
+    // Mock signup: accept any credentials, assign given role
+    setUser({ id: '1', email, role, assigned_location: location });
     setLoading(false);
   };
 
   const logout = async () => {
-    console.log('Logging out...');
-    await supabase.auth.signOut();
     setUser(null);
   };
 
