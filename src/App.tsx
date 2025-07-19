@@ -13,6 +13,7 @@ import Signup from "./pages/Signup";
 
 // Owner pages
 import Index from "./pages/Index";
+import Dashboard from "./pages/Dashboard";
 import AutomaticLogs from "./pages/AutomaticLogs";
 import ManualLogs from "./pages/ManualLogs";
 import Comparison from "./pages/Comparison";
@@ -38,6 +39,7 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             {/* Public routes */}
+            <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             
@@ -53,10 +55,10 @@ const App = () => (
             
             {/* Owner routes */}
             <Route 
-              path="/" 
+              path="/dashboard" 
               element={
                 <ProtectedRoute requiredRole="owner">
-                  <Index />
+                  <Dashboard />
                 </ProtectedRoute>
               } 
             />

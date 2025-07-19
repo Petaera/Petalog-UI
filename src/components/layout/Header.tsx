@@ -3,6 +3,7 @@ import { useState } from "react";
 import { MapPin, User, LogOut, ChevronDown } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,7 +28,13 @@ interface HeaderProps {
 
 export function Header({ selectedLocation, onLocationChange }: HeaderProps) {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const currentLocation = locations.find(loc => loc.id === selectedLocation) || locations[0];
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
 
   return (
     <header className="h-16 border-b bg-card/50 backdrop-blur-sm">
@@ -88,7 +95,7 @@ export function Header({ selectedLocation, onLocationChange }: HeaderProps) {
                 Profile Settings
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={logout} className="text-destructive">
+              <DropdownMenuItem onClick={handleLogout} className="text-destructive">
                 <LogOut className="mr-2 h-4 w-4" />
                 Logout
               </DropdownMenuItem>

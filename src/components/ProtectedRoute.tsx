@@ -24,7 +24,7 @@ export const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) 
 
   if (requiredRole && user.role !== requiredRole) {
     // Redirect to appropriate dashboard based on user's role
-    const redirectPath = user.role === 'owner' ? '/' : '/manager-portal';
+    const redirectPath = user.role === 'owner' ? '/dashboard' : '/manager-portal';
     return <Navigate to={redirectPath} replace />;
   }
 

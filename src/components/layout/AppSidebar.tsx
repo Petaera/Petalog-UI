@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/sidebar";
 
 const navigationItems = [
-  { title: "Dashboard", url: "/", icon: Home },
+  { title: "Dashboard", url: "/dashboard", icon: Home },
   { title: "Automatic Logs", url: "/automatic-logs", icon: Database },
   { title: "Manual Logs", url: "/manual-logs", icon: PenTool },
   { title: "Comparison", url: "/comparison", icon: FileText },

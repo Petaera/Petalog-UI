@@ -31,7 +31,7 @@ export default function Login() {
       // Role-based redirection will be handled by the app router
       const userData = JSON.parse(localStorage.getItem('user') || '{}');
       if (userData.role === 'owner') {
-        navigate('/');
+        navigate('/dashboard');
       } else if (userData.role === 'manager') {
         navigate('/manager-portal');
       }

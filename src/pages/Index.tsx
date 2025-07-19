@@ -1,31 +1,38 @@
-import { Layout } from "@/components/layout/Layout";
-import React from "react";
+import React, { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Camera, Clock, Database, Gauge, Gift, Download, Zap, Eye, BarChart3, Car, Truck, Building, Warehouse, Shield, Users, Timer, FileText } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const Index = () => {
+  // Clear any existing user data when landing page loads
+  useEffect(() => {
+    // Always clear user data when landing page loads to ensure clean state
+    localStorage.removeItem('user');
+  }, []);
+
   return (
-    <Layout>
-      <div className="min-h-screen bg-white">
-        {/* Header */}
-        <header className="bg-white/95 backdrop-blur-sm sticky top-0 z-50 border-b border-gray-100">
-          <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <Camera className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">PetaLog</h1>
-                <p className="text-xs text-gray-600">Track. Log. Know.</p>
-              </div>
+    <div className="min-h-screen bg-white">
+      {/* Header */}
+      <header className="bg-white/95 backdrop-blur-sm sticky top-0 z-50 border-b border-gray-100">
+        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <Camera className="w-5 h-5 text-white" />
             </div>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">PetaLog</h1>
+              <p className="text-xs text-gray-600">Track. Log. Know.</p>
+            </div>
+          </div>
+          <Link to="/login">
             <Button className="bg-blue-600 hover:bg-blue-700 text-white">
               Login
             </Button>
-          </div>
-        </header>
+          </Link>
+        </div>
+      </header>
 
         {/* Hero Section */}
         <section className="relative min-h-[90vh] flex items-center justify-center overflow-hidden">
@@ -45,9 +52,11 @@ const Index = () => {
             <p className="text-xl md:text-2xl mb-8 text-gray-200 leading-relaxed">
               Smarter Vehicle Logging for Fuel Stations, Car Washes, Warehouses & Crusher Yards
             </p>
-            <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 text-lg">
-              Get Started
-            </Button>
+            <Link to="/login">
+              <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 text-lg">
+                Get Started
+              </Button>
+            </Link>
           </div>
         </section>
 
@@ -268,8 +277,88 @@ const Index = () => {
             </div>
           </div>
         </section>
+
+        {/* CTA Section */}
+        <section className="py-20 bg-blue-600 text-white">
+          <div className="container mx-auto px-4 text-center">
+            <h2 className="text-4xl font-bold mb-6">Ready to streamline your operations?</h2>
+            <p className="text-xl mb-8 text-blue-100">
+              Let your IP camera do the logging. You focus on growth.
+            </p>
+            <Link to="/login">
+              <Button size="lg" className="bg-white text-blue-600 hover:bg-gray-100 px-8 py-4 text-lg">
+                Get Started Today
+              </Button>
+            </Link>
+          </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="bg-gray-900 text-white py-16">
+          <div className="container mx-auto px-4">
+            <div className="grid md:grid-cols-4 gap-8 mb-8">
+              <div>
+                <div className="flex items-center space-x-2 mb-4">
+                  <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                    <Camera className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold">PetaLog</h3>
+                    <p className="text-sm text-gray-400">Track. Log. Know.</p>
+                  </div>
+                </div>
+                <p className="text-gray-400 mb-4">
+                  Smart vehicle logging platform for modern businesses.
+                </p>
+              </div>
+
+              <div>
+                <h4 className="text-lg font-semibold mb-4">Product</h4>
+                <ul className="space-y-2 text-gray-400">
+                  <li><a href="#" className="hover:text-white transition-colors">Features</a></li>
+                  <li><a href="#" className="hover:text-white transition-colors">Pricing</a></li>
+                  <li><a href="#" className="hover:text-white transition-colors">API</a></li>
+                  <li><a href="#" className="hover:text-white transition-colors">Documentation</a></li>
+                </ul>
+              </div>
+
+              <div>
+                <h4 className="text-lg font-semibold mb-4">Company</h4>
+                <ul className="space-y-2 text-gray-400">
+                  <li><a href="#" className="hover:text-white transition-colors">About</a></li>
+                  <li><a href="#" className="hover:text-white transition-colors">Contact</a></li>
+                  <li><a href="#" className="hover:text-white transition-colors">Privacy</a></li>
+                  <li><a href="#" className="hover:text-white transition-colors">Terms</a></li>
+                </ul>
+              </div>
+
+              <div>
+                <h4 className="text-lg font-semibold mb-4">Download</h4>
+                <div className="space-y-3">
+                  <a href="#" className="block">
+                    <img 
+                      src="https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg" 
+                      alt="Download on App Store"
+                      className="h-10"
+                    />
+                  </a>
+                  <a href="#" className="block">
+                    <img 
+                      src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" 
+                      alt="Get it on Google Play"
+                      className="h-10"
+                    />
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-gray-800 pt-8 text-center text-gray-400">
+              <p>&copy; 2025 PetaEra Technologies. All rights reserved.</p>
+            </div>
+          </div>
+        </footer>
       </div>
-    </Layout>
   );
 };
 
