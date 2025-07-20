@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -26,6 +25,7 @@ import OwnerEntry from "./pages/OwnerEntry";
 // Manager pages
 import ManagerPortal from "./pages/ManagerPortal";
 import DashboardManager from "./pages/DashboardManager";
+import ManagerLogs from "./pages/ManagerLogs";
 
 import NotFound from "./pages/NotFound";
 
@@ -53,13 +53,11 @@ const App = () => (
                 </ProtectedRoute>
               } 
             />
-            
-            {/* Owner routes */}
             <Route 
-              path="/dashboard" 
+              path="/manager-logs" 
               element={
-                <ProtectedRoute requiredRole="owner">
-                  <Dashboard />
+                <ProtectedRoute requiredRole="manager">
+                  <ManagerLogs />
                 </ProtectedRoute>
               } 
             />
@@ -68,6 +66,24 @@ const App = () => (
               element={
                 <ProtectedRoute requiredRole="owner">
                   <AutomaticLogs />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/automatic-logs" 
+              element={
+                <ProtectedRoute requiredRole="manager">
+                  <Navigate to="/manager-logs" replace />
+                </ProtectedRoute>
+              } 
+            />
+            
+            {/* Owner routes */}
+            <Route 
+              path="/dashboard" 
+              element={
+                <ProtectedRoute requiredRole="owner">
+                  <Dashboard />
                 </ProtectedRoute>
               } 
             />

@@ -42,11 +42,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .select('*')
         .eq('id', authData.user.id)
         .single();
+      console.log('Fetched userData from users table:', userData, 'userError:', userError);
       if (userError || !userData) throw userError || new Error('User not found in users table');
+      const trimmedRole = typeof userData.role === 'string' ? userData.role.trim() : userData.role;
       setUser({
         id: userData.id,
         email: userData.email,
-        role: userData.role,
+        role: trimmedRole && trimmedRole.includes('manager') ? 'manager' : trimmedRole,
+        assigned_location: userData.assigned_location,
+      });
+      console.log('User object set in context:', {
+        id: userData.id,
+        email: userData.email,
+        role: trimmedRole && trimmedRole.includes('manager') ? 'manager' : trimmedRole,
         assigned_location: userData.assigned_location,
       });
     } catch (error) {
