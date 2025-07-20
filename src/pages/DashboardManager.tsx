@@ -44,6 +44,7 @@ const DashboardManager = () => {
         </div>
 
         {/* Quick Stats */}
+        {/*
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -97,14 +98,15 @@ const DashboardManager = () => {
             </CardContent>
           </Card>
         </div>
+        */}
 
         {/* Recent Activity */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Manual Logged Entries</CardTitle>
+              <CardTitle>Logged Entries</CardTitle>
               <CardDescription>
-                Vehicles entered manually by staff
+                Vehicles entered by staff
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -126,6 +128,7 @@ const DashboardManager = () => {
             </CardContent>
           </Card>
 
+          {/*
           <Card>
             <CardHeader>
               <CardTitle>Auto Logged Entries</CardTitle>
@@ -151,6 +154,7 @@ const DashboardManager = () => {
               </div>
             </CardContent>
           </Card>
+          */}
         </div>
       </div>
     </Layout>

@@ -26,6 +26,13 @@ import OwnerEntry from "./pages/OwnerEntry";
 import ManagerPortal from "./pages/ManagerPortal";
 import DashboardManager from "./pages/DashboardManager";
 import ManagerLogs from "./pages/ManagerLogs";
+import ManagerAutomaticLogs from "./pages/ManagerAutomaticLogs";
+import ManagerManualLogs from "./pages/ManagerManualLogs";
+import ManagerComparison from "./pages/ManagerComparison";
+import ManagerReports from "./pages/ManagerReports";
+import ManagerPriceSettings from "./pages/ManagerPriceSettings";
+import ManagerVehicleHistory from "./pages/ManagerVehicleHistory";
+import ManagerOwnerEntry from "./pages/ManagerOwnerEntry";
 
 import NotFound from "./pages/NotFound";
 
@@ -62,6 +69,62 @@ const App = () => (
               } 
             />
             <Route 
+              path="/manager-automatic-logs" 
+              element={
+                <ProtectedRoute requiredRole="manager">
+                  <ManagerAutomaticLogs />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/manager-manual-logs" 
+              element={
+                <ProtectedRoute requiredRole="manager">
+                  <ManagerManualLogs />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/manager-comparison" 
+              element={
+                <ProtectedRoute requiredRole="manager">
+                  <ManagerComparison />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/manager-reports" 
+              element={
+                <ProtectedRoute requiredRole="manager">
+                  <ManagerReports />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/manager-price-settings" 
+              element={
+                <ProtectedRoute requiredRole="manager">
+                  <ManagerPriceSettings />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/manager-vehicle-history" 
+              element={
+                <ProtectedRoute requiredRole="manager">
+                  <ManagerVehicleHistory />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/manager-owner-entry" 
+              element={
+                <ProtectedRoute requiredRole="manager">
+                  <ManagerOwnerEntry />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
               path="/automatic-logs" 
               element={
                 <ProtectedRoute requiredRole="owner">
@@ -73,7 +136,7 @@ const App = () => (
               path="/automatic-logs" 
               element={
                 <ProtectedRoute requiredRole="manager">
-                  <Navigate to="/manager-logs" replace />
+                  <Navigate to="/manager-automatic-logs" replace />
                 </ProtectedRoute>
               } 
             />
@@ -96,6 +159,14 @@ const App = () => (
               } 
             />
             <Route 
+              path="/manual-logs" 
+              element={
+                <ProtectedRoute requiredRole="manager">
+                  <Navigate to="/manager-manual-logs" replace />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
               path="/comparison" 
               element={
                 <ProtectedRoute requiredRole="owner">
@@ -104,10 +175,26 @@ const App = () => (
               } 
             />
             <Route 
+              path="/comparison" 
+              element={
+                <ProtectedRoute requiredRole="manager">
+                  <Navigate to="/manager-comparison" replace />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
               path="/reports" 
               element={
                 <ProtectedRoute requiredRole="owner">
                   <Reports />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/reports" 
+              element={
+                <ProtectedRoute requiredRole="manager">
+                  <Navigate to="/manager-reports" replace />
                 </ProtectedRoute>
               } 
             />
@@ -128,6 +215,14 @@ const App = () => (
               } 
             />
             <Route 
+              path="/price-settings" 
+              element={
+                <ProtectedRoute requiredRole="manager">
+                  <Navigate to="/manager-price-settings" replace />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
               path="/vehicle-history" 
               element={
                 <ProtectedRoute requiredRole="owner">
@@ -136,10 +231,26 @@ const App = () => (
               } 
             />
             <Route 
+              path="/vehicle-history" 
+              element={
+                <ProtectedRoute requiredRole="manager">
+                  <Navigate to="/manager-vehicle-history" replace />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
               path="/owner-entry" 
               element={
                 <ProtectedRoute requiredRole="owner">
                   <OwnerEntry />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/owner-entry" 
+              element={
+                <ProtectedRoute requiredRole="manager">
+                  <Navigate to="/manager-owner-entry" replace />
                 </ProtectedRoute>
               } 
             />
