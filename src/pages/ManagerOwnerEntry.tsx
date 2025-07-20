@@ -73,11 +73,13 @@ export default function OwnerEntry() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <Car className="h-6 w-6 text-primary" />
-              <h1 className="text-2xl font-bold">Owner Manual Entry</h1>
+              <h1 className="text-2xl font-bold">Manual Entry</h1>
             </div>
+            {/*
             <Badge variant="outline" className="bg-primary/10 text-primary border-primary">
               Owner Access
             </Badge>
+            */}
           </div>
           
           <Button variant="outline" size="sm">
@@ -93,6 +95,31 @@ export default function OwnerEntry() {
               <CardTitle>Vehicle Entry Details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Entry Type - move this section above Vehicle Number */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Entry Type</Label>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant={entryType === 'normal' ? 'default' : 'outline'} 
+                      size="sm" 
+                      className="flex-1 text-xs sm:text-sm"
+                      onClick={() => setEntryType('normal')}
+                    >
+                      Normal
+                    </Button>
+                    <Button 
+                      variant={entryType === 'workshop' ? 'default' : 'outline'} 
+                      size="sm" 
+                      className="flex-1 text-xs sm:text-sm"
+                      onClick={() => setEntryType('workshop')}
+                    >
+                      Workshop
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              {/* Vehicle Number */}
               <div className="space-y-2">
                 <Label htmlFor="vehicleNumber">Vehicle Number</Label>
                 <Input 
@@ -145,27 +172,6 @@ export default function OwnerEntry() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Entry Type</Label>
-                  <div className="flex gap-2">
-                    <Button 
-                      variant={entryType === 'normal' ? 'default' : 'outline'} 
-                      size="sm" 
-                      className="flex-1 text-xs sm:text-sm"
-                      onClick={() => setEntryType('normal')}
-                    >
-                      Normal
-                    </Button>
-                    <Button 
-                      variant={entryType === 'workshop' ? 'default' : 'outline'} 
-                      size="sm" 
-                      className="flex-1 text-xs sm:text-sm"
-                      onClick={() => setEntryType('workshop')}
-                    >
-                      Workshop
-                    </Button>
-                  </div>
-                </div>
                 <div className="space-y-2">
                   <Label htmlFor="amount">Amount</Label>
                   <Input 

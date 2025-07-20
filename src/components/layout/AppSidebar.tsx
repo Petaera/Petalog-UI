@@ -41,7 +41,7 @@ export function AppSidebar() {
   const navigationItems = isManager
     ? [
         { title: "Dashboard", url: "/dashboard", icon: Home },
-        { title: "Owner Manual Entry", url: "/manager-owner-entry", icon: Car },
+        { title: "Manual Entry", url: "/manager-owner-entry", icon: Car },
         // { title: "Automatic Logs", url: "/manager-automatic-logs", icon: Database },
         // { title: "Manual Logs", url: "/manager-manual-logs", icon: PenTool },
         // { title: "Comparison", url: "/manager-comparison", icon: FileText },
