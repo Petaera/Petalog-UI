@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Layout } from "@/components/layout/Layout";
 import { ArrowLeft, Car, CreditCard, Banknote } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,17 +11,50 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { ScratchMarking } from "@/components/ScratchMarking";
 import { toast } from 'sonner';
+import { supabase } from '@/lib/supabaseClient';
 
 export default function OwnerEntry() {
   const [vehicleNumber, setVehicleNumber] = useState('');
+  const [vehicleTypes, setVehicleTypes] = useState<string[]>([]);
+  const [serviceOptions, setServiceOptions] = useState<string[]>([]);
+  const [priceMatrix, setPriceMatrix] = useState<any[]>([]);
   const [vehicleType, setVehicleType] = useState('');
   const [service, setService] = useState('');
+  const [amount, setAmount] = useState('');
   const [entryType, setEntryType] = useState('normal');
-  const [amount, setAmount] = useState('500');
   const [discount, setDiscount] = useState('');
   const [remarks, setRemarks] = useState('');
   const [paymentMode, setPaymentMode] = useState('cash');
   const [scratchImage, setScratchImage] = useState<string>('');
+
+  useEffect(() => {
+    const fetchServicePrices = async () => {
+      const { data, error } = await supabase.from('Service_prices').select('*');
+      console.log('Fetched Service_prices:', data, error);
+      if (data && data.length > 0) {
+        // Unique VEHICLE and SERVICE values, trimmed
+        const uniqueVehicles = [...new Set(data.map(row => row.VEHICLE && row.VEHICLE.trim()).filter(Boolean))];
+        const uniqueServices = [...new Set(data.map(row => row.SERVICE && row.SERVICE.trim()).filter(Boolean))];
+        console.log('Unique vehicles:', uniqueVehicles);
+        console.log('Unique services:', uniqueServices);
+        setVehicleTypes(uniqueVehicles);
+        setServiceOptions(uniqueServices);
+        setPriceMatrix(data);
+      }
+    };
+    fetchServicePrices();
+  }, []);
+
+  useEffect(() => {
+    if (vehicleType && service) {
+      const row = priceMatrix.find(row => row.VEHICLE === vehicleType && row.SERVICE === service);
+      if (row && row.PRICE !== undefined) {
+        setAmount(row.PRICE);
+      } else {
+        setAmount('');
+      }
+    }
+  }, [vehicleType, service, priceMatrix]);
 
   // Mock data for previous visits
   const previousVisits = vehicleNumber ? Math.floor(Math.random() * 5) + 1 : 0;
@@ -147,25 +180,23 @@ export default function OwnerEntry() {
                       <SelectValue placeholder="Select vehicle type" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="car">Car</SelectItem>
-                      <SelectItem value="bike">Bike</SelectItem>
-                      <SelectItem value="suv">SUV</SelectItem>
-                      <SelectItem value="truck">Truck</SelectItem>
+                      {vehicleTypes.map(type => (
+                        <SelectItem key={type} value={type}>{type}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="service">Service Chosen</Label>
-                  <Select value={service} onValueChange={handleServiceChange}>
+                  <Select value={service} onValueChange={setService}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select service" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="basic">Basic Wash - ₹200</SelectItem>
-                      <SelectItem value="premium">Premium Wash - ₹500</SelectItem>
-                      <SelectItem value="full">Full Service - ₹800</SelectItem>
-                      <SelectItem value="quick">Quick Wash - ₹150</SelectItem>
+                      {serviceOptions.map(option => (
+                        <SelectItem key={option} value={option}>{option}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -176,9 +207,20 @@ export default function OwnerEntry() {
                   <Label htmlFor="amount">Amount</Label>
                   <Input 
                     id="amount" 
-                    value={`₹${amount}`} 
+                    value={amount ? `₹${amount}` : ''} 
                     className="font-semibold text-financial"
+                    readOnly
                     onChange={(e) => setAmount(e.target.value.replace('₹', ''))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="discount">Discount (Optional)</Label>
+                  <Input
+                    id="discount"
+                    placeholder="Enter discount amount"
+                    type="number"
+                    value={discount}
+                    onChange={(e) => setDiscount(e.target.value)}
                   />
                 </div>
               </div>
@@ -204,19 +246,6 @@ export default function OwnerEntry() {
                     <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                     <span className="text-xs sm:text-sm">UPI</span>
                   </Button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="discount">Discount (Optional)</Label>
-                  <Input 
-                    id="discount" 
-                    placeholder="Enter discount amount" 
-                    type="number" 
-                    value={discount}
-                    onChange={(e) => setDiscount(e.target.value)}
-                  />
                 </div>
               </div>
 
