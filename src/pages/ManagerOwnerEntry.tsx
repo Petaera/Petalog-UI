@@ -26,6 +26,9 @@ export default function OwnerEntry() {
   const [remarks, setRemarks] = useState('');
   const [paymentMode, setPaymentMode] = useState('cash');
   const [scratchImage, setScratchImage] = useState<string>('');
+  const [workshop, setWorkshop] = useState('');
+  const [workshopOptions, setWorkshopOptions] = useState<string[]>([]);
+  const [workshopPriceMatrix, setWorkshopPriceMatrix] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchServicePrices = async () => {
@@ -42,19 +45,71 @@ export default function OwnerEntry() {
         setPriceMatrix(data);
       }
     };
+    const fetchWorkshopPrices = async () => {
+      const { data, error } = await supabase.from('workshop_prices').select('*');
+      console.log('Fetched workshop_prices:', data, error);
+      if (data) {
+        setWorkshopPriceMatrix(data);
+        const uniqueWorkshops = [...new Set(data.map(row => row.WORKSHOP && row.WORKSHOP.trim()).filter(Boolean))];
+        console.log('Unique workshops:', uniqueWorkshops);
+        setWorkshopOptions(uniqueWorkshops);
+      }
+    };
     fetchServicePrices();
+    fetchWorkshopPrices();
   }, []);
 
+  // Reset and repopulate dropdowns when entryType changes
   useEffect(() => {
-    if (vehicleType && service) {
+    setWorkshop('');
+    setVehicleType('');
+    setService('');
+    setAmount('');
+
+    if (entryType === 'normal') {
+      const uniqueVehicles = [...new Set(priceMatrix.map(row => row.VEHICLE && row.VEHICLE.trim()).filter(Boolean))];
+      const uniqueServices = [...new Set(priceMatrix.map(row => row.SERVICE && row.SERVICE.trim()).filter(Boolean))];
+      setVehicleTypes(uniqueVehicles);
+      setServiceOptions(uniqueServices);
+    } else { 
+      setVehicleTypes([]);
+      setServiceOptions([]);
+    }
+  }, [entryType, priceMatrix]);
+
+  // When workshop changes, update vehicle types
+  useEffect(() => {
+    if (entryType === 'workshop' && workshop) {
+      const filtered = workshopPriceMatrix.filter(row => row.WORKSHOP === workshop);
+      const uniqueVehicles = [...new Set(filtered.map(row => row.VEHICLE && row.VEHICLE.trim()).filter(Boolean))];
+      setVehicleTypes(uniqueVehicles);
+      setVehicleType('');
+      setService('');
+      setAmount('');
+      setServiceOptions([]);
+    }
+  }, [workshop, entryType, workshopPriceMatrix]);
+  
+  // Calculate amount based on entry type and selections
+  useEffect(() => {
+    if (entryType === 'normal' && vehicleType && service) {
       const row = priceMatrix.find(row => row.VEHICLE === vehicleType && row.SERVICE === service);
       if (row && row.PRICE !== undefined) {
         setAmount(row.PRICE);
       } else {
         setAmount('');
       }
+    } else if (entryType === 'workshop' && workshop && vehicleType) {
+      const row = workshopPriceMatrix.find(
+        row => row.WORKSHOP === workshop && row.VEHICLE === vehicleType
+      );
+      if (row && row.PRICE !== undefined) {
+        setAmount(row.PRICE);
+      } else {
+        setAmount('');
+      }
     }
-  }, [vehicleType, service, priceMatrix]);
+  }, [entryType, vehicleType, service, workshop, priceMatrix, workshopPriceMatrix]);
 
   // Mock data for previous visits
   const previousVisits = vehicleNumber ? Math.floor(Math.random() * 5) + 1 : 0;
@@ -173,33 +228,68 @@ export default function OwnerEntry() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="vehicleType">Vehicle Type</Label>
-                  <Select value={vehicleType} onValueChange={setVehicleType}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select vehicle type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {vehicleTypes.map(type => (
-                        <SelectItem key={type} value={type}>{type}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {entryType === 'normal' && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="vehicleType">Vehicle Type</Label>
+                      <Select value={vehicleType} onValueChange={setVehicleType}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select vehicle type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {vehicleTypes.map(type => (
+                            <SelectItem key={type} value={type}>{type}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="service">Service Chosen</Label>
-                  <Select value={service} onValueChange={setService}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select service" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {serviceOptions.map(option => (
-                        <SelectItem key={option} value={option}>{option}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="service">Service Chosen</Label>
+                      <Select value={service} onValueChange={setService}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select service" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {serviceOptions.map(option => (
+                            <SelectItem key={option} value={option}>{option}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
+                )}
+
+                {entryType === 'workshop' && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="workshop">Workshop</Label>
+                      <Select value={workshop} onValueChange={setWorkshop}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select workshop" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {workshopOptions.map(option => (
+                            <SelectItem key={option} value={option}>{option}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="vehicleType">Vehicle Type</Label>
+                      <Select value={vehicleType} onValueChange={setVehicleType}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select vehicle type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {vehicleTypes.map(type => (
+                            <SelectItem key={type} value={type}>{type}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
