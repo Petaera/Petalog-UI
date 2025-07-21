@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScratchMarking } from "@/components/ScratchMarking";
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabaseClient';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function OwnerEntry() {
   const [vehicleNumber, setVehicleNumber] = useState('');
@@ -25,10 +26,12 @@ export default function OwnerEntry() {
   const [discount, setDiscount] = useState('');
   const [remarks, setRemarks] = useState('');
   const [paymentMode, setPaymentMode] = useState('cash');
-  const [scratchImage, setScratchImage] = useState<string>('');
+  const [scratchImage, setScratchImage] = useState<Blob | null>(null);
   const [workshop, setWorkshop] = useState('');
   const [workshopOptions, setWorkshopOptions] = useState<string[]>([]);
   const [workshopPriceMatrix, setWorkshopPriceMatrix] = useState<any[]>([]);
+
+  const { user } = useAuth();
 
   useEffect(() => {
     const fetchServicePrices = async () => {
@@ -130,28 +133,97 @@ export default function OwnerEntry() {
     setAmount(prices[value] || '200');
   };
 
-  const handleSubmit = () => {
-    if (!vehicleNumber || !vehicleType || !service) {
+  const handleScratchSave = (imageBlob: Blob) => {
+    setScratchImage(imageBlob);
+  };
+
+  // Polyfill for uuid if needed
+  function generateUUID() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    // fallback (not cryptographically secure)
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
+
+  const handleSubmit = async () => {
+    if (!vehicleNumber || !vehicleType || (entryType === 'normal' && !service)) {
       toast.error('Please fill in all required fields');
       return;
     }
-
-    // Mock submission
-    toast.success('Owner entry submitted successfully!');
-    
-    // Reset form
-    setVehicleNumber('');
-    setVehicleType('');
-    setService('');
-    setAmount('500');
-    setDiscount('');
-    setRemarks('');
-    setPaymentMode('cash');
-    setScratchImage('');
-  };
-
-  const handleScratchSave = (imageData: string) => {
-    setScratchImage(imageData);
+    if (!scratchImage) {
+      toast.error('Please save the scratch marking before submitting.');
+      return;
+    }
+    try {
+      // 0. Check if vehicle exists, else insert
+      let vehicleId;
+      const { data: existingVehicle } = await supabase
+        .from('vehicles')
+        .select('id')
+        .eq('number_plate', vehicleNumber)
+        .single();
+      if (existingVehicle && existingVehicle.id) {
+        vehicleId = existingVehicle.id;
+      } else {
+        vehicleId = generateUUID();
+        await supabase.from('vehicles').insert([
+          {
+            id: vehicleId,
+            number_plate: vehicleNumber,
+            type: vehicleType,
+          },
+        ]);
+      }
+      // 1. Upload image to Supabase Storage
+      const safeVehicleNumber = vehicleNumber.replace(/[^a-zA-Z0-9_-]/g, '');
+      const fileName = `${safeVehicleNumber}_${Date.now()}.png`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('man-images')
+        .upload(fileName, scratchImage, { contentType: 'image/png' });
+      if (uploadError) throw uploadError;
+      // 2. Get public URL
+      const { data: publicUrlData } = supabase.storage.from('man-images').getPublicUrl(fileName);
+      const imageUrl = publicUrlData?.publicUrl;
+      // Calculate final amount
+      const priceNum = parseFloat(amount) || 0;
+      const discountNum = parseFloat(discount) || 0;
+      const finalAmount = priceNum - discountNum;
+      // 3. Insert into logs-man
+      const { error: insertError } = await supabase.from('logs-man').insert([
+        {
+          vehicle_id: vehicleId,
+          location_id: user?.assigned_location,
+          entry_type: entryType,
+          image_url: imageUrl,
+          created_by: user?.id,
+          Amount: finalAmount,
+          discount: discount,
+          remarks: remarks,
+          payment_mode: paymentMode,
+          service: service,
+          vehicle_type: vehicleType,
+          workshop: entryType === 'workshop' ? workshop : null,
+          created_at: new Date().toISOString(),
+        },
+      ]);
+      if (insertError) throw insertError;
+      toast.success('Owner entry submitted successfully!');
+      // Reset form
+      setVehicleNumber('');
+      setVehicleType('');
+      setService('');
+      setAmount('500');
+      setDiscount('');
+      setRemarks('');
+      setPaymentMode('cash');
+      setScratchImage(null);
+    } catch (err: any) {
+      toast.error('Submission failed: ' + (err?.message || err));
+    }
   };
 
   return (

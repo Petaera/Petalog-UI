@@ -6,7 +6,7 @@ import { Palette, Save, Undo, Trash2, ZoomIn, ZoomOut, Move } from 'lucide-react
 import { toast } from 'sonner';
 
 interface ScratchMarkingProps {
-  onSave: (imageData: string) => void;
+  onSave: (imageBlob: Blob) => void;
 }
 
 export const ScratchMarking = ({ onSave }: ScratchMarkingProps) => {
@@ -333,9 +333,12 @@ export const ScratchMarking = ({ onSave }: ScratchMarkingProps) => {
   // Save both image and markings
   const saveImage = () => {
     if (!canvasRef.current) return;
-    const imageData = canvasRef.current.toDataURL('image/png');
-    onSave(imageData);
-    toast.success('Scratch markings saved!');
+    canvasRef.current.toBlob((blob) => {
+      if (blob) {
+        onSave(blob);
+        toast.success('Scratch markings saved!');
+      }
+    }, 'image/png');
   };
 
   return (
