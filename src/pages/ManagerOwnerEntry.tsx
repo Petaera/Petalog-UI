@@ -212,7 +212,7 @@ export default function OwnerEntry() {
                 <Label htmlFor="vehicleNumber">Vehicle Number</Label>
                 <Input 
                   id="vehicleNumber"
-                  placeholder="Enter vehicle number" 
+                  placeholder="Enter vehicle number (KL07AB0001)" 
                   className="text-center font-mono text-lg uppercase"
                   value={vehicleNumber}
                   onChange={(e) => handleVehicleNumberChange(e.target.value)}

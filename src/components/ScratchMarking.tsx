@@ -20,6 +20,31 @@ export const ScratchMarking = ({ onSave }: ScratchMarkingProps) => {
   const [isPanning, setIsPanning] = useState(false);
   const [lastPan, setLastPan] = useState({ x: 0, y: 0 });
   const [originalImageDimensions, setOriginalImageDimensions] = useState({ width: 0, height: 0 });
+  const selectedImage = '/uploads/3786d68b-afbe-4a2d-91cb-0ca2cb589288.png';
+  const [isSpacePressed, setIsSpacePressed] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState<{x: number, y: number} | null>(null);
+  const [markingsImage, setMarkingsImage] = useState<HTMLCanvasElement | null>(null);
+
+  // Helper to create or get the markings canvas
+  const getMarkingsCanvas = (width: number, height: number) => {
+    let canvas = markingsImage;
+    if (!canvas || canvas.width !== width || canvas.height !== height) {
+      const newCanvas = document.createElement('canvas');
+      newCanvas.width = width;
+      newCanvas.height = height;
+      // Copy old markings if possible
+      if (canvas) {
+        const ctx = newCanvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(canvas, 0, 0, width, height);
+        }
+      }
+      setMarkingsImage(newCanvas);
+      canvas = newCanvas;
+    }
+    return canvas;
+  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -30,22 +55,17 @@ export const ScratchMarking = ({ onSave }: ScratchMarkingProps) => {
 
     setContext(ctx);
 
-    // Load the new car diagram image
+    // Load the selected car diagram image
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
-      // Store original dimensions
       setOriginalImageDimensions({ width: img.width, height: img.height });
-      
-      // Set canvas dimensions to maintain aspect ratio for mobile
       const container = containerRef.current;
-      const containerWidth = container ? container.clientWidth - 32 : 600; // Account for padding
+      const containerWidth = container ? container.clientWidth - 32 : 600;
       const maxWidth = Math.min(containerWidth, 600);
       const maxHeight = 400;
-      
       const aspectRatio = img.width / img.height;
       let canvasWidth, canvasHeight;
-      
       if (aspectRatio > maxWidth / maxHeight) {
         canvasWidth = maxWidth;
         canvasHeight = maxWidth / aspectRatio;
@@ -53,36 +73,105 @@ export const ScratchMarking = ({ onSave }: ScratchMarkingProps) => {
         canvasHeight = maxHeight;
         canvasWidth = maxHeight * aspectRatio;
       }
-      
       canvas.width = canvasWidth;
       canvas.height = canvasHeight;
-      
       redrawCanvas(img, canvasWidth, canvasHeight);
       setImageLoaded(true);
     };
-    img.src = '/lovable-uploads/3786d68b-afbe-4a2d-91cb-0ca2cb589288.png';
+    img.src = selectedImage;
+  }, [selectedImage, pan.x, pan.y, scale]);
+
+  // Add event listeners for spacebar
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space') setIsSpacePressed(true);
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') setIsSpacePressed(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
   }, []);
 
+  // Mouse wheel zoom
+  const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const zoomIntensity = 0.1;
+    let newScale = scale;
+    if (e.deltaY < 0) {
+      newScale = Math.min(scale + zoomIntensity, 3);
+    } else {
+      newScale = Math.max(scale - zoomIntensity, 0.5);
+    }
+    // Zoom to mouse position
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    const wx = (mouseX - pan.x) / scale;
+    const wy = (mouseY - pan.y) / scale;
+    setScale(newScale);
+    setPan({
+      x: mouseX - wx * newScale,
+      y: mouseY - wy * newScale
+    });
+  };
+
+  // Mouse drag pan
+  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if ((e.button === 2) || isSpacePressed) {
+      setIsDragging(true);
+      setDragStart({ x: e.clientX, y: e.clientY });
+      return;
+    }
+    startDrawing(e);
+  };
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (isDragging && dragStart) {
+      setPan(prev => ({
+        x: prev.x + (e.clientX - dragStart.x),
+        y: prev.y + (e.clientY - dragStart.y)
+      }));
+      setDragStart({ x: e.clientX, y: e.clientY });
+      return;
+    }
+    draw(e);
+  };
+  const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (isDragging) {
+      setIsDragging(false);
+      setDragStart(null);
+      return;
+    }
+    stopDrawing();
+  };
+  // Prevent context menu on right click
+  const handleContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+  };
+
+  // Redraw both background and markings
   const redrawCanvas = (img: HTMLImageElement, width: number, height: number) => {
     if (!context) return;
-    
     // Save the current transform
     context.save();
-    
     // Clear the entire canvas
     context.setTransform(1, 0, 0, 1, 0, 0);
     context.clearRect(0, 0, context.canvas.width, context.canvas.height);
-    
     // Apply pan and scale transforms
     context.translate(pan.x, pan.y);
     context.scale(scale, scale);
-    
     // Draw the image
     context.drawImage(img, 0, 0, width, height);
-    
+    // Draw the markings
+    const markingsCanvas = getMarkingsCanvas(width, height);
+    context.drawImage(markingsCanvas, 0, 0, width, height);
     // Restore transform for drawing
     context.restore();
-    
     // Set drawing properties with red color
     context.strokeStyle = '#ef4444';
     context.lineWidth = 3 / scale; // Adjust line width for zoom
@@ -103,12 +192,11 @@ export const ScratchMarking = ({ onSave }: ScratchMarkingProps) => {
     };
   };
 
+  // Drawing logic: draw on the markings canvas, then redraw everything
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     if (!context || !imageLoaded) return;
     e.preventDefault();
-    
     if ('touches' in e && e.touches.length > 1) {
-      // Multi-touch for panning
       setIsPanning(true);
       const touch1 = e.touches[0];
       const touch2 = e.touches[1];
@@ -118,55 +206,64 @@ export const ScratchMarking = ({ onSave }: ScratchMarkingProps) => {
       });
       return;
     }
-    
     // Ensure red color is set before drawing
-    context.strokeStyle = '#ef4444';
-    context.lineWidth = 3 / scale;
-    context.lineCap = 'round';
-    context.lineJoin = 'round';
-    
     setIsDrawing(true);
     const pos = getEventPos(e);
-    
-    context.save();
-    context.translate(pan.x, pan.y);
-    context.scale(scale, scale);
-    context.beginPath();
-    context.moveTo(pos.x, pos.y);
-    context.restore();
+    // Draw on the markings canvas
+    const markingsCanvas = getMarkingsCanvas(canvasRef.current!.width, canvasRef.current!.height);
+    const markingsCtx = markingsCanvas.getContext('2d');
+    if (!markingsCtx) return;
+    markingsCtx.save();
+    markingsCtx.translate(pan.x, pan.y);
+    markingsCtx.scale(scale, scale);
+    markingsCtx.strokeStyle = '#ef4444';
+    markingsCtx.lineWidth = 3 / scale;
+    markingsCtx.lineCap = 'round';
+    markingsCtx.lineJoin = 'round';
+    markingsCtx.beginPath();
+    markingsCtx.moveTo(pos.x, pos.y);
+    markingsCtx.restore();
   };
 
   const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     e.preventDefault();
-    
     if ('touches' in e && e.touches.length > 1 && isPanning) {
-      // Handle panning
       const touch1 = e.touches[0];
       const touch2 = e.touches[1];
       const currentCenter = {
         x: (touch1.clientX + touch2.clientX) / 2,
         y: (touch1.clientY + touch2.clientY) / 2
       };
-      
       setPan(prev => ({
         x: prev.x + (currentCenter.x - lastPan.x),
         y: prev.y + (currentCenter.y - lastPan.y)
       }));
-      
       setLastPan(currentCenter);
       return;
     }
-    
     if (!isDrawing || !context) return;
-    
     const pos = getEventPos(e);
-    
-    context.save();
-    context.translate(pan.x, pan.y);
-    context.scale(scale, scale);
-    context.lineTo(pos.x, pos.y);
-    context.stroke();
-    context.restore();
+    // Draw on the markings canvas
+    const markingsCanvas = getMarkingsCanvas(canvasRef.current!.width, canvasRef.current!.height);
+    const markingsCtx = markingsCanvas.getContext('2d');
+    if (!markingsCtx) return;
+    markingsCtx.save();
+    markingsCtx.translate(pan.x, pan.y);
+    markingsCtx.scale(scale, scale);
+    markingsCtx.strokeStyle = '#ef4444';
+    markingsCtx.lineWidth = 3 / scale;
+    markingsCtx.lineCap = 'round';
+    markingsCtx.lineJoin = 'round';
+    markingsCtx.lineTo(pos.x, pos.y);
+    markingsCtx.stroke();
+    markingsCtx.restore();
+    // Redraw everything
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      redrawCanvas(img, canvasRef.current!.width, canvasRef.current!.height);
+    };
+    img.src = selectedImage;
   };
 
   const stopDrawing = () => {
@@ -176,6 +273,12 @@ export const ScratchMarking = ({ onSave }: ScratchMarkingProps) => {
       context.beginPath();
     }
   };
+
+  // Update markings when image or canvas size changes
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    getMarkingsCanvas(canvasRef.current.width, canvasRef.current.height);
+  }, [selectedImage, canvasRef.current?.width, canvasRef.current?.height]);
 
   const handleZoom = (direction: 'in' | 'out') => {
     const zoomFactor = 0.2;
@@ -191,7 +294,7 @@ export const ScratchMarking = ({ onSave }: ScratchMarkingProps) => {
     img.onload = () => {
       redrawCanvas(img, canvasRef.current?.width || 0, canvasRef.current?.height || 0);
     };
-    img.src = '/lovable-uploads/3786d68b-afbe-4a2d-91cb-0ca2cb589288.png';
+    img.src = selectedImage;
   };
 
   const resetView = () => {
@@ -203,30 +306,33 @@ export const ScratchMarking = ({ onSave }: ScratchMarkingProps) => {
     img.onload = () => {
       redrawCanvas(img, canvasRef.current?.width || 0, canvasRef.current?.height || 0);
     };
-    img.src = '/lovable-uploads/3786d68b-afbe-4a2d-91cb-0ca2cb589288.png';
+    img.src = selectedImage;
   };
 
+  // Clear markings when clearing canvas
   const clearCanvas = () => {
     if (!context || !canvasRef.current) return;
-    
-    // Reset zoom and pan
     setScale(1);
     setPan({ x: 0, y: 0 });
-    
+    // Clear markings
+    const markingsCanvas = getMarkingsCanvas(canvasRef.current.width, canvasRef.current.height);
+    const markingsCtx = markingsCanvas.getContext('2d');
+    if (markingsCtx) {
+      markingsCtx.clearRect(0, 0, markingsCanvas.width, markingsCanvas.height);
+    }
     // Reload the original image
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       redrawCanvas(img, canvasRef.current?.width || 0, canvasRef.current?.height || 0);
     };
-    img.src = '/lovable-uploads/3786d68b-afbe-4a2d-91cb-0ca2cb589288.png';
-    
+    img.src = selectedImage;
     toast.success('Canvas cleared');
   };
 
+  // Save both image and markings
   const saveImage = () => {
     if (!canvasRef.current) return;
-    
     const imageData = canvasRef.current.toDataURL('image/png');
     onSave(imageData);
     toast.success('Scratch markings saved!');
@@ -248,10 +354,12 @@ export const ScratchMarking = ({ onSave }: ScratchMarkingProps) => {
           <canvas
             ref={canvasRef}
             className="max-w-full h-auto border rounded cursor-crosshair touch-none"
-            onMouseDown={startDrawing}
-            onMouseMove={draw}
-            onMouseUp={stopDrawing}
-            onMouseLeave={stopDrawing}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onWheel={handleWheel}
+            onContextMenu={handleContextMenu}
             onTouchStart={startDrawing}
             onTouchMove={draw}
             onTouchEnd={stopDrawing}
