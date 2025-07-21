@@ -196,6 +196,7 @@ export default function OwnerEntry() {
       const { error: insertError } = await supabase.from('logs-man').insert([
         {
           vehicle_id: vehicleId,
+          vehicle_number: vehicleNumber,
           location_id: user?.assigned_location,
           entry_type: entryType,
           image_url: imageUrl,
