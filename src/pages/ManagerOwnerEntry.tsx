@@ -338,17 +338,23 @@ export default function OwnerEntry() {
                       <Label htmlFor="service">Service Chosen</Label>
                       <ReactSelect
                         isMulti
-                        options={serviceOptions.map(option => ({
-                          value: option,
-                          label: option
-                        }))}
+                        options={
+                          vehicleType
+                            ? priceMatrix
+                                .filter(row => row.VEHICLE === vehicleType)
+                                .map(row => row.SERVICE)
+                                .filter((v, i, arr) => v && arr.indexOf(v) === i)
+                                .map(option => ({ value: option, label: option }))
+                            : []
+                        }
                         value={service.map(option => ({
                           value: option,
                           label: option
                         }))}
                         onChange={(selected) => setService(Array.isArray(selected) ? selected.map((s: any) => s.value) : [])}
-                        placeholder="Select services"
+                        placeholder={vehicleType ? "Select services" : "Select vehicle type first"}
                         classNamePrefix="react-select"
+                        isDisabled={!vehicleType}
                       />
                     </div>
                   </>
