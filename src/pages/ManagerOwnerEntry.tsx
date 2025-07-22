@@ -13,6 +13,16 @@ import { ScratchMarking } from "@/components/ScratchMarking";
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
+import { Checkbox } from '@/components/ui/checkbox';
+import ReactSelect from 'react-select';
+
+// Add SERVICE_PRICES fallback at the top-level
+const SERVICE_PRICES: { [key: string]: number } = {
+  'basic': 200,
+  'premium': 500,
+  'full': 800,
+  'quick': 150
+};
 
 export default function OwnerEntry() {
   const [vehicleNumber, setVehicleNumber] = useState('');
@@ -20,7 +30,8 @@ export default function OwnerEntry() {
   const [serviceOptions, setServiceOptions] = useState<string[]>([]);
   const [priceMatrix, setPriceMatrix] = useState<any[]>([]);
   const [vehicleType, setVehicleType] = useState('');
-  const [service, setService] = useState('');
+  // Change service to array for multi-select
+  const [service, setService] = useState<string[]>([]);
   const [amount, setAmount] = useState('');
   const [entryType, setEntryType] = useState('normal');
   const [discount, setDiscount] = useState('');
@@ -66,7 +77,7 @@ export default function OwnerEntry() {
   useEffect(() => {
     setWorkshop('');
     setVehicleType('');
-    setService('');
+    setService([]); // Reset service to empty array
     setAmount('');
 
     if (entryType === 'normal') {
@@ -87,7 +98,7 @@ export default function OwnerEntry() {
       const uniqueVehicles = [...new Set(filtered.map(row => row.VEHICLE && row.VEHICLE.trim()).filter(Boolean))];
       setVehicleTypes(uniqueVehicles);
       setVehicleType('');
-      setService('');
+      setService([]); // Reset service to empty array for workshop
       setAmount('');
       setServiceOptions([]);
     }
@@ -95,13 +106,18 @@ export default function OwnerEntry() {
   
   // Calculate amount based on entry type and selections
   useEffect(() => {
-    if (entryType === 'normal' && vehicleType && service) {
-      const row = priceMatrix.find(row => row.VEHICLE === vehicleType && row.SERVICE === service);
-      if (row && row.PRICE !== undefined) {
-        setAmount(row.PRICE);
-      } else {
-        setAmount('');
+    if (entryType === 'normal' && vehicleType && service.length > 0) {
+      // Try to use priceMatrix if available, else fallback
+      let total = 0;
+      for (const s of service) {
+        const row = priceMatrix.find(row => row.VEHICLE === vehicleType && row.SERVICE === s);
+        if (row && row.PRICE !== undefined) {
+          total += Number(row.PRICE);
+        } else {
+          total += SERVICE_PRICES[s] || 0;
+        }
       }
+      setAmount(total.toString());
     } else if (entryType === 'workshop' && workshop && vehicleType) {
       const row = workshopPriceMatrix.find(
         row => row.WORKSHOP === workshop && row.VEHICLE === vehicleType
@@ -111,6 +127,8 @@ export default function OwnerEntry() {
       } else {
         setAmount('');
       }
+    } else {
+      setAmount('');
     }
   }, [entryType, vehicleType, service, workshop, priceMatrix, workshopPriceMatrix]);
 
@@ -121,16 +139,15 @@ export default function OwnerEntry() {
     setVehicleNumber(value.toUpperCase());
   };
 
+  // Handle service change for multi-select
+  const handleServiceCheckbox = (value: string, checked: boolean | "indeterminate") => {
+    setService((prev) =>
+      checked ? [...prev, value] : prev.filter((v) => v !== value)
+    );
+  };
+  // Handle single-select for workshop
   const handleServiceChange = (value: string) => {
-    setService(value);
-    // Update amount based on service
-    const prices: { [key: string]: string } = {
-      'basic': '200',
-      'premium': '500',
-      'full': '800',
-      'quick': '150'
-    };
-    setAmount(prices[value] || '200');
+    setService([value]);
   };
 
   const handleScratchSave = (imageBlob: Blob) => {
@@ -150,7 +167,7 @@ export default function OwnerEntry() {
   }
 
   const handleSubmit = async () => {
-    if (!vehicleNumber || !vehicleType || (entryType === 'normal' && !service)) {
+    if (!vehicleNumber || !vehicleType || (entryType === 'normal' && service.length === 0)) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -205,7 +222,7 @@ export default function OwnerEntry() {
           discount: discountNum,
           remarks: remarks,
           payment_mode: paymentMode,
-          service: service,
+          service: service.join(','), // Store as comma-separated string
           vehicle_type: vehicleType,
           workshop: entryType === 'workshop' ? workshop : null,
           created_at: new Date().toISOString(),
@@ -216,7 +233,7 @@ export default function OwnerEntry() {
       // Reset form
       setVehicleNumber('');
       setVehicleType('');
-      setService('');
+      setService([]); // Reset service to empty array
       setAmount('500');
       setDiscount('');
       setRemarks('');
@@ -319,16 +336,20 @@ export default function OwnerEntry() {
 
                     <div className="space-y-2">
                       <Label htmlFor="service">Service Chosen</Label>
-                      <Select value={service} onValueChange={setService}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select service" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {serviceOptions.map(option => (
-                            <SelectItem key={option} value={option}>{option}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <ReactSelect
+                        isMulti
+                        options={serviceOptions.map(option => ({
+                          value: option,
+                          label: option
+                        }))}
+                        value={service.map(option => ({
+                          value: option,
+                          label: option
+                        }))}
+                        onChange={(selected) => setService(Array.isArray(selected) ? selected.map((s: any) => s.value) : [])}
+                        placeholder="Select services"
+                        classNamePrefix="react-select"
+                      />
                     </div>
                   </>
                 )}

@@ -11,11 +11,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { ScratchMarking } from "@/components/ScratchMarking";
 import { toast } from 'sonner';
+import { Checkbox } from '@/components/ui/checkbox';
+import React from 'react';
 
 export default function OwnerEntry() {
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [vehicleType, setVehicleType] = useState('');
-  const [service, setService] = useState('');
+  const [service, setService] = useState<string[]>([]);
   const [entryType, setEntryType] = useState('normal');
   const [amount, setAmount] = useState('500');
   const [discount, setDiscount] = useState('');
@@ -26,20 +28,36 @@ export default function OwnerEntry() {
   // Mock data for previous visits
   const previousVisits = vehicleNumber ? Math.floor(Math.random() * 5) + 1 : 0;
 
+  // Service price map
+  const SERVICE_PRICES: { [key: string]: number } = {
+    'basic': 200,
+    'premium': 500,
+    'full': 800,
+    'quick': 150
+  };
+
+  // Update amount when service or entryType changes
+  React.useEffect(() => {
+    if (entryType === 'normal') {
+      const total = service.reduce((sum, s) => sum + (SERVICE_PRICES[s] || 0), 0);
+      setAmount(total.toString());
+    }
+  }, [service, entryType]);
+
   const handleVehicleNumberChange = (value: string) => {
     setVehicleNumber(value.toUpperCase());
   };
 
+  // Handle service change for multi-select
+  const handleServiceCheckbox = (value: string, checked: boolean | "indeterminate") => {
+    setService((prev) =>
+      checked ? [...prev, value] : prev.filter((v) => v !== value)
+    );
+  };
+  // Handle single-select for workshop
   const handleServiceChange = (value: string) => {
-    setService(value);
-    // Update amount based on service
-    const prices: { [key: string]: string } = {
-      'basic': '200',
-      'premium': '500',
-      'full': '800',
-      'quick': '150'
-    };
-    setAmount(prices[value] || '200');
+    setService([value]);
+    setAmount(SERVICE_PRICES[value]?.toString() || '200');
   };
 
   const handleSubmit = () => {
@@ -54,7 +72,7 @@ export default function OwnerEntry() {
     // Reset form
     setVehicleNumber('');
     setVehicleType('');
-    setService('');
+    setService(['basic']); // Reset to default for normal entry
     setAmount('500');
     setDiscount('');
     setRemarks('');
@@ -155,17 +173,32 @@ export default function OwnerEntry() {
 
                 <div className="space-y-2">
                   <Label htmlFor="service">Service Chosen</Label>
-                  <Select value={service} onValueChange={handleServiceChange}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select service" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="basic">Basic Wash - ₹200</SelectItem>
-                      <SelectItem value="premium">Premium Wash - ₹500</SelectItem>
-                      <SelectItem value="full">Full Service - ₹800</SelectItem>
-                      <SelectItem value="quick">Quick Wash - ₹150</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {entryType === 'normal' ? (
+                    <div className="flex flex-col gap-2">
+                      {Object.keys(SERVICE_PRICES).map((key) => (
+                        <label key={key} className="flex items-center gap-2 cursor-pointer">
+                          <Checkbox
+                            checked={service.includes(key)}
+                            onCheckedChange={(checked) => handleServiceCheckbox(key, checked)}
+                            id={`service-${key}`}
+                          />
+                          <span>{key.charAt(0).toUpperCase() + key.slice(1)} - ₹{SERVICE_PRICES[key]}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <Select value={service[0] || ''} onValueChange={handleServiceChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select service" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="basic">Basic Wash - ₹200</SelectItem>
+                        <SelectItem value="premium">Premium Wash - ₹500</SelectItem>
+                        <SelectItem value="full">Full Service - ₹800</SelectItem>
+                        <SelectItem value="quick">Quick Wash - ₹150</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               </div>
 

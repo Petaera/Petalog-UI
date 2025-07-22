@@ -18,12 +18,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Checkbox } from '@/components/ui/checkbox';
+import React from 'react';
 
 export default function ManagerPortal() {
   const { user, logout } = useAuth();
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [vehicleType, setVehicleType] = useState('');
-  const [service, setService] = useState('');
+  // Change service to array for multi-select
+  const [service, setService] = useState<string[]>([]);
   const [entryType, setEntryType] = useState('normal');
   const [amount, setAmount] = useState('500');
   const [discount, setDiscount] = useState('');
@@ -32,6 +35,20 @@ export default function ManagerPortal() {
   const [scratchImage, setScratchImage] = useState<Blob | null>(null);
   const [showStats, setShowStats] = useState(false);
 
+  // Service price map
+  const SERVICE_PRICES: { [key: string]: number } = {
+    'basic': 200,
+    'premium': 500,
+    'full': 800,
+    'quick': 150
+  };
+  const SERVICE_LABELS: { [key: string]: string } = {
+    'basic': 'Basic Wash',
+    'premium': 'Premium Wash',
+    'full': 'Full Service',
+    'quick': 'Quick Wash',
+  };
+
   // Mock data for previous visits and today's stats
   const previousVisits = vehicleNumber ? Math.floor(Math.random() * 5) + 1 : 0;
   const todayEntries = [
@@ -39,24 +56,32 @@ export default function ManagerPortal() {
     { vehicleNumber: 'MH14CD5678', time: '08:45 AM', service: 'Premium Wash', amount: 500 },
   ];
 
+  // Update amount when service or entryType changes
+  React.useEffect(() => {
+    if (entryType === 'normal') {
+      const total = service.reduce((sum, s) => sum + (SERVICE_PRICES[s] || 0), 0);
+      setAmount(total.toString());
+    }
+  }, [service, entryType]);
+
   const handleVehicleNumberChange = (value: string) => {
     setVehicleNumber(value.toUpperCase());
   };
 
+  // Handle service change for multi-select
+  const handleServiceCheckbox = (value: string, checked: boolean | "indeterminate") => {
+    setService((prev) =>
+      checked ? [...prev, value] : prev.filter((v) => v !== value)
+    );
+  };
+  // Handle single-select for workshop
   const handleServiceChange = (value: string) => {
-    setService(value);
-    // Update amount based on service
-    const prices: { [key: string]: string } = {
-      'basic': '200',
-      'premium': '500',
-      'full': '800',
-      'quick': '150'
-    };
-    setAmount(prices[value] || '200');
+    setService([value]);
+    setAmount(SERVICE_PRICES[value]?.toString() || '200');
   };
 
   const handleSubmit = () => {
-    if (!vehicleNumber || !vehicleType || !service) {
+    if (!vehicleNumber || !vehicleType || service.length === 0) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -67,7 +92,7 @@ export default function ManagerPortal() {
     // Reset form
     setVehicleNumber('');
     setVehicleType('');
-    setService('');
+    setService([]);
     setAmount('500');
     setDiscount('');
     setRemarks('');
@@ -260,17 +285,32 @@ export default function ManagerPortal() {
 
                 <div className="space-y-2">
                   <Label htmlFor="service">Service Chosen</Label>
-                  <Select value={service} onValueChange={handleServiceChange}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select service" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="basic">Basic Wash - ₹200</SelectItem>
-                      <SelectItem value="premium">Premium Wash - ₹500</SelectItem>
-                      <SelectItem value="full">Full Service - ₹800</SelectItem>
-                      <SelectItem value="quick">Quick Wash - ₹150</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {entryType === 'normal' ? (
+                    <div className="flex flex-col gap-2">
+                      {Object.keys(SERVICE_PRICES).map((key) => (
+                        <label key={key} className="flex items-center gap-2 cursor-pointer">
+                          <Checkbox
+                            checked={service.includes(key)}
+                            onCheckedChange={(checked) => handleServiceCheckbox(key, checked)}
+                            id={`service-${key}`}
+                          />
+                          <span>{SERVICE_LABELS[key]} - ₹{SERVICE_PRICES[key]}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <Select value={service[0] || ''} onValueChange={handleServiceChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select service" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="basic">Basic Wash - ₹200</SelectItem>
+                        <SelectItem value="premium">Premium Wash - ₹500</SelectItem>
+                        <SelectItem value="full">Full Service - ₹800</SelectItem>
+                        <SelectItem value="quick">Quick Wash - ₹150</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               </div>
 
@@ -303,6 +343,7 @@ export default function ManagerPortal() {
                     value={`₹${amount}`} 
                     className="font-semibold text-financial"
                     onChange={(e) => setAmount(e.target.value.replace('₹', ''))}
+                    readOnly={entryType === 'normal'}
                   />
                 </div>
               </div>
