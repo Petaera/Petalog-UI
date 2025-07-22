@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
 interface User {
@@ -30,6 +30,35 @@ export const useAuth = () => {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Restore user from Supabase session on mount
+  useEffect(() => {
+    const restoreUser = async () => {
+      setLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        // Fetch user data from users table
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        if (!userError && userData) {
+          const trimmedRole = typeof userData.role === 'string' ? userData.role.trim() : userData.role;
+          setUser({
+            id: userData.id,
+            email: userData.email,
+            role: trimmedRole && trimmedRole.includes('manager') ? 'manager' : trimmedRole,
+            assigned_location: userData.assigned_location,
+          });
+        } else {
+          setUser(null);
+        }
+      }
+      setLoading(false);
+    };
+    restoreUser();
+  }, []);
 
   const login = async (email: string, password: string) => {
     setLoading(true);
