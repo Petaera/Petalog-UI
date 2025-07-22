@@ -341,7 +341,7 @@ export default function OwnerEntry() {
                         options={
                           vehicleType
                             ? priceMatrix
-                                .filter(row => row.VEHICLE === vehicleType)
+                                .filter(row => row.VEHICLE && row.VEHICLE.trim() === vehicleType.trim())
                                 .map(row => row.SERVICE)
                                 .filter((v, i, arr) => v && arr.indexOf(v) === i)
                                 .map(option => ({ value: option, label: option }))

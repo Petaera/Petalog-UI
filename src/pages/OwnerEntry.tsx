@@ -50,18 +50,22 @@ export default function OwnerEntry() {
 
   // Handle service change for multi-select
   const handleServiceCheckbox = (value: string, checked: boolean | "indeterminate") => {
+    const trimmedValue = value.trim();
     setService((prev) =>
-      checked ? [...prev, value] : prev.filter((v) => v !== value)
+      checked ? [...prev, trimmedValue] : prev.filter((v) => v !== trimmedValue)
     );
   };
   // Handle single-select for workshop
   const handleServiceChange = (value: string) => {
-    setService([value]);
-    setAmount(SERVICE_PRICES[value]?.toString() || '200');
+    const trimmedValue = value.trim();
+    setService([trimmedValue]);
+    setAmount(SERVICE_PRICES[trimmedValue]?.toString() || '200');
   };
 
   const handleSubmit = () => {
-    if (!vehicleNumber || !vehicleType || !service) {
+    const trimmedVehicleType = vehicleType.trim();
+    const trimmedServices = service.map(s => s.trim());
+    if (!vehicleNumber || !trimmedVehicleType || !trimmedServices.length) {
       toast.error('Please fill in all required fields');
       return;
     }
