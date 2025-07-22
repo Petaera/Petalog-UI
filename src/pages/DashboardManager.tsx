@@ -16,13 +16,11 @@ const DashboardManager = () => {
       let manQuery = supabase
         .from('logs-man')
         .select('id, entry_time, location_id, vehicle_id, vehicles(number_plate)')
-        .order('entry_time', { ascending: false })
-        .limit(3);
+        .order('entry_time', { ascending: false });
       let autoQuery = supabase
         .from('logs-auto')
         .select('id, entry_time, location_id, vehicle_id, vehicles(number_plate)')
-        .order('entry_time', { ascending: false })
-        .limit(3);
+        .order('entry_time', { ascending: false });
       if (user?.assigned_location) {
         manQuery = manQuery.eq('location_id', user.assigned_location);
         autoQuery = autoQuery.eq('location_id', user.assigned_location);
