@@ -190,7 +190,7 @@ export default function OwnerEntry() {
       const imageUrl = publicUrlData?.publicUrl;
       // Calculate final amount
       const priceNum = parseFloat(amount) || 0;
-      const discountNum = parseFloat(discount) || 0;
+      const discountNum = discount === '' ? 0 : parseFloat(discount) || 0;
       const finalAmount = priceNum - discountNum;
       // 3. Insert into logs-man
       const { error: insertError } = await supabase.from('logs-man').insert([
@@ -202,7 +202,7 @@ export default function OwnerEntry() {
           image_url: imageUrl,
           created_by: user?.id,
           Amount: finalAmount,
-          discount: discount,
+          discount: discountNum,
           remarks: remarks,
           payment_mode: paymentMode,
           service: service,
