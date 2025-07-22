@@ -29,7 +29,7 @@ export default function ManagerPortal() {
   const [discount, setDiscount] = useState('');
   const [remarks, setRemarks] = useState('');
   const [paymentMode, setPaymentMode] = useState('cash');
-  const [scratchImage, setScratchImage] = useState<string>('');
+  const [scratchImage, setScratchImage] = useState<Blob | null>(null);
   const [showStats, setShowStats] = useState(false);
 
   // Mock data for previous visits and today's stats
@@ -72,11 +72,11 @@ export default function ManagerPortal() {
     setDiscount('');
     setRemarks('');
     setPaymentMode('cash');
-    setScratchImage('');
+    setScratchImage(null);
   };
 
-  const handleScratchSave = (imageData: string) => {
-    setScratchImage(imageData);
+  const handleScratchSave = (imageBlob: Blob) => {
+    setScratchImage(imageBlob);
   };
 
   if (showStats) {
