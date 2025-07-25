@@ -4,20 +4,10 @@ import { ArrowLeft, Database } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabaseClient";
 
-export default function AutomaticLogs() {
-  const [locations, setLocations] = useState([]);
-  const [selectedLocation, setSelectedLocation] = useState("");
+// Accept selectedLocation as a prop from parent (Layout/App)
+export default function AutomaticLogs({ selectedLocation }) {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    // Fetch locations on mount
-    const fetchLocations = async () => {
-      const { data, error } = await supabase.from("locations").select("id, name");
-      if (!error && data) setLocations(data);
-    };
-    fetchLocations();
-  }, []);
 
   useEffect(() => {
     if (!selectedLocation) return;
@@ -49,21 +39,6 @@ export default function AutomaticLogs() {
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back
           </Button>
-        </div>
-
-        <div className="mb-4">
-          <label htmlFor="location-select" className="block mb-2 font-medium">Select Location:</label>
-          <select
-            id="location-select"
-            className="border rounded px-3 py-2 w-full max-w-xs"
-            value={selectedLocation}
-            onChange={e => setSelectedLocation(e.target.value)}
-          >
-            <option value="">-- Choose a location --</option>
-            {locations.map((loc) => (
-              <option key={loc.id} value={loc.id}>{loc.name}</option>
-            ))}
-          </select>
         </div>
 
         <div className="metric-card">
