@@ -20,7 +20,7 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
     const fetchLogs = async () => {
       const { data, error } = await supabase
         .from("logs-auto")
-        .select("id, entry_time, exit_time, vehicle_id, vehicles(number_plate)")
+        .select("id, entry_time, exit_time, vehicle_id, entry_url, exit_image, vehicles(number_plate)")
         .eq("location_id", selectedLocation)
         .order("entry_time", { ascending: false });
       console.log('AutomaticLogs Supabase logs-auto data:', data);
@@ -86,8 +86,32 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
                         <td className="border px-4 py-2">-</td>
                         <td className="border px-4 py-2">{log.entry_time ? new Date(log.entry_time).toLocaleString() : "-"}</td>
                         <td className="border px-4 py-2">{log.exit_time ? new Date(log.exit_time).toLocaleString() : "-"}</td>
-                        <td className="border px-4 py-2"><img src={"/placeholder.svg"} alt="Entry" className="w-16 h-10 object-cover" /></td>
-                        <td className="border px-4 py-2"><img src={"/placeholder.svg"} alt="Exit" className="w-16 h-10 object-cover" /></td>
+                        <td className="border px-4 py-2">
+                          {log.entry_url ? (
+                            <img 
+                              src={log.entry_url} 
+                              alt="Entry" 
+                              className="w-16 h-10 object-cover rounded cursor-pointer hover:opacity-80 transition-opacity" 
+                              onClick={() => window.open(log.entry_url, '_blank')}
+                              title="Click to view full image"
+                            />
+                          ) : (
+                            <img src={"/placeholder.svg"} alt="Entry" className="w-16 h-10 object-cover" />
+                          )}
+                        </td>
+                        <td className="border px-4 py-2">
+                          {log.exit_image ? (
+                            <img 
+                              src={log.exit_image} 
+                              alt="Exit" 
+                              className="w-16 h-10 object-cover rounded cursor-pointer hover:opacity-80 transition-opacity" 
+                              onClick={() => window.open(log.exit_image, '_blank')}
+                              title="Click to view full image"
+                            />
+                          ) : (
+                            <img src={"/placeholder.svg"} alt="Exit" className="w-16 h-10 object-cover" />
+                          )}
+                        </td>
                         <td className="border px-4 py-2">{getDuration(log.entry_time, log.exit_time)}</td>
                       </tr>
                     ))
