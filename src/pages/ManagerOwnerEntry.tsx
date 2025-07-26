@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { ScratchMarking } from "@/components/ScratchMarking";
+import { LocationAutocomplete } from "@/components/LocationAutocomplete";
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
@@ -24,7 +25,7 @@ const SERVICE_PRICES: { [key: string]: number } = {
   'quick': 150
 };
 
-export default function OwnerEntry() {
+export default function ManagerOwnerEntry() {
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [vehicleTypes, setVehicleTypes] = useState<string[]>([]);
   const [serviceOptions, setServiceOptions] = useState<string[]>([]);
@@ -46,6 +47,7 @@ export default function OwnerEntry() {
   const [customerName, setCustomerName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
+  const [customerLocation, setCustomerLocation] = useState('');
   
   // Vehicle brand and model
   const [selectedVehicleBrand, setSelectedVehicleBrand] = useState('');
@@ -322,6 +324,7 @@ export default function OwnerEntry() {
           Name: trimmedCustomerName,
           Phone_no: phoneNumber,
           'D.O.B': dateOfBirth || null,
+          Location: customerLocation || null,
           // Vehicle details
           vehicle_brand: selectedVehicleBrand || null,
           vehicle_model: selectedModel || null,
@@ -330,7 +333,7 @@ export default function OwnerEntry() {
         },
       ]);
       if (insertError) throw insertError;
-      toast.success('Owner entry submitted successfully!');
+      toast.success('Manager entry submitted successfully!');
       // Reset form
       setVehicleNumber('');
       setVehicleType('');
@@ -343,6 +346,7 @@ export default function OwnerEntry() {
       setCustomerName('');
       setPhoneNumber('');
       setDateOfBirth('');
+      setCustomerLocation('');
       setSelectedVehicleBrand('');
       setSelectedModel('');
       setSelectedModelId('');
@@ -360,11 +364,9 @@ export default function OwnerEntry() {
               <Car className="h-6 w-6 text-primary" />
               <h1 className="text-2xl font-bold">Manual Entry</h1>
             </div>
-            {/*
             <Badge variant="outline" className="bg-primary/10 text-primary border-primary">
-              Owner Access
+              Manager Access
             </Badge>
-            */}
           </div>
           
           <Button variant="outline" size="sm">
@@ -458,6 +460,15 @@ export default function OwnerEntry() {
                       onChange={(e) => setDateOfBirth(e.target.value)}
                     />
                   </div>
+                  <div className="space-y-2">
+                    <LocationAutocomplete
+                      value={customerLocation}
+                      onChange={setCustomerLocation}
+                      placeholder="Type to search location..."
+                      label="Location (Optional)"
+                      id="customerLocation"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -467,16 +478,16 @@ export default function OwnerEntry() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="selectedVehicleBrand">Vehicle Brand</Label>
-                    <Select value={selectedVehicleBrand} onValueChange={setSelectedVehicleBrand}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select vehicle brand" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableVehicleBrands.map(brand => (
-                          <SelectItem key={brand} value={brand}>{brand}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <ReactSelect
+                      isClearable
+                      isSearchable
+                      placeholder="Type to search vehicle brand..."
+                      options={availableVehicleBrands.map(brand => ({ value: brand, label: brand }))}
+                      value={selectedVehicleBrand ? { value: selectedVehicleBrand, label: selectedVehicleBrand } : null}
+                      onChange={(selected) => setSelectedVehicleBrand(selected?.value || '')}
+                      classNamePrefix="react-select"
+                      noOptionsMessage={() => "No brands found"}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="selectedModel">Vehicle Model</Label>

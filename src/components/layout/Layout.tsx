@@ -5,6 +5,7 @@ import { Header } from "./Header";
 import Dashboard from '@/pages/Dashboard';
 import AutomaticLogs from '@/pages/AutomaticLogs';
 import ManualLogs from '@/pages/ManualLogs';
+import OwnerEntry from '@/pages/OwnerEntry';
 import { supabase } from "@/lib/supabaseClient";
 
 interface LayoutProps {
@@ -37,7 +38,7 @@ export function Layout({ children }: LayoutProps) {
             onLocationChange={setSelectedLocation}
           />
           <main className="flex-1 overflow-auto">
-            {React.isValidElement(children) && (children.type === Dashboard || children.type === AutomaticLogs || children.type === ManualLogs)
+            {React.isValidElement(children) && (children.type === Dashboard || children.type === AutomaticLogs || children.type === ManualLogs || children.type === OwnerEntry)
               ? React.cloneElement(children as React.ReactElement<any>, { selectedLocation })
               : children}
           </main>

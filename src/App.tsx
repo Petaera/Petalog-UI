@@ -9,6 +9,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 // Auth pages
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import Privacy from "./pages/Privacy";
 
 // Owner pages
 import Index from "./pages/Index.tsx";
@@ -51,6 +52,7 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
+            <Route path="/privacy" element={<Privacy />} />
             
             {/* Manager routes */}
             <Route 
@@ -247,7 +249,9 @@ const App = () => (
               path="/owner-entry" 
               element={
                 <ProtectedRoute requiredRole="owner">
-                  <OwnerEntry />
+                  <Layout>
+                    <OwnerEntry />
+                  </Layout>
                 </ProtectedRoute>
               } 
             />

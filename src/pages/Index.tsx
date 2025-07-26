@@ -26,11 +26,18 @@ const Index = () => {
               <p className="text-xs text-gray-600">Track. Log. Know.</p>
             </div>
           </div>
-          <Link to="/login">
-            <Button className="bg-blue-600 hover:bg-blue-700 text-white">
-              Login
-            </Button>
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link to="/privacy">
+              <Button variant="outline" className="border-blue-600 text-blue-600 hover:bg-blue-50">
+                Privacy
+              </Button>
+            </Link>
+            <Link to="/login">
+              <Button className="bg-blue-600 hover:bg-blue-700 text-white">
+                Login
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 
