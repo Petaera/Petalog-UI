@@ -41,8 +41,99 @@ export default function OwnerEntry() {
   const [workshop, setWorkshop] = useState('');
   const [workshopOptions, setWorkshopOptions] = useState<string[]>([]);
   const [workshopPriceMatrix, setWorkshopPriceMatrix] = useState<any[]>([]);
+  
+  // Customer details
+  const [customerName, setCustomerName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  
+  // Vehicle brand and model
+  const [selectedVehicleBrand, setSelectedVehicleBrand] = useState('');
+  const [selectedModel, setSelectedModel] = useState('');
+  const [selectedModelId, setSelectedModelId] = useState('');
+  const [availableVehicleBrands, setAvailableVehicleBrands] = useState<string[]>([]);
+  const [availableModels, setAvailableModels] = useState<{name: string, id: string}[]>([]);
+  const [vehicleData, setVehicleData] = useState<any[]>([]);
 
   const { user } = useAuth();
+
+  // Fetch vehicle brands and models from Vehicles_in_india table
+  useEffect(() => {
+    const fetchVehicleData = async () => {
+      console.log('Fetching from Vehicles_in_india table...');
+      
+      // Fetch all fields including id for Brand_id mapping
+      let result = await supabase
+        .from('Vehicles_in_india')
+        .select('id, "Vehicle Brands", "Models"');
+      
+      console.log('Vehicles_in_india result:', result);
+      
+      // If that fails, try selecting all fields
+      if (result.error) {
+        console.log('Trying to select all fields...');
+        result = await supabase
+          .from('Vehicles_in_india')
+          .select('*');
+        console.log('Select all result:', result);
+      }
+      
+      const { data, error } = result;
+      
+      if (!error && data && data.length > 0) {
+        setVehicleData(data);
+        console.log('Vehicle brands and models data:', data);
+        console.log('Available fields:', Object.keys(data[0]));
+        
+        // Use the correct field names from Vehicles_in_india table
+        if (data[0].hasOwnProperty('Vehicle Brands')) {
+          const uniqueBrands = [...new Set(data.map(item => item['Vehicle Brands']))].filter(Boolean) as string[];
+          console.log('Unique vehicle brands found:', uniqueBrands);
+          setAvailableVehicleBrands(uniqueBrands);
+        } else {
+          console.warn('Vehicle Brands field not found in data');
+        }
+      } else {
+        console.log('No data found or error occurred');
+      }
+    };
+    fetchVehicleData();
+  }, []);
+
+  // Update available models when vehicle brand changes
+  useEffect(() => {
+    if (selectedVehicleBrand && vehicleData.length > 0) {
+      console.log('Filtering models for vehicle brand:', selectedVehicleBrand);
+      
+      // Use the correct field names from Vehicles_in_india table
+      if (vehicleData[0]?.hasOwnProperty('Vehicle Brands') && vehicleData[0]?.hasOwnProperty('Models')) {
+        const modelsForBrand = vehicleData
+          .filter(item => item['Vehicle Brands'] === selectedVehicleBrand)
+          .map(item => ({
+            name: item['Models'],
+            id: item.id
+          }))
+          .filter(item => item.name); // Filter out empty models
+        
+        // Remove duplicates based on model name but keep the id
+        const uniqueModels = modelsForBrand.filter((model, index, arr) => 
+          arr.findIndex(m => m.name === model.name) === index
+        );
+        
+        console.log('Models found for brand:', uniqueModels);
+        setAvailableModels(uniqueModels);
+      } else {
+        console.warn('Vehicle Brands or Models field not found in data');
+        setAvailableModels([]);
+      }
+      setSelectedModel(''); // Reset model when brand changes
+      setSelectedModelId(''); // Reset model ID when brand changes
+    } else {
+      setAvailableModels([]);
+      setSelectedModel('');
+      setSelectedModelId('');
+    }
+  }, [selectedVehicleBrand, vehicleData]);
 
   useEffect(() => {
     const fetchServicePrices = async () => {
@@ -167,8 +258,10 @@ export default function OwnerEntry() {
   }
 
   const handleSubmit = async () => {
-    if (!vehicleNumber || !vehicleType || (entryType === 'normal' && service.length === 0)) {
-      toast.error('Please fill in all required fields');
+    const trimmedCustomerName = customerName.trim();
+    
+    if (!vehicleNumber || !vehicleType || (entryType === 'normal' && service.length === 0) || !trimmedCustomerName || !phoneNumber) {
+      toast.error('Please fill in all required fields (Vehicle Number, Vehicle Type, Service, Customer Name, and Phone Number)');
       return;
     }
     if (!scratchImage) {
@@ -225,6 +318,14 @@ export default function OwnerEntry() {
           service: service.join(','), // Store as comma-separated string
           vehicle_type: vehicleType,
           workshop: entryType === 'workshop' ? workshop : null,
+          // Customer details
+          Name: trimmedCustomerName,
+          Phone_no: phoneNumber,
+          'D.O.B': dateOfBirth || null,
+          // Vehicle details
+          vehicle_brand: selectedVehicleBrand || null,
+          vehicle_model: selectedModel || null,
+          Brand_id: selectedModelId || null,
           created_at: new Date().toISOString(),
         },
       ]);
@@ -239,6 +340,12 @@ export default function OwnerEntry() {
       setRemarks('');
       setPaymentMode('cash');
       setScratchImage(null);
+      setCustomerName('');
+      setPhoneNumber('');
+      setDateOfBirth('');
+      setSelectedVehicleBrand('');
+      setSelectedModel('');
+      setSelectedModelId('');
     } catch (err: any) {
       toast.error('Submission failed: ' + (err?.message || err));
     }
@@ -315,6 +422,85 @@ export default function OwnerEntry() {
                     </span>
                   </div>
                 )}
+              </div>
+
+              {/* Customer Details */}
+              <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
+                <Label className="text-base font-semibold">Customer Details</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="customerName">Customer Name *</Label>
+                    <Input 
+                      id="customerName"
+                      placeholder="Enter customer name" 
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="phoneNumber">Phone Number *</Label>
+                    <Input 
+                      id="phoneNumber"
+                      placeholder="Enter phone number" 
+                      type="tel"
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="dateOfBirth">Date of Birth (Optional)</Label>
+                    <Input 
+                      id="dateOfBirth"
+                      type="date"
+                      value={dateOfBirth}
+                      onChange={(e) => setDateOfBirth(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Vehicle Brand and Model */}
+              <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
+                <Label className="text-base font-semibold">Vehicle Details</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="selectedVehicleBrand">Vehicle Brand</Label>
+                    <Select value={selectedVehicleBrand} onValueChange={setSelectedVehicleBrand}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select vehicle brand" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableVehicleBrands.map(brand => (
+                          <SelectItem key={brand} value={brand}>{brand}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="selectedModel">Vehicle Model</Label>
+                    <Select 
+                      value={selectedModel} 
+                      onValueChange={(value) => {
+                        setSelectedModel(value);
+                        // Find and set the corresponding model ID
+                        const modelObj = availableModels.find(m => m.name === value);
+                        setSelectedModelId(modelObj?.id || '');
+                      }}
+                      disabled={!selectedVehicleBrand}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={selectedVehicleBrand ? "Select model" : "Select vehicle brand first"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableModels.map(model => (
+                          <SelectItem key={model.id} value={model.name}>{model.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

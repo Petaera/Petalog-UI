@@ -23,7 +23,7 @@ export default function OwnerEntry() {
   const [discount, setDiscount] = useState('');
   const [remarks, setRemarks] = useState('');
   const [paymentMode, setPaymentMode] = useState('cash');
-  const [scratchImage, setScratchImage] = useState<string>('');
+  const [scratchImage, setScratchImage] = useState<Blob | null>(null);
 
   // Mock data for previous visits
   const previousVisits = vehicleNumber ? Math.floor(Math.random() * 5) + 1 : 0;
@@ -81,11 +81,11 @@ export default function OwnerEntry() {
     setDiscount('');
     setRemarks('');
     setPaymentMode('cash');
-    setScratchImage('');
+    setScratchImage(null);
   };
 
-  const handleScratchSave = (imageData: string) => {
-    setScratchImage(imageData);
+  const handleScratchSave = (imageBlob: Blob) => {
+    setScratchImage(imageBlob);
   };
 
   return (

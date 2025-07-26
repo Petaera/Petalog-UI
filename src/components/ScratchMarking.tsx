@@ -2,7 +2,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Palette, Save, Undo, Trash2, ZoomIn, ZoomOut, Move } from 'lucide-react';
+import { Palette, Save, Undo, Trash2, ZoomIn, ZoomOut, Move, Pen, Eraser } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ScratchMarkingProps {
@@ -25,6 +25,7 @@ export const ScratchMarking = ({ onSave }: ScratchMarkingProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<{x: number, y: number} | null>(null);
   const [markingsImage, setMarkingsImage] = useState<HTMLCanvasElement | null>(null);
+  const [currentTool, setCurrentTool] = useState<'pen' | 'eraser'>('pen');
 
   // Helper to create or get the markings canvas
   const getMarkingsCanvas = (width: number, height: number) => {
@@ -216,8 +217,17 @@ export const ScratchMarking = ({ onSave }: ScratchMarkingProps) => {
     markingsCtx.save();
     markingsCtx.translate(pan.x, pan.y);
     markingsCtx.scale(scale, scale);
-    markingsCtx.strokeStyle = '#ef4444';
-    markingsCtx.lineWidth = 3 / scale;
+    
+    // Set tool properties
+    if (currentTool === 'pen') {
+      markingsCtx.globalCompositeOperation = 'source-over';
+      markingsCtx.strokeStyle = '#ef4444';
+      markingsCtx.lineWidth = 3 / scale;
+    } else {
+      markingsCtx.globalCompositeOperation = 'destination-out';
+      markingsCtx.lineWidth = 10 / scale; // Larger eraser
+    }
+    
     markingsCtx.lineCap = 'round';
     markingsCtx.lineJoin = 'round';
     markingsCtx.beginPath();
@@ -250,8 +260,17 @@ export const ScratchMarking = ({ onSave }: ScratchMarkingProps) => {
     markingsCtx.save();
     markingsCtx.translate(pan.x, pan.y);
     markingsCtx.scale(scale, scale);
-    markingsCtx.strokeStyle = '#ef4444';
-    markingsCtx.lineWidth = 3 / scale;
+    
+    // Set tool properties
+    if (currentTool === 'pen') {
+      markingsCtx.globalCompositeOperation = 'source-over';
+      markingsCtx.strokeStyle = '#ef4444';
+      markingsCtx.lineWidth = 3 / scale;
+    } else {
+      markingsCtx.globalCompositeOperation = 'destination-out';
+      markingsCtx.lineWidth = 10 / scale; // Larger eraser
+    }
+    
     markingsCtx.lineCap = 'round';
     markingsCtx.lineJoin = 'round';
     markingsCtx.lineTo(pos.x, pos.y);
@@ -356,7 +375,9 @@ export const ScratchMarking = ({ onSave }: ScratchMarkingProps) => {
         >
           <canvas
             ref={canvasRef}
-            className="max-w-full h-auto border rounded cursor-crosshair touch-none"
+            className={`max-w-full h-auto border rounded touch-none ${
+              currentTool === 'pen' ? 'cursor-crosshair' : 'cursor-pointer'
+            }`}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
@@ -372,6 +393,29 @@ export const ScratchMarking = ({ onSave }: ScratchMarkingProps) => {
               transformOrigin: '0 0'
             }}
           />
+        </div>
+
+        {/* Tool selection */}
+        <div className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg">
+          <span className="text-sm font-medium text-muted-foreground">Tool:</span>
+          <Button
+            variant={currentTool === 'pen' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setCurrentTool('pen')}
+            className="flex-shrink-0"
+          >
+            <Pen className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Pen</span>
+          </Button>
+          <Button
+            variant={currentTool === 'eraser' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setCurrentTool('eraser')}
+            className="flex-shrink-0"
+          >
+            <Eraser className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Eraser</span>
+          </Button>
         </div>
 
         {/* Mobile-friendly controls */}
@@ -441,8 +485,8 @@ export const ScratchMarking = ({ onSave }: ScratchMarkingProps) => {
 
         <div className="p-3 bg-muted/30 rounded-lg">
           <p className="text-sm text-muted-foreground">
-            <span className="block sm:hidden">Touch to draw red marks on the car diagram. Use pinch gestures to zoom and drag to pan. Use the zoom controls below for precise marking.</span>
-            <span className="hidden sm:block">Draw directly on the car diagram to mark scratches or damages. Use your mouse to draw red lines. Use zoom controls for detailed marking. The marked image will be saved with the entry.</span>
+            <span className="block sm:hidden">Select pen to draw red marks or eraser to remove markings. Touch to draw/erase on the car diagram. Use pinch gestures to zoom and drag to pan.</span>
+            <span className="hidden sm:block">Select pen tool to draw red lines marking scratches or damages, or use eraser tool to remove markings. Use zoom controls for detailed work. The marked image will be saved with the entry.</span>
           </p>
         </div>
       </CardContent>
