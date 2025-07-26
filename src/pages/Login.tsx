@@ -51,7 +51,8 @@ export default function Login() {
               <Car className="h-8 w-8" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold">Car Wash Management</CardTitle>
+          {/* Updated to PetaLog */}
+          <CardTitle className="text-2xl font-bold">PetaLog</CardTitle>
           <CardDescription>Sign in to your account</CardDescription>
         </CardHeader>
         <CardContent>

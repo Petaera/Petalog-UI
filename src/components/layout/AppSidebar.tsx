@@ -66,7 +66,7 @@ export function AppSidebar() {
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3 py-2">
-            Car Wash Management
+            PetaLog Management
           </SidebarGroupLabel>
 
           <SidebarGroupContent>

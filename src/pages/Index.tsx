@@ -18,9 +18,11 @@ const Index = () => {
       <header className="bg-white/95 backdrop-blur-sm sticky top-0 z-50 border-b border-gray-100">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-              <Camera className="w-5 h-5 text-white" />
-            </div>
+            <img 
+              src="/uploads/Logo only white bg.png" 
+              alt="PetaLog Logo" 
+              className="w-12 h-12 object-contain"
+            />
             <div>
               <h1 className="text-xl font-bold text-gray-900">PetaLog</h1>
               <p className="text-xs text-gray-600">Track. Log. Know.</p>
@@ -306,9 +308,11 @@ const Index = () => {
             <div className="grid md:grid-cols-4 gap-8 mb-8">
               <div>
                 <div className="flex items-center space-x-2 mb-4">
-                  <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                    <Camera className="w-5 h-5 text-white" />
-                  </div>
+                  <img 
+                    src="/uploads/Logo only white bg.png" 
+                    alt="PetaLog Logo" 
+                    className="w-12 h-12 object-contain"
+                  />
                   <div>
                     <h3 className="text-lg font-bold">PetaLog</h3>
                     <p className="text-sm text-gray-400">Track. Log. Know.</p>
@@ -334,7 +338,7 @@ const Index = () => {
                 <ul className="space-y-2 text-gray-400">
                   <li><a href="#" className="hover:text-white transition-colors">About</a></li>
                   <li><a href="#" className="hover:text-white transition-colors">Contact</a></li>
-                  <li><a href="#" className="hover:text-white transition-colors">Privacy</a></li>
+                  <li><Link to="/privacy" className="hover:text-white transition-colors">Privacy</Link></li>
                   <li><a href="#" className="hover:text-white transition-colors">Terms</a></li>
                 </ul>
               </div>

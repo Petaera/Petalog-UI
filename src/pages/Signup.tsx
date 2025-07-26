@@ -83,7 +83,7 @@ export default function Signup() {
             </div>
           </div>
           <CardTitle className="text-2xl font-bold">Create Account</CardTitle>
-          <CardDescription>Join Car Wash Management System</CardDescription>
+                      <CardDescription>Join PetaLog Platform</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
