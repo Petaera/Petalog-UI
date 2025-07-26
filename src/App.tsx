@@ -157,7 +157,9 @@ const App = () => (
               path="/manual-logs" 
               element={
                 <ProtectedRoute requiredRole="owner">
-                  <ManualLogs />
+                  <Layout>
+                    <ManualLogs />
+                  </Layout>
                 </ProtectedRoute>
               } 
             />
