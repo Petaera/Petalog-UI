@@ -17,32 +17,20 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/lib/supabaseClient";
 
 interface HeaderProps {
+  locations: { id: string; name: string; address: string }[];
   selectedLocation: string;
   onLocationChange: (locationId: string) => void;
 }
 
-export function Header({ selectedLocation, onLocationChange }: HeaderProps) {
+export function Header({ locations, selectedLocation, onLocationChange }: HeaderProps) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [managerLocation, setManagerLocation] = useState<{ name: string; address: string } | null>(null);
   const isManager = user?.role === 'manager';
 
-  // Move these inside the component
-  const [locations, setLocations] = useState<{ id: string; name: string; address: string }[]>([]);
-  useEffect(() => {
-    // Only fetch locations for owner
-    if (!isManager) {
-      const fetchLocations = async () => {
-        const { data, error } = await supabase.from('locations').select('id, name, address');
-        if (!error && data) {
-          setLocations(data);
-        } else {
-          setLocations([]);
-        }
-      };
-      fetchLocations();
-    }
-  }, [isManager]);
+  // Remove locations state and fetching logic
+  // const [locations, setLocations] = useState<{ id: string; name: string; address: string }[]>([]);
+  // useEffect(() => { ... });
 
   const currentLocation = locations.find(loc => loc.id === selectedLocation) || locations[0];
 

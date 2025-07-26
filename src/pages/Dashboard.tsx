@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from '@/contexts/AuthContext';
 
 // Accept selectedLocation as a prop
-const Dashboard = ({ selectedLocation }: { selectedLocation: string }) => {
+const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
   const { user } = useAuth();
   const [manualLogs, setManualLogs] = useState<any[]>([]);
   const [autoLogs, setAutoLogs] = useState<any[]>([]);

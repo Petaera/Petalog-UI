@@ -35,6 +35,7 @@ import ManagerVehicleHistory from "./pages/ManagerVehicleHistory";
 import ManagerOwnerEntry from "./pages/ManagerOwnerEntry";
 
 import NotFound from "./pages/NotFound";
+import { Layout } from "@/components/layout/Layout";
 
 const queryClient = new QueryClient();
 
@@ -128,7 +129,9 @@ const App = () => (
               path="/automatic-logs" 
               element={
                 <ProtectedRoute requiredRole="owner">
-                  <AutomaticLogs />
+                  <Layout>
+                    <AutomaticLogs />
+                  </Layout>
                 </ProtectedRoute>
               } 
             />
