@@ -16,6 +16,7 @@ const DashboardManager = () => {
       let manQuery = supabase
         .from('logs-man')
         .select('id, entry_time, location_id, vehicle_id, vehicles(number_plate)')
+        .eq('approval_status', 'approved') // Only show approved manual logs
         .order('entry_time', { ascending: false });
       let autoQuery = supabase
         .from('logs-auto')

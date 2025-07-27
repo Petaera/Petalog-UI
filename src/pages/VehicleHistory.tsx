@@ -58,10 +58,7 @@ export default function VehicleHistory() {
             </div>
           </div>
           
-          <Button variant="outline" size="sm">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
+
         </div>
 
         {/* Search Form */}

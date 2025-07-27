@@ -330,6 +330,8 @@ export default function ManagerOwnerEntry() {
           vehicle_model: selectedModel || null,
           Brand_id: selectedModelId || null,
           created_at: new Date().toISOString(),
+          // Approval status
+          approval_status: 'pending',
         },
       ]);
       if (insertError) throw insertError;
@@ -369,10 +371,7 @@ export default function ManagerOwnerEntry() {
             </Badge>
           </div>
           
-          <Button variant="outline" size="sm">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
+
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">

@@ -337,6 +337,8 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
           vehicle_model: selectedModel || null,
           Brand_id: selectedModelId || null,
           created_at: new Date().toISOString(),
+          // Approval status
+          approval_status: 'pending',
         },
       ]);
       if (insertError) throw insertError;

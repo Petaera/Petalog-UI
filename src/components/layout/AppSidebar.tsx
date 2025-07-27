@@ -42,12 +42,7 @@ export function AppSidebar() {
     ? [
         { title: "Dashboard", url: "/dashboard", icon: Home },
         { title: "Manual Entry", url: "/manager-owner-entry", icon: Car },
-        // { title: "Automatic Logs", url: "/manager-automatic-logs", icon: Database },
-        // { title: "Manual Logs", url: "/manager-manual-logs", icon: PenTool },
-        // { title: "Comparison", url: "/manager-comparison", icon: FileText },
-        // { title: "Reports & Statistics", url: "/manager-reports", icon: BarChart3 },
-        // { title: "Price Settings", url: "/manager-price-settings", icon: Settings },
-        // { title: "Vehicle History", url: "/manager-vehicle-history", icon: Search },
+        { title: "Manual Logs", url: "/manager-manual-logs", icon: PenTool },
       ]
     : [
         { title: "Dashboard", url: "/dashboard", icon: Home },
