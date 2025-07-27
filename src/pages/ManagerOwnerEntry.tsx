@@ -203,7 +203,11 @@ export default function ManagerOwnerEntry() {
       // Try to use priceMatrix if available, else fallback
       let total = 0;
       for (const s of service) {
-        const row = priceMatrix.find(row => row.VEHICLE === vehicleType && row.SERVICE === s);
+        // Trim both the database values and the service name for comparison
+        const row = priceMatrix.find(row => 
+          (row.VEHICLE && row.VEHICLE.trim()) === vehicleType.trim() && 
+          (row.SERVICE && row.SERVICE.trim()) === s.trim()
+        );
         if (row && row.PRICE !== undefined) {
           total += Number(row.PRICE);
         } else {
@@ -213,7 +217,8 @@ export default function ManagerOwnerEntry() {
       setAmount(total.toString());
     } else if (entryType === 'workshop' && workshop && vehicleType) {
       const row = workshopPriceMatrix.find(
-        row => row.WORKSHOP === workshop && row.VEHICLE === vehicleType
+        row => (row.WORKSHOP && row.WORKSHOP.trim()) === workshop.trim() && 
+               (row.VEHICLE && row.VEHICLE.trim()) === vehicleType.trim()
       );
       if (row && row.PRICE !== undefined) {
         setAmount(row.PRICE);
