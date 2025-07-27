@@ -57,8 +57,12 @@ export default function Login() {
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <div className="flex justify-center mb-4">
-              <div className="flex items-center justify-center w-16 h-16 rounded-full bg-primary text-primary-foreground">
-                <Car className="h-8 w-8" />
+              <div className="flex items-center justify-center w-16 h-16">
+                <img 
+                  src="/android-chrome-192x192.png" 
+                  alt="PetaLog Logo" 
+                  className="w-16 h-16 object-contain rounded-lg"
+                />
               </div>
             </div>
           {/* Updated to PetaLog */}
