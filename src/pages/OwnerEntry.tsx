@@ -269,8 +269,8 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       return;
     }
     
-    if (!vehicleNumber || !vehicleType || (entryType === 'normal' && service.length === 0) || !trimmedCustomerName || !phoneNumber) {
-      toast.error('Please fill in all required fields (Vehicle Number, Vehicle Type, Service, Customer Name, and Phone Number)');
+    if (!vehicleNumber || !vehicleType || (entryType === 'normal' && service.length === 0)) {
+      toast.error('Please fill in all required fields (Vehicle Number, Vehicle Type, and Service)');
       return;
     }
     if (!scratchImage) {
@@ -328,8 +328,8 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
           vehicle_type: vehicleType,
           workshop: entryType === 'workshop' ? workshop : null,
           // Customer details
-          Name: trimmedCustomerName,
-          Phone_no: phoneNumber,
+          Name: trimmedCustomerName || null,
+          Phone_no: phoneNumber || null,
           'D.O.B': dateOfBirth || null,
           Location: customerLocation || null,
           // Vehicle details
@@ -434,7 +434,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                 <Label className="text-base font-semibold">Customer Details</Label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="customerName">Customer Name *</Label>
+                    <Label htmlFor="customerName">Customer Name (Optional)</Label>
                     <Input 
                       id="customerName"
                       placeholder="Enter customer name" 
@@ -443,7 +443,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="phoneNumber">Phone Number *</Label>
+                    <Label htmlFor="phoneNumber">Phone Number (Optional)</Label>
                     <Input 
                       id="phoneNumber"
                       placeholder="Enter phone number" 

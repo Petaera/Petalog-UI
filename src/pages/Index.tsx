@@ -334,7 +334,7 @@ const Index = () => {
                   <li><a href="#" className="hover:text-white transition-colors">About</a></li>
                   <li><a href="#" className="hover:text-white transition-colors">Contact</a></li>
                   <li><Link to="/privacy" className="hover:text-white transition-colors">Privacy</Link></li>
-                  <li><a href="#" className="hover:text-white transition-colors">Terms</a></li>
+                  <li><Link to="/terms" className="hover:text-white transition-colors">Terms</Link></li>
                 </ul>
               </div>
 

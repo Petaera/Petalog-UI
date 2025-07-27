@@ -10,6 +10,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Privacy from "./pages/Privacy";
+import Terms from "./pages/Terms";
 
 // Owner pages
 import Index from "./pages/Index.tsx";
@@ -53,6 +54,7 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/privacy" element={<Privacy />} />
+            <Route path="/terms" element={<Terms />} />
             
             {/* Manager routes */}
             <Route 
