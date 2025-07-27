@@ -43,14 +43,24 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 to-secondary/10 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="flex justify-center mb-4">
-            <div className="flex items-center justify-center w-16 h-16 rounded-full bg-primary text-primary-foreground">
-              <Car className="h-8 w-8" />
+    <div className="min-h-screen bg-gradient-to-br from-primary/5 to-secondary/10 p-4 relative">
+      {/* Back to Home button positioned at top-left of page */}
+      <div className="absolute top-4 left-4 z-10">
+        <Link to="/">
+          <Button variant="outline" size="sm" className="text-sm">
+            ← Back to Home
+          </Button>
+        </Link>
+      </div>
+      
+      <div className="flex items-center justify-center min-h-screen">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="flex justify-center mb-4">
+              <div className="flex items-center justify-center w-16 h-16 rounded-full bg-primary text-primary-foreground">
+                <Car className="h-8 w-8" />
+              </div>
             </div>
-          </div>
           {/* Updated to PetaLog */}
           <CardTitle className="text-2xl font-bold">PetaLog</CardTitle>
           <CardDescription>Sign in to your account</CardDescription>
@@ -108,6 +118,7 @@ export default function Login() {
           </div>
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }
