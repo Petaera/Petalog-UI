@@ -72,7 +72,7 @@ export default function Reports() {
             </div>
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-center gap-2">
             <Button variant="outline" size="sm">
               <Download className="h-4 w-4 mr-2" />
               Export PDF
@@ -81,7 +81,6 @@ export default function Reports() {
               <FileSpreadsheet className="h-4 w-4 mr-2" />
               Export Excel
             </Button>
-            
           </div>
         </div>
 
