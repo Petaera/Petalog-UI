@@ -8,6 +8,8 @@ import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getOrCreateVehicleId } from "@/lib/utils";
 
 interface ComparisonProps {
   selectedLocation?: string;
@@ -27,6 +29,7 @@ export default function Comparison({ selectedLocation }: ComparisonProps) {
   const [comparisonData, setComparisonData] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState("");
+  const [selectedLogType, setSelectedLogType] = useState<string>("all");
 
   useEffect(() => {
     console.log("Comparison useEffect - selectedLocation:", selectedLocation);
@@ -40,7 +43,7 @@ export default function Comparison({ selectedLocation }: ComparisonProps) {
     }
     
     fetchComparisonData();
-  }, [selectedLocation, selectedDate]);
+  }, [selectedLocation, selectedDate, selectedLogType]);
 
   const fetchComparisonData = async () => {
     setLoading(true);
@@ -52,6 +55,7 @@ export default function Comparison({ selectedLocation }: ComparisonProps) {
         .from("logs-man")
         .select("*, vehicles(number_plate)")
         .eq("location_id", selectedLocation)
+        .eq("approval_status", "approved")
         .order("created_at", { ascending: false });
 
       // Add date filter if selected
@@ -59,18 +63,15 @@ export default function Comparison({ selectedLocation }: ComparisonProps) {
         const startOfDay = `${selectedDate}T00:00:00.000Z`;
         const endOfDay = `${selectedDate}T23:59:59.999Z`;
         manualQuery = manualQuery
-          .gte("created_at", startOfDay)
-          .lte("created_at", endOfDay);
+          .gte("entry_time", startOfDay)
+          .lte("entry_time", endOfDay);
       }
 
-      const { data: manualData, error: manualError } = await manualQuery;
-
-      console.log("Manual logs query result:", { manualData, manualError });
-      console.log("Manual logs count:", manualData?.length || 0);
+      const { data: manualLogs, error: manualError } = await manualQuery;
 
       if (manualError) {
         console.error('Error fetching manual logs:', manualError);
-        toast.error('Error fetching manual logs: ' + manualError.message);
+        return;
       }
 
       // Fetch automatic logs
@@ -85,133 +86,100 @@ export default function Comparison({ selectedLocation }: ComparisonProps) {
         const startOfDay = `${selectedDate}T00:00:00.000Z`;
         const endOfDay = `${selectedDate}T23:59:59.999Z`;
         automaticQuery = automaticQuery
-          .gte("created_at", startOfDay)
-          .lte("created_at", endOfDay);
+          .gte("entry_time", startOfDay)
+          .lte("entry_time", endOfDay);
       }
 
-      const { data: automaticData, error: automaticError } = await automaticQuery;
-
-      console.log("Automatic logs query result:", { automaticData, automaticError });
-      console.log("Automatic logs count:", automaticData?.length || 0);
+      const { data: automaticLogs, error: automaticError } = await automaticQuery;
 
       if (automaticError) {
         console.error('Error fetching automatic logs:', automaticError);
-        toast.error('Error fetching automatic logs: ' + automaticError.message);
+        return;
       }
 
-      // Combine and format the data
-      const manualLogs = (manualData || []).map(log => ({
+      // Process and combine logs
+      const processedManualLogs = (manualLogs || []).map(log => ({
         ...log,
-        log_type: 'manual' as const,
-        vehicle_number: log.vehicle_number || log.vehicles?.number_plate || ""
+        vehicle_number: log.vehicle_number || log.vehicles?.number_plate || "",
+        log_type: 'manual' as const
       }));
 
-      const automaticLogs = (automaticData || []).map(log => ({
+      const processedAutomaticLogs = (automaticLogs || []).map(log => ({
         ...log,
-        log_type: 'automatic' as const,
-        vehicle_number: log.vehicle_number || log.vehicles?.number_plate || ""
+        vehicle_number: log.vehicle_number || log.vehicles?.number_plate || "",
+        log_type: 'automatic' as const
       }));
 
-      console.log("Formatted manual logs:", manualLogs);
-      console.log("Formatted automatic logs:", automaticLogs);
+      // Create maps for finding common vehicles
+      const manualVehicleMap = new Map();
+      const automaticVehicleMap = new Map();
 
-      // Detect common vehicles (same vehicle number on same day)
-      const commonVehicles = new Set<string>();
-      
-      // Create maps for easy lookup
-      const manualVehicleMap = new Map<string, any[]>();
-      const automaticVehicleMap = new Map<string, any[]>();
-
-      // Group manual logs by vehicle number and date
-      manualLogs.forEach(log => {
-        const vehicleKey = log.vehicle_number;
-        const dateKey = log.created_at.split('T')[0]; // Get just the date part
-        const key = `${vehicleKey}_${dateKey}`;
-        
-        if (!manualVehicleMap.has(key)) {
-          manualVehicleMap.set(key, []);
-        }
-        manualVehicleMap.get(key)!.push(log);
+      processedManualLogs.forEach(log => {
+        const key = `${log.vehicle_number}-${new Date(log.created_at).toDateString()}`;
+        manualVehicleMap.set(key, log);
       });
 
-      // Group automatic logs by vehicle number and date
-      automaticLogs.forEach(log => {
-        const vehicleKey = log.vehicle_number;
-        const dateKey = log.created_at.split('T')[0]; // Get just the date part
-        const key = `${vehicleKey}_${dateKey}`;
-        
-        if (!automaticVehicleMap.has(key)) {
-          automaticVehicleMap.set(key, []);
-        }
-        automaticVehicleMap.get(key)!.push(log);
+      processedAutomaticLogs.forEach(log => {
+        const key = `${log.vehicle_number}-${new Date(log.created_at).toDateString()}`;
+        automaticVehicleMap.set(key, log);
       });
 
-      // Find common vehicles (appear in both manual and automatic on same day)
+      // Find common vehicles
+      const commonVehicles = new Set();
       for (const [key] of manualVehicleMap) {
         if (automaticVehicleMap.has(key)) {
           commonVehicles.add(key);
         }
       }
 
-      console.log("Common vehicles found:", Array.from(commonVehicles));
+      // Mark common entries
+      const allLogs = [
+        ...processedManualLogs.map(log => {
+          const key = `${log.vehicle_number}-${new Date(log.created_at).toDateString()}`;
+          return {
+            ...log,
+            log_type: commonVehicles.has(key) ? 'common' as const : 'manual' as const
+          };
+        }),
+        ...processedAutomaticLogs.map(log => {
+          const key = `${log.vehicle_number}-${new Date(log.created_at).toDateString()}`;
+          return {
+            ...log,
+            log_type: commonVehicles.has(key) ? 'common' as const : 'automatic' as const
+          };
+        })
+      ];
 
-      // Mark common vehicles in both arrays
-      const processedManualLogs = manualLogs.map(log => {
-        const vehicleKey = log.vehicle_number;
-        const dateKey = log.created_at.split('T')[0];
-        const key = `${vehicleKey}_${dateKey}`;
-        
-        return {
-          ...log,
-          log_type: commonVehicles.has(key) ? 'common' as const : 'manual' as const
-        };
-      });
-
-      const processedAutomaticLogs = automaticLogs.map(log => {
-        const vehicleKey = log.vehicle_number;
-        const dateKey = log.created_at.split('T')[0];
-        const key = `${vehicleKey}_${dateKey}`;
-        
-        return {
-          ...log,
-          log_type: commonVehicles.has(key) ? 'common' as const : 'automatic' as const
-        };
-      });
-
-      // Combine all logs and sort by date (newest first)
-      const allLogs = [...processedManualLogs, ...processedAutomaticLogs].sort((a, b) => 
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-
-      // Remove duplicates for common vehicles (keep only one entry per common vehicle+date)
+      // Remove duplicates for common entries (keep only one entry per common vehicle+date)
       const finalLogs: LogEntry[] = [];
-      const processedKeys = new Set<string>();
+      const addedCommonKeys = new Set();
 
       allLogs.forEach(log => {
-        const vehicleKey = log.vehicle_number;
-        const dateKey = log.created_at.split('T')[0];
-        const key = `${vehicleKey}_${dateKey}`;
+        const key = `${log.vehicle_number}-${new Date(log.created_at).toDateString()}`;
         
         if (log.log_type === 'common') {
-          // For common vehicles, only add once
-          if (!processedKeys.has(key)) {
+          if (!addedCommonKeys.has(key)) {
             finalLogs.push(log);
-            processedKeys.add(key);
+            addedCommonKeys.add(key);
           }
         } else {
-          // For manual and automatic only, add normally
           finalLogs.push(log);
         }
       });
 
-      console.log("Final logs after deduplication:", finalLogs);
-      console.log("Total logs count:", finalLogs.length);
+      // Apply log type filter
+      let filteredLogs = finalLogs;
+      if (selectedLogType !== "all") {
+        filteredLogs = finalLogs.filter(log => log.log_type === selectedLogType);
+      }
 
-      setComparisonData(finalLogs);
+      // Sort by date
+      filteredLogs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
+      setComparisonData(filteredLogs);
+      console.log('Comparison data set:', filteredLogs);
     } catch (error) {
       console.error('Error fetching comparison data:', error);
-      toast.error('Error fetching comparison data: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -231,6 +199,10 @@ export default function Comparison({ selectedLocation }: ComparisonProps) {
     setSelectedDate("");
   };
 
+  const clearLogTypeFilter = () => {
+    setSelectedLogType("all");
+  };
+
   return (
     <div className="flex-1 p-4 lg:p-6 space-y-4 lg:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -242,7 +214,7 @@ export default function Comparison({ selectedLocation }: ComparisonProps) {
         </div>
       </div>
 
-      {/* Date Filter */}
+      {/* Date and Type Filter */}
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
@@ -260,14 +232,28 @@ export default function Comparison({ selectedLocation }: ComparisonProps) {
                 onChange={(e) => setSelectedDate(e.target.value)}
                 className="w-full sm:w-48"
               />
-              {selectedDate && (
+              <Select value={selectedLogType} onValueChange={setSelectedLogType}>
+                <SelectTrigger className="w-full sm:w-48">
+                  <SelectValue placeholder="Select log type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="common">Common Only</SelectItem>
+                  <SelectItem value="manual">Manual Only</SelectItem>
+                  <SelectItem value="automatic">Automatic Only</SelectItem>
+                </SelectContent>
+              </Select>
+              {(selectedDate || selectedLogType !== "all") && (
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={clearDateFilter}
+                  onClick={() => {
+                    clearDateFilter();
+                    clearLogTypeFilter();
+                  }}
                   className="text-muted-foreground hover:text-foreground"
                 >
-                  Clear Filter
+                  Clear Filters
                 </Button>
               )}
             </div>
@@ -295,7 +281,9 @@ export default function Comparison({ selectedLocation }: ComparisonProps) {
                       <tr><td colSpan={5} className="text-center py-4">Loading...</td></tr>
                     ) : comparisonData.length === 0 ? (
                       <tr><td colSpan={5} className="text-center py-4 text-muted-foreground">
-                        {selectedDate ? `No logs found for ${new Date(selectedDate).toLocaleDateString()}` : 'No logs found'}
+                        {selectedDate || selectedLogType !== "all" 
+                          ? `No logs found for ${selectedDate ? `date ${new Date(selectedDate).toLocaleDateString()}` : ''}${selectedDate && selectedLogType !== "all" ? ' and ' : ''}${selectedLogType !== "all" ? `type ${selectedLogType}` : ''}`
+                          : 'No logs found'}
                       </td></tr>
                     ) : (
                       comparisonData.map((log, idx) => (
