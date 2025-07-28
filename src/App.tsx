@@ -179,7 +179,9 @@ const App = () => (
               path="/comparison" 
               element={
                 <ProtectedRoute requiredRole="owner">
-                  <Comparison />
+                  <Layout>
+                    <Comparison />
+                  </Layout>
                 </ProtectedRoute>
               } 
             />

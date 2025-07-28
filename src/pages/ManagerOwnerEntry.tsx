@@ -16,6 +16,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { Checkbox } from '@/components/ui/checkbox';
 import ReactSelect from 'react-select';
+import { getOrCreateVehicleId } from "@/lib/utils";
 
 // Add SERVICE_PRICES fallback at the top-level
 const SERVICE_PRICES: { [key: string]: number } = {
@@ -276,25 +277,9 @@ export default function ManagerOwnerEntry() {
       return;
     }
     try {
-      // 0. Check if vehicle exists, else insert
-      let vehicleId;
-      const { data: existingVehicle } = await supabase
-        .from('vehicles')
-        .select('id')
-        .eq('number_plate', vehicleNumber)
-        .single();
-      if (existingVehicle && existingVehicle.id) {
-        vehicleId = existingVehicle.id;
-      } else {
-        vehicleId = generateUUID();
-        await supabase.from('vehicles').insert([
-          {
-            id: vehicleId,
-            number_plate: vehicleNumber,
-            type: vehicleType,
-          },
-        ]);
-      }
+      // Use the utility function to get or create vehicle ID
+      const vehicleId = await getOrCreateVehicleId(vehicleNumber, vehicleType);
+      
       // 1. Upload image to Supabase Storage
       const safeVehicleNumber = vehicleNumber.replace(/[^a-zA-Z0-9_-]/g, '');
       const fileName = `${safeVehicleNumber}_${Date.now()}.png`;
