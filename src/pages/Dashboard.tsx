@@ -42,21 +42,21 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
 
   return (
     <Layout>
-      <div className="p-6">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
+      <div className="p-4 lg:p-6">
+        <div className="mb-6 lg:mb-8">
+          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
           <p className="text-gray-600">Welcome to your vehicle logging dashboard</p>
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-6 lg:mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Vehicles Today</CardTitle>
               <Car className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">1,234</div>
+              <div className="text-xl lg:text-2xl font-bold">1,234</div>
               <p className="text-xs text-muted-foreground">
                 +20.1% from yesterday
               </p>
@@ -69,7 +69,7 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
               <Timer className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">45</div>
+              <div className="text-xl lg:text-2xl font-bold">45</div>
               <p className="text-xs text-muted-foreground">
                 Currently in facility
               </p>
@@ -82,7 +82,7 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
               <Gift className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">$12,345</div>
+              <div className="text-xl lg:text-2xl font-bold">$12,345</div>
               <p className="text-xs text-muted-foreground">
                 +15.3% from yesterday
               </p>
@@ -95,7 +95,7 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
               <Clock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">23m</div>
+              <div className="text-xl lg:text-2xl font-bold">23m</div>
               <p className="text-xs text-muted-foreground">
                 Per vehicle session
               </p>

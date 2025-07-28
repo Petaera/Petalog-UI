@@ -232,12 +232,12 @@ export default function Comparison({ selectedLocation }: ComparisonProps) {
   };
 
   return (
-    <div className="flex-1 p-6 pt-10 space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+    <div className="flex-1 p-4 lg:p-6 space-y-4 lg:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-2 lg:gap-4">
           <div className="flex items-center gap-2">
-            <FileText className="h-6 w-6 text-primary" />
-            <h1 className="text-2xl font-bold">Comparison</h1>
+            <FileText className="h-5 w-5 lg:h-6 lg:w-6 text-primary" />
+            <h1 className="text-xl lg:text-2xl font-bold">Comparison</h1>
           </div>
         </div>
       </div>
@@ -245,86 +245,89 @@ export default function Comparison({ selectedLocation }: ComparisonProps) {
       {/* Date Filter */}
       <Card>
         <CardContent className="p-4">
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="flex items-center gap-2">
               <Calendar className="h-5 w-5 text-muted-foreground" />
               <Label htmlFor="date-filter" className="text-sm font-medium">
                 Filter by Date:
               </Label>
             </div>
-            <Input
-              id="date-filter"
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="w-48"
-            />
-            {selectedDate && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={clearDateFilter}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                Clear Filter
-              </Button>
-            )}
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Input
+                id="date-filter"
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="w-full sm:w-48"
+              />
+              {selectedDate && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={clearDateFilter}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  Clear Filter
+                </Button>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Comparison Data Table */}
       <Card className="mt-6">
         <CardContent className="p-6">
-          <div className="overflow-x-auto">
-            <table className="min-w-full border">
-              <thead>
-                <tr className="bg-muted/50">
-                  <th className="border px-4 py-2 text-left">Vehicle No</th>
-                  <th className="border px-4 py-2 text-left">Entry Time</th>
-                  <th className="border px-4 py-2 text-left">Exit Time</th>
-                  <th className="border px-4 py-2 text-left">Duration</th>
-                  <th className="border px-4 py-2 text-left">Type</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr><td colSpan={5} className="text-center py-4">Loading...</td></tr>
-                ) : comparisonData.length === 0 ? (
-                  <tr><td colSpan={5} className="text-center py-4 text-muted-foreground">
-                    {selectedDate ? `No logs found for ${new Date(selectedDate).toLocaleDateString()}` : 'No logs found'}
-                  </td></tr>
-                ) : (
-                  comparisonData.map((log, idx) => (
-                    <tr key={log.id || idx} className="hover:bg-muted/30">
-                      <td className="border px-4 py-2 font-medium">
-                        {log.vehicle_number || log.vehicles?.number_plate || "-"}
-                      </td>
-                      <td className="border px-4 py-2">
-                        {log.entry_time ? new Date(log.entry_time).toLocaleString() : 
-                         log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
-                      </td>
-                      <td className="border px-4 py-2">
-                        {log.exit_time ? new Date(log.exit_time).toLocaleString() : "-"}
-                      </td>
-                      <td className="border px-4 py-2">
-                        {log.entry_time && log.exit_time ? 
-                          getDuration(log.entry_time, log.exit_time) : "-"
-                        }
-                      </td>
-                      <td className="border px-4 py-2">
-                        <Badge 
-                          variant={log.log_type === 'manual' ? 'outline' : log.log_type === 'automatic' ? 'default' : 'secondary'}
-                          className={log.log_type === 'manual' ? 'text-orange-600 border-orange-600' : log.log_type === 'automatic' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}
-                        >
-                          {log.log_type === 'manual' ? 'Manual' : log.log_type === 'automatic' ? 'Automatic' : 'Common'}
-                        </Badge>
-                      </td>
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <div className="min-w-full inline-block align-middle">
+              <div className="overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle No</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entry Time</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Exit Time</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {loading ? (
+                      <tr><td colSpan={5} className="text-center py-4">Loading...</td></tr>
+                    ) : comparisonData.length === 0 ? (
+                      <tr><td colSpan={5} className="text-center py-4 text-muted-foreground">
+                        {selectedDate ? `No logs found for ${new Date(selectedDate).toLocaleDateString()}` : 'No logs found'}
+                      </td></tr>
+                    ) : (
+                      comparisonData.map((log, idx) => (
+                        <tr key={log.id || idx} className="hover:bg-muted/30">
+                          <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {log.vehicle_number || log.vehicles?.number_plate || "-"}
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {log.entry_time ? new Date(log.entry_time).toLocaleString() : 
+                             log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {log.exit_time ? new Date(log.exit_time).toLocaleString() : "-"}
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {getDuration(log.entry_time, log.exit_time)}
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                            <Badge 
+                              variant={log.log_type === 'common' ? 'secondary' : log.log_type === 'manual' ? 'default' : 'outline'}
+                              className={log.log_type === 'common' ? 'bg-gray-100 text-gray-800' : ''}
+                            >
+                              {log.log_type === 'common' ? 'Common' : log.log_type === 'manual' ? 'Manual' : 'Automatic'}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>

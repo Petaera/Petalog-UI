@@ -355,12 +355,12 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
   };
 
   return (
-    <div className="flex-1 p-4 md:p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+    <div className="flex-1 p-4 lg:p-6 space-y-4 lg:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-2 lg:gap-4">
           <div className="flex items-center gap-2">
-            <Car className="h-6 w-6 text-primary" />
-            <h1 className="text-2xl font-bold">Manual Entry</h1>
+            <Car className="h-5 w-5 lg:h-6 lg:w-6 text-primary" />
+            <h1 className="text-xl lg:text-2xl font-bold">Owner Manual Entry</h1>
           </div>
           <Badge variant="outline" className="bg-primary/10 text-primary border-primary">
             Owner Access
@@ -368,295 +368,287 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         </div>
       </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          {/* Entry Form */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Vehicle Entry Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Entry Type - move this section above Vehicle Number */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Entry Type</Label>
-                  <div className="flex gap-2">
-                    <Button 
-                      variant={entryType === 'normal' ? 'default' : 'outline'} 
-                      size="sm" 
-                      className="flex-1 text-xs sm:text-sm"
-                      onClick={() => setEntryType('normal')}
-                    >
-                      Normal
-                    </Button>
-                    <Button 
-                      variant={entryType === 'workshop' ? 'default' : 'outline'} 
-                      size="sm" 
-                      className="flex-1 text-xs sm:text-sm"
-                      onClick={() => setEntryType('workshop')}
-                    >
-                      Workshop
-                    </Button>
-                  </div>
-                </div>
-              </div>
-              {/* Vehicle Number */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
+        {/* Vehicle Information */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg lg:text-xl">Vehicle Information</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="vehicleNumber">Vehicle Number</Label>
-                <Input 
-                  id="vehicleNumber"
-                  placeholder="Enter vehicle number (KL07AB0001)" 
-                  className="text-center font-mono text-lg uppercase"
+                <Label htmlFor="vehicle-number">Vehicle Number *</Label>
+                <Input
+                  id="vehicle-number"
                   value={vehicleNumber}
                   onChange={(e) => handleVehicleNumberChange(e.target.value)}
-                />
-                {vehicleNumber && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <div className={`w-2 h-2 rounded-full ${previousVisits > 0 ? 'bg-success' : 'bg-warning'}`}></div>
-                    <span className="text-muted-foreground">
-                      {previousVisits > 0 ? `Previous Visits: ${previousVisits} times` : 'New Customer'}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Customer Details */}
-              <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
-                <Label className="text-base font-semibold">Customer Details</Label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="customerName">Customer Name (Optional)</Label>
-                    <Input 
-                      id="customerName"
-                      placeholder="Enter customer name" 
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phoneNumber">Phone Number (Optional)</Label>
-                    <Input 
-                      id="phoneNumber"
-                      placeholder="Enter phone number" 
-                      type="tel"
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="dateOfBirth">Date of Birth (Optional)</Label>
-                    <Input 
-                      id="dateOfBirth"
-                      type="date"
-                      value={dateOfBirth}
-                      onChange={(e) => setDateOfBirth(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <LocationAutocomplete
-                      value={customerLocation}
-                      onChange={setCustomerLocation}
-                      placeholder="Type to search location..."
-                      label="Location (Optional)"
-                      id="customerLocation"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Vehicle Brand and Model */}
-              <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
-                <Label className="text-base font-semibold">Vehicle Details</Label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="selectedVehicleBrand">Vehicle Brand</Label>
-                    <ReactSelect
-                      isClearable
-                      isSearchable
-                      placeholder="Type to search vehicle brand..."
-                      options={availableVehicleBrands.map(brand => ({ value: brand, label: brand }))}
-                      value={selectedVehicleBrand ? { value: selectedVehicleBrand, label: selectedVehicleBrand } : null}
-                      onChange={(selected) => setSelectedVehicleBrand(selected?.value || '')}
-                      classNamePrefix="react-select"
-                      noOptionsMessage={() => "No brands found"}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="selectedModel">Vehicle Model</Label>
-                    <Select 
-                      value={selectedModel} 
-                      onValueChange={(value) => {
-                        setSelectedModel(value);
-                        // Find and set the corresponding model ID
-                        const modelObj = availableModels.find(m => m.name === value);
-                        setSelectedModelId(modelObj?.id || '');
-                      }}
-                      disabled={!selectedVehicleBrand}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={selectedVehicleBrand ? "Select model" : "Select vehicle brand first"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableModels.map(model => (
-                          <SelectItem key={model.id} value={model.name}>{model.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {entryType === 'normal' && (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="vehicleType">Vehicle Type</Label>
-                      <Select value={vehicleType} onValueChange={setVehicleType}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select vehicle type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {vehicleTypes.map(type => (
-                            <SelectItem key={type} value={type}>{type}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="service">Service Chosen</Label>
-                      <ReactSelect
-                        isMulti
-                        options={
-                          vehicleType
-                            ? priceMatrix
-                                .filter(row => row.VEHICLE && row.VEHICLE.trim() === vehicleType.trim())
-                                .map(row => row.SERVICE)
-                                .filter((v, i, arr) => v && arr.indexOf(v) === i)
-                                .map(option => ({ value: option, label: option }))
-                            : []
-                        }
-                        value={service.map(option => ({
-                          value: option,
-                          label: option
-                        }))}
-                        onChange={(selected) => setService(Array.isArray(selected) ? selected.map((s: any) => s.value) : [])}
-                        placeholder={vehicleType ? "Select services" : "Select vehicle type first"}
-                        classNamePrefix="react-select"
-                        isDisabled={!vehicleType}
-                      />
-                    </div>
-                  </>
-                )}
-
-                {entryType === 'workshop' && (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="workshop">Workshop</Label>
-                      <Select value={workshop} onValueChange={setWorkshop}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select workshop" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {workshopOptions.map(option => (
-                            <SelectItem key={option} value={option}>{option}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="vehicleType">Vehicle Type</Label>
-                      <Select value={vehicleType} onValueChange={setVehicleType}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select vehicle type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {vehicleTypes.map(type => (
-                            <SelectItem key={type} value={type}>{type}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="amount">Amount</Label>
-                  <Input 
-                    id="amount" 
-                    value={amount ? `₹${amount}` : ''} 
-                    className="font-semibold text-financial"
-                    readOnly
-                    onChange={(e) => setAmount(e.target.value.replace('₹', ''))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="discount">Discount (Optional)</Label>
-                  <Input
-                    id="discount"
-                    placeholder="Enter discount amount"
-                    type="number"
-                    value={discount}
-                    onChange={(e) => setDiscount(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Payment Mode</Label>
-                <div className="flex gap-2">
-                  <Button 
-                    variant={paymentMode === 'cash' ? 'default' : 'outline'} 
-                    size="sm" 
-                    className="flex-1"
-                    onClick={() => setPaymentMode('cash')}
-                  >
-                    <Banknote className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                    <span className="text-xs sm:text-sm">Cash</span>
-                  </Button>
-                  <Button 
-                    variant={paymentMode === 'upi' ? 'default' : 'outline'} 
-                    size="sm" 
-                    className="flex-1"
-                    onClick={() => setPaymentMode('upi')}
-                  >
-                    <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                    <span className="text-xs sm:text-sm">UPI</span>
-                  </Button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="remarks">Remarks</Label>
-                <Textarea 
-                  id="remarks" 
-                  placeholder="Any additional notes..." 
-                  rows={3} 
-                  value={remarks}
-                  onChange={(e) => setRemarks(e.target.value)}
+                  placeholder="Enter vehicle number"
+                  className="w-full"
                 />
               </div>
-            </CardContent>
-          </Card>
+              <div className="space-y-2">
+                <Label htmlFor="vehicle-type">Vehicle Type *</Label>
+                <Select value={vehicleType} onValueChange={setVehicleType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select vehicle type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {vehicleTypes.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
-          {/* Scratch Marking Section */}
-          <ScratchMarking onSave={handleScratchSave} />
-        </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="vehicle-brand">Vehicle Brand</Label>
+                <Select value={selectedVehicleBrand} onValueChange={setSelectedVehicleBrand}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select brand" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableVehicleBrands.map((brand) => (
+                      <SelectItem key={brand} value={brand}>
+                        {brand}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="vehicle-model">Vehicle Model</Label>
+                <Select value={selectedModelId} onValueChange={setSelectedModelId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableModels.map((model) => (
+                      <SelectItem key={model.id} value={model.id}>
+                        {model.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-        {/* Submit Button */}
-        <div className="flex justify-center">
-          <Button 
-            variant="default" 
-            size="lg" 
-            className="px-8"
-            onClick={handleSubmit}
-          >
-            Submit Entry
-          </Button>
-        </div>
+        {/* Customer Information */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg lg:text-xl">Customer Information</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="customer-name">Customer Name</Label>
+                <Input
+                  id="customer-name"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  placeholder="Enter customer name"
+                  className="w-full"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone-number">Phone Number</Label>
+                <Input
+                  id="phone-number"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  placeholder="Enter phone number"
+                  className="w-full"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="date-of-birth">Date of Birth</Label>
+                <Input
+                  id="date-of-birth"
+                  type="date"
+                  value={dateOfBirth}
+                  onChange={(e) => setDateOfBirth(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="customer-location">Customer Location</Label>
+                <Input
+                  id="customer-location"
+                  value={customerLocation}
+                  onChange={(e) => setCustomerLocation(e.target.value)}
+                  placeholder="Enter location"
+                  className="w-full"
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
-    );
+
+      {/* Service and Payment Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
+        {/* Service Selection */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg lg:text-xl">Service & Payment</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Entry Type */}
+            <div className="space-y-2">
+              <Label>Entry Type</Label>
+              <div className="flex gap-2">
+                <Button 
+                  variant={entryType === 'normal' ? 'default' : 'outline'} 
+                  size="sm" 
+                  className="flex-1"
+                  onClick={() => setEntryType('normal')}
+                >
+                  Normal
+                </Button>
+                <Button 
+                  variant={entryType === 'workshop' ? 'default' : 'outline'} 
+                  size="sm" 
+                  className="flex-1"
+                  onClick={() => setEntryType('workshop')}
+                >
+                  Workshop
+                </Button>
+              </div>
+            </div>
+
+            {/* Service Selection */}
+            {entryType === 'normal' && (
+              <div className="space-y-2">
+                <Label htmlFor="service">Service Chosen</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {serviceOptions.map((serviceOption) => (
+                    <div key={serviceOption} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={serviceOption}
+                        checked={service.includes(serviceOption)}
+                        onCheckedChange={(checked) => handleServiceCheckbox(serviceOption, checked)}
+                      />
+                      <Label htmlFor={serviceOption} className="text-sm">
+                        {serviceOption.charAt(0).toUpperCase() + serviceOption.slice(1)}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Workshop Selection */}
+            {entryType === 'workshop' && (
+              <div className="space-y-2">
+                <Label htmlFor="workshop">Workshop</Label>
+                <Select value={workshop} onValueChange={setWorkshop}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select workshop" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {workshopOptions.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Amount and Discount */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="amount">Amount</Label>
+                <Input 
+                  id="amount" 
+                  value={amount ? `₹${amount}` : ''} 
+                  className="font-semibold text-financial"
+                  readOnly
+                  onChange={(e) => setAmount(e.target.value.replace('₹', ''))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="discount">Discount (Optional)</Label>
+                <Input
+                  id="discount"
+                  placeholder="Enter discount amount"
+                  type="number"
+                  value={discount}
+                  onChange={(e) => setDiscount(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Payment Mode */}
+            <div className="space-y-2">
+              <Label>Payment Mode</Label>
+              <div className="flex gap-2">
+                <Button 
+                  variant={paymentMode === 'cash' ? 'default' : 'outline'} 
+                  size="sm" 
+                  className="flex-1"
+                  onClick={() => setPaymentMode('cash')}
+                >
+                  <Banknote className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                  <span className="text-xs sm:text-sm">Cash</span>
+                </Button>
+                <Button 
+                  variant={paymentMode === 'upi' ? 'default' : 'outline'} 
+                  size="sm" 
+                  className="flex-1"
+                  onClick={() => setPaymentMode('upi')}
+                >
+                  <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                  <span className="text-xs sm:text-sm">UPI</span>
+                </Button>
+              </div>
+            </div>
+
+            {/* Remarks */}
+            <div className="space-y-2">
+              <Label htmlFor="remarks">Remarks</Label>
+              <Textarea 
+                id="remarks" 
+                placeholder="Any additional notes..." 
+                rows={3} 
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Scratch Marking Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg lg:text-xl">Vehicle Scratch Marking</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ScratchMarking onSave={handleScratchSave} />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Submit Button */}
+      <div className="flex justify-center">
+        <Button 
+          variant="default" 
+          size="lg" 
+          className="px-8"
+          onClick={handleSubmit}
+        >
+          Submit Entry
+        </Button>
+      </div>
+    </div>
+  );
 }
