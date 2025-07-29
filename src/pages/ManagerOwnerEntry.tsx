@@ -16,6 +16,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { Checkbox } from '@/components/ui/checkbox';
 import ReactSelect from 'react-select';
+import { getOrCreateVehicleId } from "@/lib/utils";
 
 // Add SERVICE_PRICES fallback at the top-level
 const SERVICE_PRICES: { [key: string]: number } = {
@@ -203,7 +204,11 @@ export default function ManagerOwnerEntry() {
       // Try to use priceMatrix if available, else fallback
       let total = 0;
       for (const s of service) {
-        const row = priceMatrix.find(row => row.VEHICLE === vehicleType && row.SERVICE === s);
+        // Trim both the database values and the service name for comparison
+        const row = priceMatrix.find(row => 
+          (row.VEHICLE && row.VEHICLE.trim()) === vehicleType.trim() && 
+          (row.SERVICE && row.SERVICE.trim()) === s.trim()
+        );
         if (row && row.PRICE !== undefined) {
           total += Number(row.PRICE);
         } else {
@@ -213,7 +218,8 @@ export default function ManagerOwnerEntry() {
       setAmount(total.toString());
     } else if (entryType === 'workshop' && workshop && vehicleType) {
       const row = workshopPriceMatrix.find(
-        row => row.WORKSHOP === workshop && row.VEHICLE === vehicleType
+        row => (row.WORKSHOP && row.WORKSHOP.trim()) === workshop.trim() && 
+               (row.VEHICLE && row.VEHICLE.trim()) === vehicleType.trim()
       );
       if (row && row.PRICE !== undefined) {
         setAmount(row.PRICE);
@@ -262,8 +268,8 @@ export default function ManagerOwnerEntry() {
   const handleSubmit = async () => {
     const trimmedCustomerName = customerName.trim();
     
-    if (!vehicleNumber || !vehicleType || (entryType === 'normal' && service.length === 0) || !trimmedCustomerName || !phoneNumber) {
-      toast.error('Please fill in all required fields (Vehicle Number, Vehicle Type, Service, Customer Name, and Phone Number)');
+    if (!vehicleNumber || !vehicleType || (entryType === 'normal' && service.length === 0)) {
+      toast.error('Please fill in all required fields (Vehicle Number, Vehicle Type, and Service)');
       return;
     }
     if (!scratchImage) {
@@ -271,25 +277,9 @@ export default function ManagerOwnerEntry() {
       return;
     }
     try {
-      // 0. Check if vehicle exists, else insert
-      let vehicleId;
-      const { data: existingVehicle } = await supabase
-        .from('vehicles')
-        .select('id')
-        .eq('number_plate', vehicleNumber)
-        .single();
-      if (existingVehicle && existingVehicle.id) {
-        vehicleId = existingVehicle.id;
-      } else {
-        vehicleId = generateUUID();
-        await supabase.from('vehicles').insert([
-          {
-            id: vehicleId,
-            number_plate: vehicleNumber,
-            type: vehicleType,
-          },
-        ]);
-      }
+      // Use the utility function to get or create vehicle ID
+      const vehicleId = await getOrCreateVehicleId(vehicleNumber, vehicleType);
+      
       // 1. Upload image to Supabase Storage
       const safeVehicleNumber = vehicleNumber.replace(/[^a-zA-Z0-9_-]/g, '');
       const fileName = `${safeVehicleNumber}_${Date.now()}.png`;
@@ -321,8 +311,8 @@ export default function ManagerOwnerEntry() {
           vehicle_type: vehicleType,
           workshop: entryType === 'workshop' ? workshop : null,
           // Customer details
-          Name: trimmedCustomerName,
-          Phone_no: phoneNumber,
+          Name: trimmedCustomerName || null,
+          Phone_no: phoneNumber || null,
           'D.O.B': dateOfBirth || null,
           Location: customerLocation || null,
           // Vehicle details
@@ -430,7 +420,7 @@ export default function ManagerOwnerEntry() {
                 <Label className="text-base font-semibold">Customer Details</Label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="customerName">Customer Name *</Label>
+                    <Label htmlFor="customerName">Customer Name (Optional)</Label>
                     <Input 
                       id="customerName"
                       placeholder="Enter customer name" 
@@ -439,7 +429,7 @@ export default function ManagerOwnerEntry() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="phoneNumber">Phone Number *</Label>
+                    <Label htmlFor="phoneNumber">Phone Number (Optional)</Label>
                     <Input 
                       id="phoneNumber"
                       placeholder="Enter phone number" 

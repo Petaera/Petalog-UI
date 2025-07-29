@@ -57,11 +57,12 @@ export function AppSidebar() {
       ];
 
   return (
-    <Sidebar>
-      <SidebarContent>
+    <Sidebar className="border-r">
+      <SidebarContent className="py-4">
         <SidebarGroup>
           <SidebarGroupLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3 py-2">
-            PetaLog Management
+            <span className="hidden sm:inline">PetaLog Management</span>
+            <span className="sm:hidden">PetaLog</span>
           </SidebarGroupLabel>
 
           <SidebarGroupContent>
@@ -74,8 +75,8 @@ export function AppSidebar() {
                       end 
                       className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 ${getNavClassName(item.url)}`}
                     >
-                      <item.icon className="h-5 w-5 flex-shrink-0" />
-                      <span className="font-medium">{item.title}</span>
+                      <item.icon className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+                      <span className="font-medium text-sm sm:text-base truncate">{item.title}</span>
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

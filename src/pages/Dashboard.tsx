@@ -135,23 +135,27 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
 
   return (
     <Layout>
-      <div className="p-6">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
+      <div className="p-4 lg:p-6">
+        <div className="mb-6 lg:mb-8">
+          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
           <p className="text-gray-600">Welcome to your vehicle logging dashboard</p>
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-6 lg:mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Vehicles Today</CardTitle>
               <Car className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
+<<<<<<< HEAD
               <div className="text-2xl font-bold">
                 {stats.loading ? "..." : stats.totalVehiclesToday.toLocaleString()}
               </div>
+=======
+              <div className="text-xl lg:text-2xl font-bold">1,234</div>
+>>>>>>> 1ec4b3ff05350a2737f6ac12a13668934c320d6e
               <p className="text-xs text-muted-foreground">
                 Vehicles processed today
               </p>
@@ -164,9 +168,13 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
               <Timer className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
+<<<<<<< HEAD
               <div className="text-2xl font-bold">
                 {stats.loading ? "..." : stats.activeSessions}
               </div>
+=======
+              <div className="text-xl lg:text-2xl font-bold">45</div>
+>>>>>>> 1ec4b3ff05350a2737f6ac12a13668934c320d6e
               <p className="text-xs text-muted-foreground">
                 Awaiting approval
               </p>
@@ -179,9 +187,13 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
               <Gift className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
+<<<<<<< HEAD
               <div className="text-2xl font-bold">
                 {stats.loading ? "..." : `₹${stats.revenueToday.toLocaleString()}`}
               </div>
+=======
+              <div className="text-xl lg:text-2xl font-bold">$12,345</div>
+>>>>>>> 1ec4b3ff05350a2737f6ac12a13668934c320d6e
               <p className="text-xs text-muted-foreground">
                 Total earnings today
               </p>
@@ -194,9 +206,13 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
               <Clock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
+<<<<<<< HEAD
               <div className="text-2xl font-bold">
                 {stats.loading ? "..." : `${stats.averageDuration}m`}
               </div>
+=======
+              <div className="text-xl lg:text-2xl font-bold">23m</div>
+>>>>>>> 1ec4b3ff05350a2737f6ac12a13668934c320d6e
               <p className="text-xs text-muted-foreground">
                 Per vehicle session
               </p>

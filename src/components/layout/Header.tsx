@@ -59,27 +59,27 @@ export function Header({ locations, selectedLocation, onLocationChange }: Header
 
   return (
     <header className="h-16 border-b bg-card/50 backdrop-blur-sm">
-      <div className="flex h-full items-center justify-between px-4">
-        <div className="flex items-center gap-4">
-          <SidebarTrigger className="h-8 w-8" />
+      <div className="flex h-full items-center justify-between px-4 lg:px-6">
+        <div className="flex items-center gap-2 lg:gap-4 min-w-0 flex-1">
+          <SidebarTrigger className="h-8 w-8 flex-shrink-0" />
           {isManager ? (
-            <div className="flex flex-col items-start min-w-64 border rounded px-4 py-2 bg-white">
-              <span className="font-medium text-sm">{managerLocation ? managerLocation.name : 'Loading...'}</span>
-              <span className="text-xs text-muted-foreground">{managerLocation ? managerLocation.address : ''}</span>
+            <div className="flex flex-col items-start min-w-0 flex-1 border rounded px-3 lg:px-4 py-2 bg-white">
+              <span className="font-medium text-sm truncate">{managerLocation ? managerLocation.name : 'Loading...'}</span>
+              <span className="text-xs text-muted-foreground truncate">{managerLocation ? managerLocation.address : ''}</span>
             </div>
           ) : (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="flex items-center gap-2 min-w-64">
-                  <MapPin className="h-4 w-4 text-primary" />
-                  <div className="flex flex-col items-start">
-                    <span className="font-medium text-sm">{currentLocation ? currentLocation.name : 'Select Location'}</span>
-                    <span className="text-xs text-muted-foreground">{currentLocation ? currentLocation.address : ''}</span>
+                <Button variant="outline" className="flex items-center gap-2 min-w-0 flex-1 max-w-xs lg:max-w-sm">
+                  <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
+                  <div className="flex flex-col items-start min-w-0 flex-1">
+                    <span className="font-medium text-sm truncate">{currentLocation ? currentLocation.name : 'Select Location'}</span>
+                    <span className="text-xs text-muted-foreground truncate">{currentLocation ? currentLocation.address : ''}</span>
                   </div>
-                  <ChevronDown className="h-4 w-4 ml-auto" />
+                  <ChevronDown className="h-4 w-4 ml-auto flex-shrink-0" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-64">
+              <DropdownMenuContent align="start" className="w-64 lg:w-80">
                 <DropdownMenuLabel>Select Location</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {locations.map((location) => (
@@ -98,22 +98,22 @@ export function Header({ locations, selectedLocation, onLocationChange }: Header
         </div>
 
         {/* User Profile */}
-        <div className="flex items-center gap-3">
-          <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
+        <div className="flex items-center gap-2 lg:gap-3 flex-shrink-0">
+          <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 hidden sm:inline-flex">
             {user?.role === 'owner' ? 'Owner' : 'Manager'}
           </Badge>
           
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="flex items-center gap-2">
-                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground">
+                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground flex-shrink-0">
                   <User className="h-4 w-4" />
                 </div>
-                <span className="font-medium">{user?.email}</span>
-                <ChevronDown className="h-4 w-4" />
+                <span className="font-medium hidden sm:inline">{user?.email}</span>
+                <ChevronDown className="h-4 w-4 flex-shrink-0" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent align="end" className="w-56 lg:w-64">
               <DropdownMenuLabel>My Account</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem>
