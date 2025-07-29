@@ -192,7 +192,7 @@ export default function Reports() {
       filteredLogs = filteredLogs.filter(log => 
         log.vehicle_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         log.Name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        log.Phone_no?.includes(searchTerm)
+        String(log.Phone_no || '').includes(searchTerm)
       );
       console.log('🔍 After search filter:', filteredLogs.length, 'records');
     }
@@ -239,16 +239,29 @@ export default function Reports() {
     }
 
     if (vehicleType !== "all") {
-      filteredLogs = filteredLogs.filter(log => log.vehicle_type === vehicleType);
+      filteredLogs = filteredLogs.filter(log => {
+        const normalizedLogType = (log.vehicle_type || '').toString().trim();
+        const normalizedFilterType = vehicleType.trim();
+        return normalizedLogType.toLowerCase() === normalizedFilterType.toLowerCase();
+      });
+      console.log('🔍 After vehicle type filter:', filteredLogs.length, 'records');
     }
 
     if (service !== "all") {
-      filteredLogs = filteredLogs.filter(log => log.service === service);
+      filteredLogs = filteredLogs.filter(log => {
+        const normalizedLogService = (log.service || '').toString().trim();
+        const normalizedFilterService = service.trim();
+        return normalizedLogService.toLowerCase() === normalizedFilterService.toLowerCase();
+      });
       console.log('🔍 After service filter:', filteredLogs.length, 'records');
     }
 
     if (entryType !== "all") {
-      filteredLogs = filteredLogs.filter(log => log.entry_type === entryType);
+      filteredLogs = filteredLogs.filter(log => {
+        const normalizedLogEntry = (log.entry_type || '').toString().trim();
+        const normalizedFilterEntry = entryType.trim();
+        return normalizedLogEntry.toLowerCase() === normalizedFilterEntry.toLowerCase();
+      });
       console.log('🔍 After entry type filter:', filteredLogs.length, 'records');
     }
 
@@ -475,11 +488,23 @@ export default function Reports() {
                     <SelectItem value="Bike">Bike</SelectItem>
                     <SelectItem value="SUV">SUV</SelectItem>
                     <SelectItem value="Truck">Truck</SelectItem>
-                    {[...new Set(logs.map(log => log.vehicle_type))].filter(type => 
-                      type && !['Car', 'Bike', 'SUV', 'Truck'].includes(type)
-                    ).map((type, index) => (
-                      <SelectItem key={`vehicle-type-${type}-${index}`} value={type}>{type}</SelectItem>
-                    ))}
+                    {(() => {
+                      // Get unique vehicle types with proper normalization
+                      const standardTypes = ['Car', 'Bike', 'SUV', 'Truck'];
+                      const uniqueTypes = [...new Set(
+                        logs
+                          .map(log => log.vehicle_type)
+                          .filter(type => type && typeof type === 'string')
+                          .map(type => type.trim()) // Remove whitespace
+                          .filter(type => type.length > 0)
+                      )]
+                        .filter(type => !standardTypes.some(std => std.toLowerCase() === type.toLowerCase()))
+                        .sort(); // Sort alphabetically
+                      
+                      return uniqueTypes.map((type, index) => (
+                        <SelectItem key={`vehicle-type-${type}-${index}`} value={type}>{type}</SelectItem>
+                      ));
+                    })()}
                   </SelectContent>
                 </Select>
               </div>
@@ -498,11 +523,23 @@ export default function Reports() {
                     <SelectItem value="Full Service">Full Service</SelectItem>
                     <SelectItem value="Quick Wash">Quick Wash</SelectItem>
                     <SelectItem value="Workshop">Workshop</SelectItem>
-                    {[...new Set(logs.map(log => log.service))].filter(serviceType => 
-                      serviceType && !['Basic Wash', 'Premium Wash', 'Full Service', 'Quick Wash', 'Workshop'].includes(serviceType)
-                    ).map((serviceType, index) => (
-                      <SelectItem key={`service-type-${serviceType}-${index}`} value={serviceType}>{serviceType}</SelectItem>
-                    ))}
+                    {(() => {
+                      // Get unique service types with proper normalization
+                      const standardServices = ['Basic Wash', 'Premium Wash', 'Full Service', 'Quick Wash', 'Workshop'];
+                      const uniqueServices = [...new Set(
+                        logs
+                          .map(log => log.service)
+                          .filter(service => service && typeof service === 'string')
+                          .map(service => service.trim()) // Remove whitespace
+                          .filter(service => service.length > 0)
+                      )]
+                        .filter(service => !standardServices.some(std => std.toLowerCase() === service.toLowerCase()))
+                        .sort(); // Sort alphabetically
+                      
+                      return uniqueServices.map((service, index) => (
+                        <SelectItem key={`service-type-${service}-${index}`} value={service}>{service}</SelectItem>
+                      ));
+                    })()}
                   </SelectContent>
                 </Select>
               </div>
@@ -518,11 +555,23 @@ export default function Reports() {
                     <SelectItem value="all">All Entry Types</SelectItem>
                     <SelectItem value="Manual">Manual Entry</SelectItem>
                     <SelectItem value="Automatic">Automatic Entry</SelectItem>
-                    {[...new Set(logs.map(log => log.entry_type))].filter(type => 
-                      type && !['Manual', 'Automatic'].includes(type)
-                    ).map((type, index) => (
-                      <SelectItem key={`entry-type-${type}-${index}`} value={type}>{type}</SelectItem>
-                    ))}
+                    {(() => {
+                      // Get unique entry types with proper normalization
+                      const standardTypes = ['Manual', 'Automatic'];
+                      const uniqueTypes = [...new Set(
+                        logs
+                          .map(log => log.entry_type)
+                          .filter(type => type && typeof type === 'string')
+                          .map(type => type.trim()) // Remove whitespace
+                          .filter(type => type.length > 0)
+                      )]
+                        .filter(type => !standardTypes.some(std => std.toLowerCase() === type.toLowerCase()))
+                        .sort(); // Sort alphabetically
+                      
+                      return uniqueTypes.map((type, index) => (
+                        <SelectItem key={`entry-type-${type}-${index}`} value={type}>{type}</SelectItem>
+                      ));
+                    })()}
                   </SelectContent>
                 </Select>
               </div>
