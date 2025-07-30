@@ -24,27 +24,11 @@ interface ServicePrice {
   created_at?: string;
 }
 
-interface Location {
-  id: string;
-  name: string;
-  address: string;
-  price_multiplier?: number;
-  status?: string;
-}
 
-interface LocationPrice {
-  id: string;
-  location_id: string;
-  location_name: string;
-  multiplier: number;
-  status: string;
-}
 
 export default function PriceSettings() {
   // State for data
   const [servicePrices, setServicePrices] = useState<ServicePrice[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
-  const [locationPrices, setLocationPrices] = useState<LocationPrice[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,10 +48,21 @@ export default function PriceSettings() {
     
     // Handle common variations
     normalized = normalized.replace(/\s+/g, ' '); // Normalize multiple spaces to single space
-    normalized = normalized.replace(/UNDER\s+BODY\s+COATING/gi, 'UNDER BODY COATING');
-    normalized = normalized.replace(/UNDERBODY\s+COATING/gi, 'UNDER BODY COATING');
-    normalized = normalized.replace(/SILENCER\s+COATING/gi, 'SILENCER COATING');
-    normalized = normalized.replace(/UNDER\s+COATING/gi, 'UNDER BODY COATING');
+    
+    // More aggressive Under Body Coating detection
+    const lowerService = service.toLowerCase();
+    if (lowerService.includes('under') && (lowerService.includes('coating') || lowerService.includes('coatinng'))) {
+      normalized = 'UNDER BODY COATING';
+    } else if (lowerService.includes('underbody') && (lowerService.includes('coating') || lowerService.includes('coatinng'))) {
+      normalized = 'UNDER BODY COATING';
+    } else if (lowerService.includes('under') && lowerService.includes('body') && (lowerService.includes('coating') || lowerService.includes('coatinng'))) {
+      normalized = 'UNDER BODY COATING';
+    }
+    
+    // Handle Silencer Coating variations
+    if (lowerService.includes('silencer') && (lowerService.includes('coating') || lowerService.includes('coatinng'))) {
+      normalized = 'SILENCER COATING';
+    }
     
     return normalized;
   };
@@ -90,6 +85,26 @@ export default function PriceSettings() {
 
   // Process raw service price data into matrix format
   const processServicePricesToMatrix = (rawData: ServicePrice[]) => {
+    console.log('🔄 Processing service prices to matrix...');
+    console.log('📊 Raw data count:', rawData.length);
+    
+    // Log all unique services before normalization
+    const allServices = rawData.map(item => item.SERVICE);
+    console.log('🔍 All services before normalization:', [...new Set(allServices)]);
+    
+    // Special debugging: Show all Under Body Coating related entries
+    const underBodyEntries = rawData.filter(item => 
+      item.SERVICE.toLowerCase().includes('under') || 
+      item.SERVICE.toLowerCase().includes('coating')
+    );
+    console.log('🎯 ALL UNDER BODY COATING RELATED ENTRIES:', underBodyEntries.map(item => ({
+      original: item.SERVICE,
+      normalized: normalizeService(item.SERVICE),
+      vehicle: item.VEHICLE,
+      price: item.PRICE,
+      created_at: item.created_at
+    })));
+    
     // Deduplicate: for each (normalized service, normalized vehicle) pair, keep only the latest by created_at or the first found
     const pairMap = new Map<string, ServicePrice>();
     const originalNames: Record<string, string> = {};
@@ -100,21 +115,38 @@ export default function PriceSettings() {
       const normVehicle = normalizeVehicle(item.VEHICLE);
       const key = `${normService}|||${normVehicle}`;
       
+      // Special debugging for Under Body Coating
+      if (item.SERVICE.toLowerCase().includes('under') || item.SERVICE.toLowerCase().includes('coating')) {
+        console.log(`🎯 UNDER BODY COATING DEBUG: "${item.SERVICE}" -> "${normService}" | Vehicle: "${item.VEHICLE}" -> "${normVehicle}" | Key: ${key}`);
+      }
+      
+      console.log(`🔍 Processing: "${item.SERVICE}" -> "${normService}" | "${item.VEHICLE}" -> "${normVehicle}" | Key: ${key}`);
+      
       // Store the original names for display
       originalNames[normVehicle] = item.VEHICLE;
       originalServiceNames[normService] = item.SERVICE;
       
       if (!pairMap.has(key)) {
         pairMap.set(key, item);
+        console.log(`✅ Added new entry: ${key}`);
       } else {
         // If duplicate, keep the latest by created_at if available
         const existing = pairMap.get(key)!;
+        console.log(`⚠️ Duplicate found for key: ${key}`);
+        console.log(`   Existing: "${existing.SERVICE}" | "${existing.VEHICLE}" | Price: ${existing.PRICE}`);
+        console.log(`   New: "${item.SERVICE}" | "${item.VEHICLE}" | Price: ${item.PRICE}`);
+        
         if (item.created_at && existing.created_at) {
           if (new Date(item.created_at) > new Date(existing.created_at)) {
             pairMap.set(key, item);
             originalNames[normVehicle] = item.VEHICLE; // Update with newer original name
             originalServiceNames[normService] = item.SERVICE; // Update with newer original service name
+            console.log(`🔄 Updated with newer entry: ${key}`);
+          } else {
+            console.log(`⏭️ Kept existing entry: ${key}`);
           }
+        } else {
+          console.log(`⏭️ Kept existing entry (no timestamps): ${key}`);
         }
       }
     });
@@ -125,9 +157,14 @@ export default function PriceSettings() {
       return { ...item, SERVICE: normService, VEHICLE: normVehicle };
     });
     
+    console.log('📊 After deduplication:', deduped.length, 'entries');
+    
     // Get all unique normalized services and vehicles
     const services = Array.from(new Set(deduped.map(item => item.SERVICE)));
     const vehicles = Array.from(new Set(deduped.map(item => item.VEHICLE)));
+    
+    console.log('📋 Final unique services:', services);
+    console.log('📋 Final unique vehicles:', vehicles);
     
     // Build matrix: service -> vehicle -> price
     const matrix: Record<string, Record<string, number>> = {};
@@ -144,6 +181,13 @@ export default function PriceSettings() {
     setServiceMatrix(matrix);
     setOriginalVehicleNames(originalNames);
     setOriginalServiceNames(originalServiceNames);
+    
+    // Final debugging: Show Under Body Coating in final matrix
+    if (matrix['UNDER BODY COATING']) {
+      console.log('🎯 FINAL MATRIX - UNDER BODY COATING:', matrix['UNDER BODY COATING']);
+    }
+    
+    console.log('✅ Matrix processing completed');
   };
 
   // Fetch all data from Supabase
@@ -175,7 +219,6 @@ export default function PriceSettings() {
       if (!servicePricesRes) {
         servicePricesRes = { data: null, error: { message: 'No service prices table found' } };
       }
-      const locationsRes = await supabase.from('locations').select('*');
       // Handle service prices data
       if (servicePricesRes.error) {
         setError('Failed to fetch service prices');
@@ -195,18 +238,6 @@ export default function PriceSettings() {
         setServicePrices(servicePricesRes.data || []);
         processServicePricesToMatrix(servicePricesRes.data || []);
         setUsingFallbackData(false);
-      }
-      // Handle locations data
-      if (!locationsRes.error) {
-        setLocations(locationsRes.data || []);
-        const locationPriceData = locationsRes.data?.map(location => ({
-          id: location.id,
-          location_id: location.id,
-          location_name: location.name,
-          multiplier: location.price_multiplier || 1.0,
-          status: location.status || 'Standard'
-        })) || [];
-        setLocationPrices(locationPriceData);
       }
     } catch (error) {
       setError('Failed to fetch data');
@@ -229,7 +260,6 @@ export default function PriceSettings() {
 
   // Calculate statistics
   const totalServices = serviceList.length;
-  const totalLocations = locations.length;
   const totalRules = servicePrices.length;
   const avgPrice = totalRules > 0 
     ? servicePrices.reduce((sum, service) => sum + service.PRICE, 0) / totalRules 
@@ -325,18 +355,7 @@ export default function PriceSettings() {
               </p>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Locations</CardTitle>
-              <Settings className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{totalLocations}</div>
-              <p className="text-xs text-muted-foreground">
-                Configured locations
-              </p>
-            </CardContent>
-          </Card>
+
         </div>
         {/* Service Pricing Matrix Table */}
         <Card>
@@ -388,59 +407,7 @@ export default function PriceSettings() {
             )}
           </CardContent>
         </Card>
-        {/* Location-Specific Settings */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Entry Type Modifiers</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
-                <div>
-                  <p className="font-medium">Normal Entry</p>
-                  <p className="text-sm text-muted-foreground">Standard pricing</p>
-                </div>
-                <Badge variant="default">100%</Badge>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
-                <div>
-                  <p className="font-medium">Workshop Entry</p>
-                  <p className="text-sm text-muted-foreground">Discounted rates</p>
-                </div>
-                <Badge variant="outline" className="text-financial border-financial">Variable</Badge>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Location-Specific Settings</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {loading ? (
-                <div className="flex items-center justify-center p-4">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="ml-2">Loading locations...</span>
-                </div>
-              ) : locations.length === 0 ? (
-                <div className="text-center p-4 text-muted-foreground">
-                  <p>No locations found</p>
-                </div>
-              ) : (
-                locations.map((location) => (
-                  <div key={location.id} className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
-                    <div>
-                      <p className="font-medium">{location.name}</p>
-                      <p className="text-sm text-muted-foreground">{location.address}</p>
-                    </div>
-                    <Badge variant="secondary">
-                      {(location.price_multiplier || 1.0).toFixed(1)}x
-                    </Badge>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-        </div>
+
       </div>
     </Layout>
   );

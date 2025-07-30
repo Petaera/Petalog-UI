@@ -15,9 +15,10 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
     totalVehiclesToday: 0,
     activeSessions: 0,
     revenueToday: 0,
-<<<<<<< HEAD
-    averageDuration: 0
+    averageDuration: 0,
+    loading: true
   });
+  const [locationFilterApplied, setLocationFilterApplied] = useState(false);
 
   // Debug logging
   console.log('🎯 Dashboard component rendered with:', {
@@ -26,10 +27,6 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
     hasUser: !!user,
     userRole: user?.role,
     assignedLocation: user?.assigned_location
-=======
-    averageDuration: 0,
-    loading: true
->>>>>>> 8a65e9d3e670136560762cb867a3e6d2253b230a
   });
 
   useEffect(() => {
@@ -70,17 +67,54 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
         .order('entry_time', { ascending: false })
         .limit(3);
       
+      // Enhanced location filtering logic with better debugging
+      let isLocationFiltered = false;
+      let appliedLocationId = '';
+      
+      console.log('🔍 Location filtering debug:', {
+        userRole: user?.role,
+        assignedLocation: user?.assigned_location,
+        selectedLocation: selectedLocation,
+        selectedLocationType: typeof selectedLocation,
+        selectedLocationLength: selectedLocation?.length
+      });
+      
       if (user?.role === 'manager' && user?.assigned_location) {
         console.log('👨‍💼 Manager filtering by assigned location:', user.assigned_location);
         manQuery = manQuery.eq('location_id', user.assigned_location);
         autoQuery = autoQuery.eq('location_id', user.assigned_location);
-      } else if (user?.role === 'owner' && selectedLocation) {
+        isLocationFiltered = true;
+        appliedLocationId = user.assigned_location;
+      } else if (user?.role === 'owner' && selectedLocation && selectedLocation.trim() !== '') {
         console.log('👑 Owner filtering by selected location:', selectedLocation);
         manQuery = manQuery.eq('location_id', selectedLocation);
         autoQuery = autoQuery.eq('location_id', selectedLocation);
+        isLocationFiltered = true;
+        appliedLocationId = selectedLocation;
       } else {
         console.log('⚠️ No location filter applied - showing all data');
+        console.log('   Reason:', {
+          isManager: user?.role === 'manager',
+          hasAssignedLocation: !!user?.assigned_location,
+          isOwner: user?.role === 'owner',
+          hasSelectedLocation: !!selectedLocation,
+          selectedLocationTrimmed: selectedLocation?.trim(),
+          isEmpty: selectedLocation?.trim() === ''
+        });
+        isLocationFiltered = false;
       }
+      
+      // Add location filter status to debug logs
+      console.log('📍 Location filter status:', {
+        applied: isLocationFiltered,
+        userRole: user?.role,
+        assignedLocation: user?.assigned_location,
+        selectedLocation: selectedLocation,
+        filterType: user?.role === 'manager' ? 'assigned' : 'selected'
+      });
+      
+      // Update the location filter state for UI
+      setLocationFilterApplied(isLocationFiltered);
 
       // Try without approval_status filter first
       const { data: manData, error: manError } = await manQuery;
@@ -88,148 +122,33 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
 
       console.log('📊 Manual logs result:', { data: manData, error: manError, count: manData?.length });
       console.log('📊 Auto logs result:', { data: autoData, error: autoError, count: autoData?.length });
+      
+      // Debug: Show location IDs in the returned data
+      if (manData && manData.length > 0) {
+        console.log('📍 Manual logs location IDs:', manData.map(log => log.location_id));
+      }
+      if (autoData && autoData.length > 0) {
+        console.log('📍 Auto logs location IDs:', autoData.map(log => log.location_id));
+      }
+      
+      // Debug: Check if filtering worked
+      if (isLocationFiltered && appliedLocationId) {
+        const manualFiltered = manData?.every(log => log.location_id === appliedLocationId);
+        const autoFiltered = autoData?.every(log => log.location_id === appliedLocationId);
+        console.log('✅ Location filtering verification:', {
+          manualFiltered,
+          autoFiltered,
+          expectedLocation: appliedLocationId,
+          manualCount: manData?.length || 0,
+          autoCount: autoData?.length || 0
+        });
+      }
 
       setManualLogs(manData || []);
       setAutoLogs(autoData || []);
     };
 
     const fetchStats = async () => {
-<<<<<<< HEAD
-      const today = new Date();
-      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
-
-      console.log('📅 Date range for stats:', {
-        startOfDay: startOfDay.toISOString(),
-        endOfDay: endOfDay.toISOString()
-      });
-
-      // Build location filter
-      let locationFilter = {};
-      if (user?.role === 'manager' && user?.assigned_location) {
-        locationFilter = { location_id: user.assigned_location };
-        console.log('👨‍💼 Manager stats filtering by:', locationFilter);
-      } else if (user?.role === 'owner' && selectedLocation) {
-        locationFilter = { location_id: selectedLocation };
-        console.log('👑 Owner stats filtering by:', locationFilter);
-      } else {
-        console.log('⚠️ No location filter for stats - showing all data');
-      }
-
-      try {
-        // First, let's check if we have any data at all without filters
-        const { data: allManualData, error: allManualError } = await supabase
-          .from('logs-man')
-          .select('id, entry_time, location_id')
-          .limit(5);
-
-        const { data: allAutoData, error: allAutoError } = await supabase
-          .from('logs-auto')
-          .select('id, entry_time, location_id')
-          .limit(5);
-
-        console.log('🔍 Sample data check:', {
-          manual: { data: allManualData, error: allManualError, count: allManualData?.length },
-          auto: { data: allAutoData, error: allAutoError, count: allAutoData?.length }
-        });
-
-        // Let's start with simple counts without date filters
-        const { data: allManualCount, error: allManualCountError } = await supabase
-          .from('logs-man')
-          .select('id', { count: 'exact' })
-          .match(locationFilter);
-
-        const { data: allAutoCount, error: allAutoCountError } = await supabase
-          .from('logs-auto')
-          .select('id', { count: 'exact' })
-          .match(locationFilter);
-
-        console.log('📊 All time counts:', {
-          manual: { count: allManualCount, error: allManualCountError },
-          auto: { count: allAutoCount, error: allAutoCountError }
-        });
-
-        // Now try with date filters
-        const [manualTodayRes, autoTodayRes] = await Promise.all([
-          supabase
-            .from('logs-man')
-            .select('id', { count: 'exact' })
-            .gte('entry_time', startOfDay.toISOString())
-            .lte('entry_time', endOfDay.toISOString())
-            .match(locationFilter),
-          supabase
-            .from('logs-auto')
-            .select('id', { count: 'exact' })
-            .gte('entry_time', startOfDay.toISOString())
-            .lte('entry_time', endOfDay.toISOString())
-            .match(locationFilter)
-        ]);
-
-        console.log('📊 Today stats results:', {
-          manual: manualTodayRes,
-          auto: autoTodayRes
-        });
-
-        const totalVehiclesToday = (manualTodayRes.count || 0) + (autoTodayRes.count || 0);
-
-        // Fetch active sessions (vehicles that entered today but haven't exited)
-        const activeSessionsRes = await supabase
-          .from('logs-man')
-          .select('id', { count: 'exact' })
-          .gte('entry_time', startOfDay.toISOString())
-          .lte('entry_time', endOfDay.toISOString())
-          .is('exit_time', null)
-          .match(locationFilter);
-
-        console.log('⏱️ Active sessions result:', activeSessionsRes);
-
-        const activeSessions = activeSessionsRes.count || 0;
-
-        // Calculate average duration (simplified - you might want to enhance this)
-        const durationRes = await supabase
-          .from('logs-man')
-          .select('entry_time, exit_time')
-          .not('exit_time', 'is', null)
-          .gte('entry_time', startOfDay.toISOString())
-          .lte('entry_time', endOfDay.toISOString())
-          .match(locationFilter)
-          .limit(100);
-
-        console.log('⏱️ Duration calculation result:', durationRes);
-
-        let totalDuration = 0;
-        let durationCount = 0;
-        if (durationRes.data) {
-          durationRes.data.forEach(log => {
-            if (log.entry_time && log.exit_time) {
-              const duration = new Date(log.exit_time).getTime() - new Date(log.entry_time).getTime();
-              totalDuration += duration;
-              durationCount++;
-            }
-          });
-        }
-
-        const averageDuration = durationCount > 0 ? Math.round(totalDuration / durationCount / (1000 * 60)) : 0; // in minutes
-
-        // Estimate revenue (you might want to connect this to actual pricing data)
-        const estimatedRevenue = totalVehiclesToday * 50; // Assuming $50 per vehicle
-
-        console.log('📈 Final stats:', {
-          totalVehiclesToday,
-          activeSessions,
-          revenueToday: estimatedRevenue,
-          averageDuration
-        });
-
-        setStats({
-          totalVehiclesToday,
-          activeSessions,
-          revenueToday: estimatedRevenue,
-          averageDuration
-        });
-      } catch (error) {
-        console.error('❌ Error fetching stats:', error);
-=======
       try {
         setStats(prev => ({ ...prev, loading: true }));
         
@@ -239,10 +158,14 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
         const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
         
         let locationFilter = '';
+        let isLocationFiltered = false;
+        
         if (user?.role === 'manager' && user?.assigned_location) {
           locationFilter = user.assigned_location;
-        } else if (user?.role === 'owner' && selectedLocation) {
+          isLocationFiltered = true;
+        } else if (user?.role === 'owner' && selectedLocation && selectedLocation.trim() !== '') {
           locationFilter = selectedLocation;
+          isLocationFiltered = true;
         }
 
         console.log('🏢 Dashboard Stats Debug:');
@@ -310,7 +233,6 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
       } catch (error) {
         console.error('Error fetching dashboard stats:', error);
         setStats(prev => ({ ...prev, loading: false }));
->>>>>>> 8a65e9d3e670136560762cb867a3e6d2253b230a
       }
     };
 
@@ -318,12 +240,34 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
     fetchStats();
   }, [user?.assigned_location, user?.role, selectedLocation]);
 
+  // Get current location name for display
+  const getCurrentLocationName = () => {
+    if (user?.role === 'manager' && user?.assigned_location) {
+      return `Manager Location (${user.assigned_location})`;
+    } else if (selectedLocation) {
+      return `Selected Location (${selectedLocation})`;
+    }
+    return 'All Locations';
+  };
+
   return (
     <Layout>
       <div className="p-4 lg:p-6">
         <div className="mb-6 lg:mb-8">
-          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">Dashboard</h1>
+            <Badge variant="outline" className="text-sm">
+              📍 {getCurrentLocationName()}
+            </Badge>
+          </div>
           <p className="text-gray-600">Welcome to your vehicle logging dashboard</p>
+          {locationFilterApplied && (
+            <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
+              <p className="text-sm text-blue-700">
+                🔍 <strong>Location Filter Active:</strong> Showing data for {getCurrentLocationName()}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Quick Stats */}
@@ -334,17 +278,14 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
               <Car className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-<<<<<<< HEAD
-              <div className="text-xl lg:text-2xl font-bold">{stats.totalVehiclesToday}</div>
-              <p className="text-xs text-muted-foreground">
-                Manual and automatic entries
-=======
               <div className="text-2xl font-bold">
                 {stats.loading ? "..." : stats.totalVehiclesToday.toLocaleString()}
               </div>
               <p className="text-xs text-muted-foreground">
                 Vehicles processed today
->>>>>>> 8a65e9d3e670136560762cb867a3e6d2253b230a
+                {locationFilterApplied && (
+                  <span className="ml-1 text-blue-600">📍 Filtered</span>
+                )}
               </p>
             </CardContent>
           </Card>
@@ -355,13 +296,9 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
               <Timer className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-<<<<<<< HEAD
-              <div className="text-xl lg:text-2xl font-bold">{stats.activeSessions}</div>
-=======
               <div className="text-2xl font-bold">
                 {stats.loading ? "..." : stats.activeSessions}
               </div>
->>>>>>> 8a65e9d3e670136560762cb867a3e6d2253b230a
               <p className="text-xs text-muted-foreground">
                 Awaiting approval
               </p>
@@ -374,17 +311,11 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
               <Gift className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-<<<<<<< HEAD
-              <div className="text-xl lg:text-2xl font-bold">${stats.revenueToday.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">
-                Estimated earnings
-=======
               <div className="text-2xl font-bold">
                 {stats.loading ? "..." : `₹${stats.revenueToday.toLocaleString()}`}
               </div>
               <p className="text-xs text-muted-foreground">
                 Total earnings today
->>>>>>> 8a65e9d3e670136560762cb867a3e6d2253b230a
               </p>
             </CardContent>
           </Card>
@@ -395,13 +326,9 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
               <Clock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-<<<<<<< HEAD
-              <div className="text-xl lg:text-2xl font-bold">{stats.averageDuration}m</div>
-=======
               <div className="text-2xl font-bold">
                 {stats.loading ? "..." : `${stats.averageDuration}m`}
               </div>
->>>>>>> 8a65e9d3e670136560762cb867a3e6d2253b230a
               <p className="text-xs text-muted-foreground">
                 Per vehicle session
               </p>
@@ -429,7 +356,6 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
                     <div className="flex-1">
                       <p className="text-sm font-medium">{entry.vehicles?.number_plate || 'Unknown'}</p>
                       <p className="text-xs text-gray-500">{new Date(entry.entry_time).toLocaleString()}</p>
-                      {/* Optionally show location name here if needed */}
                     </div>
                     <Badge variant="secondary">Entry</Badge>
                   </div>
