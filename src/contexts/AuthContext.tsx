@@ -7,12 +7,15 @@ interface User {
   email: string;
   role: string;
   assigned_location?: string;
+  first_name?: string;
+  last_name?: string;
+  phone?: string;
 }
 
 interface AuthContextType {
   user: User | null;
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, role: string, location?: string) => Promise<void>;
+  signup: (email: string, password: string, role: string, location?: string, userData?: { first_name?: string; last_name?: string; phone?: string }, autoLogin?: boolean) => Promise<void>;
   logout: () => Promise<void>;
   loading: boolean;
 }
@@ -37,22 +40,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        // Fetch user data from users table
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-        if (!userError && userData) {
-          const trimmedRole = typeof userData.role === 'string' ? userData.role.trim() : userData.role;
+        try {
+          // First try to get basic user info from users table
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('id, email, role, assigned_location')
+            .eq('id', session.user.id)
+            .maybeSingle();
+          
+          if (!userError && userData) {
+            const trimmedRole = typeof userData.role === 'string' ? userData.role.trim() : userData.role;
+            setUser({
+              id: userData.id,
+              email: userData.email,
+              role: trimmedRole && trimmedRole.includes('manager') ? 'manager' : trimmedRole,
+              assigned_location: userData.assigned_location,
+              first_name: undefined,
+              last_name: undefined,
+              phone: undefined,
+            });
+          } else {
+            console.log('User not found in users table, using auth user data');
+            // If user not found in users table, create basic user object from auth
+            setUser({
+              id: session.user.id,
+              email: session.user.email || '',
+              role: 'owner', // Default to owner if not found in users table
+              assigned_location: undefined,
+            });
+          }
+        } catch (error) {
+          console.log('Error accessing users table, using auth user data:', error);
           setUser({
-            id: userData.id,
-            email: userData.email,
-            role: trimmedRole && trimmedRole.includes('manager') ? 'manager' : trimmedRole,
-            assigned_location: userData.assigned_location,
+            id: session.user.id,
+            email: session.user.email || '',
+            role: 'owner',
+            assigned_location: undefined,
           });
-        } else {
-          setUser(null);
         }
       }
       setLoading(false);
@@ -65,27 +89,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
       if (authError || !authData.user) throw authError || new Error('No user returned');
-      // Fetch user data from users table
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', authData.user.id)
-        .single();
-      console.log('Fetched userData from users table:', userData, 'userError:', userError);
-      if (userError || !userData) throw userError || new Error('User not found in users table');
-      const trimmedRole = typeof userData.role === 'string' ? userData.role.trim() : userData.role;
-      setUser({
-        id: userData.id,
-        email: userData.email,
-        role: trimmedRole && trimmedRole.includes('manager') ? 'manager' : trimmedRole,
-        assigned_location: userData.assigned_location,
-      });
-      console.log('User object set in context:', {
-        id: userData.id,
-        email: userData.email,
-        role: trimmedRole && trimmedRole.includes('manager') ? 'manager' : trimmedRole,
-        assigned_location: userData.assigned_location,
-      });
+      
+      try {
+        // Fetch user data from users table
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('id, email, role, assigned_location')
+          .eq('id', authData.user.id)
+          .maybeSingle();
+        
+        console.log('Fetched userData from users table:', userData, 'userError:', userError);
+        
+        if (userError || !userData) {
+          console.log('User not found in users table, using auth user data');
+          // If user not found in users table, create basic user object from auth
+          setUser({
+            id: authData.user.id,
+            email: authData.user.email || '',
+            role: 'owner', // Default to owner if not found in users table
+            assigned_location: undefined,
+          });
+        } else {
+          const trimmedRole = typeof userData.role === 'string' ? userData.role.trim() : userData.role;
+          setUser({
+            id: userData.id,
+            email: userData.email,
+            role: trimmedRole && trimmedRole.includes('manager') ? 'manager' : trimmedRole,
+            assigned_location: userData.assigned_location,
+            first_name: undefined,
+            last_name: undefined,
+            phone: undefined,
+          });
+        }
+      } catch (error) {
+        console.log('Error accessing users table, using auth user data:', error);
+        setUser({
+          id: authData.user.id,
+          email: authData.user.email || '',
+          role: 'owner',
+          assigned_location: undefined,
+        });
+      }
+      
+      console.log('User object set in context:', user);
     } catch (error) {
       setUser(null);
       throw error;
@@ -94,30 +140,89 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signup = async (email: string, password: string, role: string, location?: string) => {
+  const signup = async (email: string, password: string, role: string, location?: string, userData?: { first_name?: string; last_name?: string; phone?: string }, autoLogin: boolean = true) => {
     setLoading(true);
     try {
+      console.log('Starting signup process...', { email, role, location, userData, autoLogin });
+      
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        throw new Error('Invalid email format');
+      }
+
+      // Validate password requirements
+      if (password.length < 6) {
+        throw new Error('Password must be at least 6 characters long');
+      }
+
       // Create user in Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({ email, password });
-      if (authError || !authData.user) throw authError || new Error('No user returned');
-      // Insert into users table
-      const { error: userError } = await supabase.from('users').insert([
-        {
-          id: authData.user.id,
-          email,
-          role,
-          assigned_location: role === 'manager' ? location : null,
-        },
-      ]);
-      if (userError) throw userError;
-      setUser({
+      const { data: authData, error: authError } = await supabase.auth.signUp({ 
+        email, 
+        password
+      });
+      
+      if (authError) {
+        console.error('Auth error:', authError);
+        throw authError;
+      }
+      
+      if (!authData.user) {
+        throw new Error('No user returned from signup');
+      }
+      
+      console.log('Auth user created:', authData.user.id);
+      
+      // Prepare user data for insertion into users table
+      const userInsertData: any = {
         id: authData.user.id,
         email,
         role,
-        assigned_location: role === 'manager' ? location : undefined,
-      });
+      };
+
+      // Add assigned_location for managers
+      if (role === 'manager' && location) {
+        userInsertData.assigned_location = location;
+      }
+
+      console.log('Inserting user data into users table:', userInsertData);
+
+      // Insert into users table
+      try {
+        const { error: userError } = await supabase.from('users').insert([userInsertData]);
+        if (userError) {
+          console.error('User insert error:', userError);
+          // Don't throw error here, just log it
+          console.log('Continuing without user table insert');
+        } else {
+          console.log('User data inserted successfully into users table');
+        }
+      } catch (insertError) {
+        console.error('Exception during user insert:', insertError);
+        console.log('Continuing without user table insert');
+      }
+      
+      // Only set user context and log in if autoLogin is true
+      if (autoLogin) {
+        setUser({
+          id: authData.user.id,
+          email,
+          role,
+          assigned_location: role === 'manager' ? location : undefined,
+          first_name: userData?.first_name,
+          last_name: userData?.last_name,
+          phone: userData?.phone,
+        });
+      } else {
+        // Sign out the created user so they're not logged in
+        await supabase.auth.signOut();
+        console.log('User created but not logged in (autoLogin: false)');
+      }
     } catch (error) {
-      setUser(null);
+      console.error('Signup error:', error);
+      if (autoLogin) {
+        setUser(null);
+      }
       throw error;
     } finally {
       setLoading(false);

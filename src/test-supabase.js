@@ -27,11 +27,47 @@ async function testSupabaseConnection() {
           console.log(`✅ ${table} accessible - Total records: ${count}`);
           if (data && data.length > 0) {
             console.log(`📋 Sample record from ${table}:`, data[0]);
+            console.log(`📋 Columns in ${table}:`, Object.keys(data[0]));
           }
         }
       } catch (err) {
         console.error(`💥 Exception accessing ${table}:`, err);
       }
+    }
+    
+    // Test users table specifically
+    console.log('\n🔍 Testing users table structure...');
+    try {
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('*')
+        .limit(1);
+      
+      if (usersError) {
+        console.error('❌ Error accessing users table:', usersError);
+      } else if (usersData && usersData.length > 0) {
+        console.log('✅ Users table structure:', Object.keys(usersData[0]));
+      } else {
+        console.log('ℹ️ Users table is empty, testing insert...');
+        // Try to insert a test record to see what columns are required
+        const testInsert = {
+          id: 'test-user-id',
+          email: 'test@example.com',
+          role: 'owner'
+        };
+        
+        const { error: insertError } = await supabase
+          .from('users')
+          .insert([testInsert]);
+        
+        if (insertError) {
+          console.error('❌ Insert error (this is expected for test):', insertError);
+        } else {
+          console.log('✅ Test insert successful');
+        }
+      }
+    } catch (err) {
+      console.error('💥 Exception testing users table:', err);
     }
     
   } catch (error) {

@@ -21,6 +21,7 @@ interface LogEntry {
   vehicles?: { number_plate: string };
   entry_time?: string;
   exit_time?: string;
+  approved_at?: string;
   created_at: string;
   log_type: 'manual' | 'automatic' | 'common';
 }
@@ -292,14 +293,42 @@ export default function Comparison({ selectedLocation }: ComparisonProps) {
                             {log.vehicle_number || log.vehicles?.number_plate || "-"}
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {log.entry_time ? new Date(log.entry_time).toLocaleString() : 
-                             log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
+                            {(() => {
+                              const entryTime = log.entry_time ? new Date(log.entry_time).toLocaleTimeString() : 
+                                               log.created_at ? new Date(log.created_at).toLocaleTimeString() : "-";
+                              console.log('Comparison Entry Time:', { 
+                                entry_time: log.entry_time, 
+                                created_at: log.created_at, 
+                                display: entryTime 
+                              });
+                              return entryTime;
+                            })()}
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {log.exit_time ? new Date(log.exit_time).toLocaleString() : "-"}
+                            {(() => {
+                              // For manual logs, use approved_at as exit time if exit_time is null
+                              const exitTime = log.log_type === 'manual' || log.log_type === 'common' 
+                                ? (log.exit_time || log.approved_at) 
+                                : log.exit_time;
+                              const displayTime = exitTime ? new Date(exitTime).toLocaleTimeString() : "-";
+                              console.log('Comparison Exit Time:', { 
+                                log_type: log.log_type,
+                                exit_time: log.exit_time,
+                                approved_at: log.approved_at,
+                                calculated_exit: exitTime,
+                                display: displayTime 
+                              });
+                              return displayTime;
+                            })()}
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {getDuration(log.entry_time, log.exit_time)}
+                            {(() => {
+                              const entryTime = log.entry_time || log.created_at;
+                              const exitTime = log.log_type === 'manual' || log.log_type === 'common' 
+                                ? (log.exit_time || log.approved_at) 
+                                : log.exit_time;
+                              return getDuration(entryTime, exitTime);
+                            })()}
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
                             <Badge 
