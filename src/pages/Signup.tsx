@@ -1,45 +1,26 @@
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Car, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '../lib/supabaseClient';
 
 export default function Signup() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [role, setRole] = useState<'owner' | 'manager' | ''>('');
-  const [assignedLocation, setAssignedLocation] = useState('');
   const [loading, setLoading] = useState(false);
-  const [locations, setLocations] = useState<{ id: string; name: string }[]>([]);
   const { signup } = useAuth();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    if (role === 'manager') {
-      const fetchLocations = async () => {
-        const { data, error } = await supabase.from('locations').select('id, name');
-        if (!error && data) {
-          setLocations(data);
-        } else {
-          setLocations([]);
-        }
-      };
-      fetchLocations();
-    }
-  }, [role]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email || !password || !confirmPassword || !role) {
+    if (!email || !password || !confirmPassword) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -49,25 +30,43 @@ export default function Signup() {
       return;
     }
 
-    if (role === 'manager' && !assignedLocation) {
-      toast.error('Please select an assigned location for manager role');
+    if (password.length < 6) {
+      toast.error('Password must be at least 6 characters long');
+      return;
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      toast.error('Please enter a valid email address');
       return;
     }
 
     try {
       setLoading(true);
-      await signup(email, password, role as 'owner' | 'manager', assignedLocation);
+      await signup(email, password, 'owner', undefined, undefined, true);
       
-      // Role-based redirection
-      if (role === 'owner') {
-        navigate('/');
-      } else if (role === 'manager') {
-        navigate('/manager-portal');
+      navigate('/');
+      toast.success('Owner account created successfully!');
+    } catch (error: any) {
+      console.error('Signup error:', error);
+      
+      // Handle specific error messages
+      if (error.message) {
+        if (error.message.includes('Invalid email format')) {
+          toast.error('Please enter a valid email address');
+        } else if (error.message.includes('Password must be at least 6 characters')) {
+          toast.error('Password must be at least 6 characters long');
+        } else if (error.message.includes('User already registered')) {
+          toast.error('An account with this email already exists');
+        } else if (error.message.includes('Invalid login credentials')) {
+          toast.error('Invalid email or password');
+        } else {
+          toast.error(error.message || 'Signup failed. Please try again.');
+        }
+      } else {
+        toast.error('Signup failed. Please try again.');
       }
-      
-      toast.success('Account created successfully!');
-    } catch (error) {
-      toast.error('Signup failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -82,8 +81,8 @@ export default function Signup() {
               <Car className="h-8 w-8" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold">Create Account</CardTitle>
-                      <CardDescription>Join PetaLog Platform</CardDescription>
+          <CardTitle className="text-2xl font-bold">Create Owner Account</CardTitle>
+          <CardDescription>Join PetaLog Platform as an Owner</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -98,37 +97,6 @@ export default function Signup() {
                 required
               />
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="role">Role</Label>
-              <Select value={role} onValueChange={(value: 'owner' | 'manager') => setRole(value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select your role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="owner">Owner</SelectItem>
-                  <SelectItem value="manager">Manager</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {role === 'manager' && (
-              <div className="space-y-2">
-                <Label htmlFor="location">Assigned Location</Label>
-                <Select value={assignedLocation} onValueChange={setAssignedLocation}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select assigned location" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {locations.map((location) => (
-                      <SelectItem key={location.id} value={location.id}>
-                        {location.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
             
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
@@ -160,7 +128,7 @@ export default function Signup() {
               disabled={loading}
             >
               <UserPlus className="h-4 w-4 mr-2" />
-              {loading ? 'Creating Account...' : 'Create Account'}
+              {loading ? 'Creating Account...' : 'Create Owner Account'}
             </Button>
           </form>
 

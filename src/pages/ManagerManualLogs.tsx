@@ -200,7 +200,8 @@ export default function ManagerManualLogs() {
       // Simple update without complex verification
       const updateData = { 
         approval_status: action === 'approve' ? 'approved' : 'rejected',
-        approved_at: action === 'approve' ? new Date().toISOString() : null
+        approved_at: action === 'approve' ? new Date().toISOString() : null,
+        exit_time: action === 'approve' ? new Date().toISOString() : null
       };
       
       console.log('Update data:', updateData);
@@ -444,13 +445,20 @@ export default function ManagerManualLogs() {
                             </td>
                             <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
                             <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {log.entry_time ? new Date(log.entry_time).toLocaleString() : 
-                               log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
+                              {log.entry_time ? new Date(log.entry_time).toLocaleTimeString() : 
+                               log.created_at ? new Date(log.created_at).toLocaleTimeString() : "-"}
                             </td>
                             <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">
-                              {log.exit_time ? new Date(log.exit_time).toLocaleString() : "-"}
+                              {log.exit_time ? new Date(log.exit_time).toLocaleTimeString() : 
+                               log.approved_at ? new Date(log.approved_at).toLocaleTimeString() : "-"}
                             </td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{getDuration(log.entry_time, log.exit_time)}</td>
+                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
+                              {(() => {
+                                const entryTime = log.entry_time || log.created_at;
+                                const exitTime = log.exit_time || log.approved_at;
+                                return getDuration(entryTime, exitTime);
+                              })()}
+                            </td>
                             <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
                               <Badge className="bg-green-100 text-green-800 hover:bg-green-100 text-xs">
                                 Approved

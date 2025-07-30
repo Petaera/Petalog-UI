@@ -149,13 +149,9 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
               <Car className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-<<<<<<< HEAD
               <div className="text-2xl font-bold">
                 {stats.loading ? "..." : stats.totalVehiclesToday.toLocaleString()}
               </div>
-=======
-              <div className="text-xl lg:text-2xl font-bold">1,234</div>
->>>>>>> 1ec4b3ff05350a2737f6ac12a13668934c320d6e
               <p className="text-xs text-muted-foreground">
                 Vehicles processed today
               </p>
@@ -168,13 +164,9 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
               <Timer className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-<<<<<<< HEAD
               <div className="text-2xl font-bold">
                 {stats.loading ? "..." : stats.activeSessions}
               </div>
-=======
-              <div className="text-xl lg:text-2xl font-bold">45</div>
->>>>>>> 1ec4b3ff05350a2737f6ac12a13668934c320d6e
               <p className="text-xs text-muted-foreground">
                 Awaiting approval
               </p>
@@ -187,13 +179,9 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
               <Gift className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-<<<<<<< HEAD
               <div className="text-2xl font-bold">
                 {stats.loading ? "..." : `₹${stats.revenueToday.toLocaleString()}`}
               </div>
-=======
-              <div className="text-xl lg:text-2xl font-bold">$12,345</div>
->>>>>>> 1ec4b3ff05350a2737f6ac12a13668934c320d6e
               <p className="text-xs text-muted-foreground">
                 Total earnings today
               </p>
@@ -206,13 +194,9 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
               <Clock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-<<<<<<< HEAD
               <div className="text-2xl font-bold">
                 {stats.loading ? "..." : `${stats.averageDuration}m`}
               </div>
-=======
-              <div className="text-xl lg:text-2xl font-bold">23m</div>
->>>>>>> 1ec4b3ff05350a2737f6ac12a13668934c320d6e
               <p className="text-xs text-muted-foreground">
                 Per vehicle session
               </p>
