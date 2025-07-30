@@ -11,33 +11,223 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
   const { user } = useAuth();
   const [manualLogs, setManualLogs] = useState<any[]>([]);
   const [autoLogs, setAutoLogs] = useState<any[]>([]);
+  const [stats, setStats] = useState({
+    totalVehiclesToday: 0,
+    activeSessions: 0,
+    revenueToday: 0,
+    averageDuration: 0
+  });
+
+  // Debug logging
+  console.log('🎯 Dashboard component rendered with:', {
+    user: user ? { id: user.id, role: user.role, assignedLocation: user.assigned_location } : null,
+    selectedLocation,
+    hasUser: !!user,
+    userRole: user?.role,
+    assignedLocation: user?.assigned_location
+  });
 
   useEffect(() => {
     const fetchLogs = async () => {
+      console.log('🔍 Fetching logs with params:', {
+        userRole: user?.role,
+        assignedLocation: user?.assigned_location,
+        selectedLocation,
+        userId: user?.id
+      });
+
+      // First, let's get some basic data without any filters to see if we have data at all
+      const { data: allManualData, error: allManualError } = await supabase
+        .from('logs-man')
+        .select('id, entry_time, location_id, vehicle_id, vehicles(number_plate)')
+        .limit(5);
+
+      const { data: allAutoData, error: allAutoError } = await supabase
+        .from('logs-auto')
+        .select('id, entry_time, location_id, vehicle_id, vehicles(number_plate)')
+        .limit(5);
+
+      console.log('🔍 All data check:', {
+        manual: { data: allManualData, error: allManualError, count: allManualData?.length },
+        auto: { data: allAutoData, error: allAutoError, count: allAutoData?.length }
+      });
+
+      // Now let's build the actual queries with filters
       let manQuery = supabase
         .from('logs-man')
         .select('id, entry_time, location_id, vehicle_id, vehicles(number_plate)')
-        .eq('approval_status', 'approved') // Only show approved manual logs
         .order('entry_time', { ascending: false })
         .limit(3);
+      
       let autoQuery = supabase
         .from('logs-auto')
         .select('id, entry_time, location_id, vehicle_id, vehicles(number_plate)')
         .order('entry_time', { ascending: false })
         .limit(3);
+      
       if (user?.role === 'manager' && user?.assigned_location) {
+        console.log('👨‍💼 Manager filtering by assigned location:', user.assigned_location);
         manQuery = manQuery.eq('location_id', user.assigned_location);
         autoQuery = autoQuery.eq('location_id', user.assigned_location);
       } else if (user?.role === 'owner' && selectedLocation) {
+        console.log('👑 Owner filtering by selected location:', selectedLocation);
         manQuery = manQuery.eq('location_id', selectedLocation);
         autoQuery = autoQuery.eq('location_id', selectedLocation);
+      } else {
+        console.log('⚠️ No location filter applied - showing all data');
       }
-      const { data: manData } = await manQuery;
+
+      // Try without approval_status filter first
+      const { data: manData, error: manError } = await manQuery;
+      const { data: autoData, error: autoError } = await autoQuery;
+
+      console.log('📊 Manual logs result:', { data: manData, error: manError, count: manData?.length });
+      console.log('📊 Auto logs result:', { data: autoData, error: autoError, count: autoData?.length });
+
       setManualLogs(manData || []);
-      const { data: autoData } = await autoQuery;
       setAutoLogs(autoData || []);
     };
+
+    const fetchStats = async () => {
+      const today = new Date();
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+
+      console.log('📅 Date range for stats:', {
+        startOfDay: startOfDay.toISOString(),
+        endOfDay: endOfDay.toISOString()
+      });
+
+      // Build location filter
+      let locationFilter = {};
+      if (user?.role === 'manager' && user?.assigned_location) {
+        locationFilter = { location_id: user.assigned_location };
+        console.log('👨‍💼 Manager stats filtering by:', locationFilter);
+      } else if (user?.role === 'owner' && selectedLocation) {
+        locationFilter = { location_id: selectedLocation };
+        console.log('👑 Owner stats filtering by:', locationFilter);
+      } else {
+        console.log('⚠️ No location filter for stats - showing all data');
+      }
+
+      try {
+        // First, let's check if we have any data at all without filters
+        const { data: allManualData, error: allManualError } = await supabase
+          .from('logs-man')
+          .select('id, entry_time, location_id')
+          .limit(5);
+
+        const { data: allAutoData, error: allAutoError } = await supabase
+          .from('logs-auto')
+          .select('id, entry_time, location_id')
+          .limit(5);
+
+        console.log('🔍 Sample data check:', {
+          manual: { data: allManualData, error: allManualError, count: allManualData?.length },
+          auto: { data: allAutoData, error: allAutoError, count: allAutoData?.length }
+        });
+
+        // Let's start with simple counts without date filters
+        const { data: allManualCount, error: allManualCountError } = await supabase
+          .from('logs-man')
+          .select('id', { count: 'exact' })
+          .match(locationFilter);
+
+        const { data: allAutoCount, error: allAutoCountError } = await supabase
+          .from('logs-auto')
+          .select('id', { count: 'exact' })
+          .match(locationFilter);
+
+        console.log('📊 All time counts:', {
+          manual: { count: allManualCount, error: allManualCountError },
+          auto: { count: allAutoCount, error: allAutoCountError }
+        });
+
+        // Now try with date filters
+        const [manualTodayRes, autoTodayRes] = await Promise.all([
+          supabase
+            .from('logs-man')
+            .select('id', { count: 'exact' })
+            .gte('entry_time', startOfDay.toISOString())
+            .lte('entry_time', endOfDay.toISOString())
+            .match(locationFilter),
+          supabase
+            .from('logs-auto')
+            .select('id', { count: 'exact' })
+            .gte('entry_time', startOfDay.toISOString())
+            .lte('entry_time', endOfDay.toISOString())
+            .match(locationFilter)
+        ]);
+
+        console.log('📊 Today stats results:', {
+          manual: manualTodayRes,
+          auto: autoTodayRes
+        });
+
+        const totalVehiclesToday = (manualTodayRes.count || 0) + (autoTodayRes.count || 0);
+
+        // Fetch active sessions (vehicles that entered today but haven't exited)
+        const activeSessionsRes = await supabase
+          .from('logs-man')
+          .select('id', { count: 'exact' })
+          .gte('entry_time', startOfDay.toISOString())
+          .lte('entry_time', endOfDay.toISOString())
+          .is('exit_time', null)
+          .match(locationFilter);
+
+        console.log('⏱️ Active sessions result:', activeSessionsRes);
+
+        const activeSessions = activeSessionsRes.count || 0;
+
+        // Calculate average duration (simplified - you might want to enhance this)
+        const durationRes = await supabase
+          .from('logs-man')
+          .select('entry_time, exit_time')
+          .not('exit_time', 'is', null)
+          .gte('entry_time', startOfDay.toISOString())
+          .lte('entry_time', endOfDay.toISOString())
+          .match(locationFilter)
+          .limit(100);
+
+        console.log('⏱️ Duration calculation result:', durationRes);
+
+        let totalDuration = 0;
+        let durationCount = 0;
+        if (durationRes.data) {
+          durationRes.data.forEach(log => {
+            if (log.entry_time && log.exit_time) {
+              const duration = new Date(log.exit_time).getTime() - new Date(log.entry_time).getTime();
+              totalDuration += duration;
+              durationCount++;
+            }
+          });
+        }
+
+        const averageDuration = durationCount > 0 ? Math.round(totalDuration / durationCount / (1000 * 60)) : 0; // in minutes
+
+        // Estimate revenue (you might want to connect this to actual pricing data)
+        const estimatedRevenue = totalVehiclesToday * 50; // Assuming $50 per vehicle
+
+        console.log('📈 Final stats:', {
+          totalVehiclesToday,
+          activeSessions,
+          revenueToday: estimatedRevenue,
+          averageDuration
+        });
+
+        setStats({
+          totalVehiclesToday,
+          activeSessions,
+          revenueToday: estimatedRevenue,
+          averageDuration
+        });
+      } catch (error) {
+        console.error('❌ Error fetching stats:', error);
+      }
+    };
+
     fetchLogs();
+    fetchStats();
   }, [user?.assigned_location, user?.role, selectedLocation]);
 
   return (
@@ -56,9 +246,9 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
               <Car className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-xl lg:text-2xl font-bold">1,234</div>
+              <div className="text-xl lg:text-2xl font-bold">{stats.totalVehiclesToday}</div>
               <p className="text-xs text-muted-foreground">
-                +20.1% from yesterday
+                Manual and automatic entries
               </p>
             </CardContent>
           </Card>
@@ -69,7 +259,7 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
               <Timer className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-xl lg:text-2xl font-bold">45</div>
+              <div className="text-xl lg:text-2xl font-bold">{stats.activeSessions}</div>
               <p className="text-xs text-muted-foreground">
                 Currently in facility
               </p>
@@ -82,9 +272,9 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
               <Gift className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-xl lg:text-2xl font-bold">$12,345</div>
+              <div className="text-xl lg:text-2xl font-bold">${stats.revenueToday.toLocaleString()}</div>
               <p className="text-xs text-muted-foreground">
-                +15.3% from yesterday
+                Estimated earnings
               </p>
             </CardContent>
           </Card>
@@ -95,7 +285,7 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
               <Clock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-xl lg:text-2xl font-bold">23m</div>
+              <div className="text-xl lg:text-2xl font-bold">{stats.averageDuration}m</div>
               <p className="text-xs text-muted-foreground">
                 Per vehicle session
               </p>
