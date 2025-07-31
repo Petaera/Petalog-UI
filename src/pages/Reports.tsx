@@ -281,10 +281,12 @@ export default function Reports() {
     const serviceBreakdown = filteredLogs.reduce((acc, log) => {
       const service = log.service || 'Unknown';
       if (!acc[service]) {
-        acc[service] = { service, count: 0, revenue: 0, price: log.Amount || 0 };
+        acc[service] = { service, count: 0, revenue: 0, price: 0 };
       }
       acc[service].count++;
       acc[service].revenue += log.Amount || 0;
+      // Calculate average price for this service
+      acc[service].price = acc[service].revenue / acc[service].count;
       return acc;
     }, {} as Record<string, any>);
 
@@ -305,17 +307,88 @@ export default function Reports() {
       percentage: totalVehicles > 0 ? (item.count / totalVehicles) * 100 : 0
     }));
 
+    // Process vehicles for display with correct service and price mapping
+    const processedVehicles = filteredLogs.map(log => {
+      // Find the corresponding service price for this vehicle type and service
+      const servicePrice = servicePrices.find(sp => sp.service_name === log.service);
+      let calculatedPrice = log.Amount || 0; // Use the actual amount from the log
+      
+      console.log('🔍 Processing vehicle:', {
+        vehicleNumber: log.vehicle_number,
+        service: log.service,
+        vehicleType: log.vehicle_type,
+        originalAmount: log.Amount,
+        servicePriceFound: !!servicePrice
+      });
+      
+      // If we have service price data, use it to validate/calculate the price
+      if (servicePrice) {
+        const vehicleType = log.vehicle_type?.toLowerCase();
+        let expectedPrice = 0;
+        
+        if (vehicleType === 'car') {
+          expectedPrice = servicePrice.car_price;
+        } else if (vehicleType === 'bike') {
+          expectedPrice = servicePrice.bike_price;
+        } else if (vehicleType === 'suv') {
+          expectedPrice = servicePrice.suv_price;
+        } else if (vehicleType === 'truck') {
+          expectedPrice = servicePrice.truck_price;
+        }
+        
+        console.log('💰 Price calculation:', {
+          vehicleType,
+          expectedPrice,
+          originalAmount: log.Amount,
+          finalPrice: calculatedPrice
+        });
+        
+        // Use the expected price if the log amount seems incorrect (0 or null)
+        if (!calculatedPrice || calculatedPrice === 0) {
+          calculatedPrice = expectedPrice;
+          console.log('✅ Using expected price:', calculatedPrice);
+        }
+      } else {
+        console.log('⚠️ No service price found for service:', log.service);
+      }
+
+      return {
+        id: log.id,
+        vehicle_number: log.vehicle_number,
+        vehicle_type: log.vehicle_type,
+        owner_name: log.Name,
+        phone_number: log.Phone_no,
+        service_type: log.service,
+        price: calculatedPrice,
+        location_id: log.location_id,
+        created_at: log.created_at,
+        entry_type: log.entry_type,
+        manager_id: log.manager_id
+      };
+    });
+
     return {
       totalRevenue,
       totalVehicles,
       avgService,
       serviceBreakdown: serviceBreakdownArray,
       vehicleDistribution: vehicleDistributionArray,
-      filteredVehicles: filteredLogs  // Using logs data for display
+      filteredVehicles: processedVehicles
     };
   };
 
   const filteredData = getFilteredData();
+
+  // Debug summary
+  console.log('📊 Reports data summary:', {
+    totalVehicles: filteredData.totalVehicles,
+    totalRevenue: filteredData.totalRevenue,
+    avgService: filteredData.avgService,
+    serviceBreakdownCount: filteredData.serviceBreakdown.length,
+    vehicleDistributionCount: filteredData.vehicleDistribution.length,
+    processedVehiclesCount: filteredData.filteredVehicles.length,
+    servicePricesAvailable: servicePrices.length
+  });
 
   const clearFilters = () => {
     setDateRange("today");
