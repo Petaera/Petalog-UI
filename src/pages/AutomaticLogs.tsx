@@ -141,8 +141,8 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
                       <tr key={log.id || idx}>
                         <td className="border px-4 py-2">{log.vehicles?.number_plate || "-"}</td>
                         <td className="border px-4 py-2">-</td>
-                        <td className="border px-4 py-2">{log.entry_time ? new Date(log.entry_time).toLocaleTimeString() : "-"}</td>
-                        <td className="border px-4 py-2">{log.exit_time ? new Date(log.exit_time).toLocaleTimeString() : "-"}</td>
+                        <td className="border px-4 py-2">{log.entry_time ? new Date(log.entry_time).toLocaleString() : "-"}</td>
+                        <td className="border px-4 py-2">{log.exit_time ? new Date(log.exit_time).toLocaleString() : "-"}</td>
                         <td className="border px-4 py-2">
                           {log.entry_url ? (
                             <img 

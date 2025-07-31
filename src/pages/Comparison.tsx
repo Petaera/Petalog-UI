@@ -294,8 +294,8 @@ export default function Comparison({ selectedLocation }: ComparisonProps) {
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
                             {(() => {
-                              const entryTime = log.entry_time ? new Date(log.entry_time).toLocaleTimeString() : 
-                                               log.created_at ? new Date(log.created_at).toLocaleTimeString() : "-";
+                              const entryTime = log.entry_time ? new Date(log.entry_time).toLocaleString() : 
+                                               log.created_at ? new Date(log.created_at).toLocaleString() : "-";
                               console.log('Comparison Entry Time:', { 
                                 entry_time: log.entry_time, 
                                 created_at: log.created_at, 
@@ -310,7 +310,7 @@ export default function Comparison({ selectedLocation }: ComparisonProps) {
                               const exitTime = log.log_type === 'manual' || log.log_type === 'common' 
                                 ? (log.exit_time || log.approved_at) 
                                 : log.exit_time;
-                              const displayTime = exitTime ? new Date(exitTime).toLocaleTimeString() : "-";
+                              const displayTime = exitTime ? new Date(exitTime).toLocaleString() : "-";
                               console.log('Comparison Exit Time:', { 
                                 log_type: log.log_type,
                                 exit_time: log.exit_time,

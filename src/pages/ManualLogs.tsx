@@ -457,12 +457,12 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                             </td>
                             <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
                             <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {log.entry_time ? new Date(log.entry_time).toLocaleTimeString() : 
-                               log.created_at ? new Date(log.created_at).toLocaleTimeString() : "-"}
+                              {log.entry_time ? new Date(log.entry_time).toLocaleString() : 
+                               log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
                             </td>
                             <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">
-                              {log.exit_time ? new Date(log.exit_time).toLocaleTimeString() : 
-                               log.approved_at ? new Date(log.approved_at).toLocaleTimeString() : "-"}
+                              {log.exit_time ? new Date(log.exit_time).toLocaleString() : 
+                               log.approved_at ? new Date(log.approved_at).toLocaleString() : "-"}
                             </td>
                             <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
                               {(() => {
