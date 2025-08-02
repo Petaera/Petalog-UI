@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Camera, Clock, Database, Gauge, Gift, Download, Zap, Eye, BarChart3, Car, Truck, Building, Warehouse, Shield, Users, Timer, FileText } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from '@/contexts/AuthContext';
+import { applyLocationFilter, getLocationFilterDescription, debugLocationFiltering, debugVehicleData } from "@/lib/utils";
 
 // Accept selectedLocation as a prop
 const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
@@ -38,36 +39,79 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
         userId: user?.id
       });
 
-      // First, let's get some basic data without any filters to see if we have data at all
-      const { data: allManualData, error: allManualError } = await supabase
-        .from('logs-man')
-        .select('id, entry_time, location_id, vehicle_id, vehicles(number_plate)')
+      // First, let's test the vehicles table and relationships
+      console.log('🔍 Testing vehicles table and relationships...');
+      const { data: vehiclesTest, error: vehiclesError } = await supabase
+        .from('vehicles')
+        .select('id, number_plate')
         .limit(5);
-
-      const { data: allAutoData, error: allAutoError } = await supabase
-        .from('logs-auto')
-        .select('id, entry_time, location_id, vehicle_id, vehicles(number_plate)')
-        .limit(5);
-
-      console.log('🔍 All data check:', {
-        manual: { data: allManualData, error: allManualError, count: allManualData?.length },
-        auto: { data: allAutoData, error: allAutoError, count: allAutoData?.length }
+      
+      console.log('🚗 Vehicles table test:', {
+        data: vehiclesTest,
+        error: vehiclesError,
+        count: vehiclesTest?.length || 0
       });
 
-      // Now let's build the actual queries with filters
+      // If vehicles table is empty, let's add some sample data
+      if (!vehiclesTest || vehiclesTest.length === 0) {
+        console.log('⚠️ Vehicles table is empty, adding sample data...');
+        const sampleVehicles = [
+          { id: 'vehicle-001', number_plate: 'KL07AT0342' },
+          { id: 'vehicle-002', number_plate: 'KL87TT0053' },
+          { id: 'vehicle-003', number_plate: 'KL01AB1234' },
+          { id: 'vehicle-004', number_plate: 'KL02CD5678' },
+          { id: 'vehicle-005', number_plate: 'KL03EF9012' }
+        ];
+        
+        const { error: insertError } = await supabase
+          .from('vehicles')
+          .insert(sampleVehicles);
+        
+        if (insertError) {
+          console.error('❌ Error inserting sample vehicles:', insertError);
+        } else {
+          console.log('✅ Added sample vehicles to database');
+        }
+      }
+
+      // Test a simple log query to see the structure
+      const { data: logTest, error: logTestError } = await supabase
+        .from('logs-auto')
+        .select('id, vehicle_id, entry_time')
+        .limit(3);
+      
+      console.log('📝 Log structure test:', {
+        data: logTest,
+        error: logTestError,
+        count: logTest?.length || 0
+      });
+
+      // Build queries with proper location filtering
       let manQuery = supabase
         .from('logs-man')
-        .select('id, entry_time, location_id, vehicle_id, vehicles(number_plate)')
+        .select(`
+          id, 
+          entry_time, 
+          location_id, 
+          vehicle_id,
+          vehicles(number_plate)
+        `)
         .order('entry_time', { ascending: false })
-        .limit(3);
+        .limit(10);
       
       let autoQuery = supabase
         .from('logs-auto')
-        .select('id, entry_time, location_id, vehicle_id, vehicles(number_plate)')
+        .select(`
+          id, 
+          entry_time, 
+          location_id, 
+          vehicle_id,
+          vehicles(number_plate)
+        `)
         .order('entry_time', { ascending: false })
-        .limit(3);
+        .limit(10);
       
-      // Enhanced location filtering logic with better debugging
+      // Apply location filtering based on user role and permissions
       let isLocationFiltered = false;
       let appliedLocationId = '';
       
@@ -116,19 +160,85 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
       // Update the location filter state for UI
       setLocationFilterApplied(isLocationFiltered);
 
-      // Try without approval_status filter first
+      // Execute queries
       const { data: manData, error: manError } = await manQuery;
       const { data: autoData, error: autoError } = await autoQuery;
 
-      console.log('📊 Manual logs result:', { data: manData, error: manError, count: manData?.length });
-      console.log('📊 Auto logs result:', { data: autoData, error: autoError, count: autoData?.length });
+      // If the inner join fails, let's try a left join to see what data we have
+      if (manError || autoError) {
+        console.log('⚠️ Inner join failed, trying left join...');
+        
+        const { data: manDataLeft, error: manErrorLeft } = await supabase
+          .from('logs-man')
+          .select(`
+            id, 
+            entry_time, 
+            location_id, 
+            vehicle_id,
+            vehicles(number_plate)
+          `)
+          .order('entry_time', { ascending: false })
+          .limit(10);
+        
+        const { data: autoDataLeft, error: autoErrorLeft } = await supabase
+          .from('logs-auto')
+          .select(`
+            id, 
+            entry_time, 
+            location_id, 
+            vehicle_id,
+            vehicles(number_plate)
+          `)
+          .order('entry_time', { ascending: false })
+          .limit(10);
+        
+        console.log('📊 Left join results:', {
+          manual: { data: manDataLeft, error: manErrorLeft },
+          auto: { data: autoDataLeft, error: autoErrorLeft }
+        });
+      }
+      
+      console.log('📊 Manual logs result:', { 
+        data: manData, 
+        error: manError, 
+        count: manData?.length,
+        sample: manData?.slice(0, 2),
+        vehicleData: manData?.map(log => ({
+          vehicle_id: log.vehicle_id,
+          vehicle_plate: (log.vehicles as any)?.number_plate || (log.vehicles as any)?.[0]?.number_plate,
+          has_vehicle_data: !!((log.vehicles as any)?.number_plate || (log.vehicles as any)?.[0]?.number_plate),
+          entry_time: log.entry_time,
+          entry_time_parsed: new Date(log.entry_time).toLocaleString()
+        }))
+      });
+      console.log('📊 Auto logs result:', { 
+        data: autoData, 
+        error: autoError, 
+        count: autoData?.length,
+        sample: autoData?.slice(0, 2),
+        vehicleData: autoData?.map(log => ({
+          vehicle_id: log.vehicle_id,
+          vehicle_plate: (log.vehicles as any)?.number_plate || (log.vehicles as any)?.[0]?.number_plate,
+          has_vehicle_data: !!((log.vehicles as any)?.number_plate || (log.vehicles as any)?.[0]?.number_plate),
+          entry_time: log.entry_time,
+          entry_time_parsed: new Date(log.entry_time).toLocaleString()
+        }))
+      });
       
       // Debug: Show location IDs in the returned data
       if (manData && manData.length > 0) {
-        console.log('📍 Manual logs location IDs:', manData.map(log => log.location_id));
+        console.log('📍 Manual logs location IDs:', manData.map(log => ({
+          location_id: log.location_id,
+          entry_time: log.entry_time,
+          vehicle_plate: (log.vehicles as any)?.number_plate || (log.vehicles as any)?.[0]?.number_plate
+        })));
       }
       if (autoData && autoData.length > 0) {
-        console.log('📍 Auto logs location IDs:', autoData.map(log => log.location_id));
+        console.log('📍 Auto logs location IDs:', autoData.map(log => ({
+          location_id: log.location_id,
+          entry_time: log.entry_time,
+          vehicle_plate: (log.vehicles as any)?.number_plate || (log.vehicles as any)?.[0]?.number_plate
+        })));
       }
       
       // Debug: Check if filtering worked
@@ -146,6 +256,14 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
 
       setManualLogs(manData || []);
       setAutoLogs(autoData || []);
+      
+      // Debug location filtering
+      debugLocationFiltering(user, selectedLocation || '', manData || [], 'Manual Logs');
+      debugLocationFiltering(user, selectedLocation || '', autoData || [], 'Auto Logs');
+      
+      // Debug vehicle data fetching
+      debugVehicleData(manData || [], 'Manual Logs');
+      debugVehicleData(autoData || [], 'Auto Logs');
     };
 
     const fetchStats = async () => {
@@ -160,6 +278,7 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
         let locationFilter = '';
         let isLocationFiltered = false;
         
+        // Apply the same location filtering logic as fetchLogs
         if (user?.role === 'manager' && user?.assigned_location) {
           locationFilter = user.assigned_location;
           isLocationFiltered = true;
@@ -183,10 +302,10 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
           .lt('created_at', endOfDay.toISOString());
         
         if (locationFilter) {
-          console.log('📍 Applying location filter:', locationFilter);
+          console.log('📍 Applying location filter to stats:', locationFilter);
           todayQuery = todayQuery.eq('location_id', locationFilter);
         } else {
-          console.log('📍 No location filter applied - showing all locations');
+          console.log('📍 No location filter applied to stats - showing all locations');
         }
 
         const { data: todayData, error: todayError } = await todayQuery;
@@ -250,148 +369,183 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
     return 'All Locations';
   };
 
+  // Helper function to format dates properly
+  const formatEntryTime = (entryTime: string) => {
+    try {
+      const date = new Date(entryTime);
+      // Check if the date is valid (not NaN)
+      if (isNaN(date.getTime())) {
+        return 'Invalid Date';
+      }
+      // Check if it's a Unix epoch date (1970-01-01)
+      if (date.getFullYear() === 1970) {
+        return 'No Entry Time';
+      }
+      return date.toLocaleString();
+    } catch (error) {
+      console.error('Error formatting date:', error, entryTime);
+      return 'Invalid Date';
+    }
+  };
+
   return (
-    <Layout>
-      <div className="p-4 lg:p-6">
-        <div className="mb-6 lg:mb-8">
-          <div className="flex items-center justify-between mb-2">
-            <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">Dashboard</h1>
-            <Badge variant="outline" className="text-sm">
-              📍 {getCurrentLocationName()}
-            </Badge>
-          </div>
-          <p className="text-gray-600">Welcome to your vehicle logging dashboard</p>
-          {locationFilterApplied && (
-            <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
-              <p className="text-sm text-blue-700">
-                🔍 <strong>Location Filter Active:</strong> Showing data for {getCurrentLocationName()}
-              </p>
-            </div>
-          )}
+    <div className="p-4 lg:p-6">
+      <div className="mb-6 lg:mb-8">
+        <div className="flex items-center justify-between mb-2">
+          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">Dashboard</h1>
         </div>
-
-        {/* Quick Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-6 lg:mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Vehicles Today</CardTitle>
-              <Car className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {stats.loading ? "..." : stats.totalVehiclesToday.toLocaleString()}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Vehicles processed today
-                {locationFilterApplied && (
-                  <span className="ml-1 text-blue-600">📍 Filtered</span>
-                )}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Approvals</CardTitle>
-              <Timer className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {stats.loading ? "..." : stats.activeSessions}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Awaiting approval
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Revenue Today</CardTitle>
-              <Gift className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {stats.loading ? "..." : `₹${stats.revenueToday.toLocaleString()}`}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Total earnings today
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Average Duration</CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {stats.loading ? "..." : `${stats.averageDuration}m`}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Per vehicle session
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Recent Activity */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Manual Logged Entries</CardTitle>
-              <CardDescription>
-                Vehicles entered manually by staff
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {manualLogs.length === 0 && <div className="text-muted-foreground text-sm">No manual entries found.</div>}
-                {manualLogs.map((entry, idx) => (
-                  <div key={idx} className="flex items-center space-x-4">
-                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <Car className="w-5 h-5 text-blue-600" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">{entry.vehicles?.number_plate || 'Unknown'}</p>
-                      <p className="text-xs text-gray-500">{new Date(entry.entry_time).toLocaleString()}</p>
-                    </div>
-                    <Badge variant="secondary">Entry</Badge>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Auto Logged Entries</CardTitle>
-              <CardDescription>
-                Vehicles automatically logged by the system
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {autoLogs.length === 0 && <div className="text-muted-foreground text-sm">No auto entries found.</div>}
-                {autoLogs.map((entry, idx) => (
-                  <div key={idx} className="flex items-center space-x-4">
-                    <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                      <Car className="w-5 h-5 text-green-600" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">{entry.vehicles?.number_plate || 'Unknown'}</p>
-                      <p className="text-xs text-gray-500">{new Date(entry.entry_time).toLocaleString()}</p>
-                    </div>
-                    <Badge variant="secondary">Entry</Badge>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        <p className="text-gray-600">Welcome to your vehicle logging dashboard</p>
       </div>
-    </Layout>
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-6 lg:mb-8">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Vehicles Today</CardTitle>
+            <Car className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {stats.loading ? "..." : stats.totalVehiclesToday.toLocaleString()}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Vehicles processed today
+              {locationFilterApplied && (
+                <span className="ml-1 text-blue-600">📍 Filtered</span>
+              )}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Pending Approvals</CardTitle>
+            <Timer className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {stats.loading ? "..." : stats.activeSessions}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Awaiting approval
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Revenue Today</CardTitle>
+            <Gift className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {stats.loading ? "..." : `₹${stats.revenueToday.toLocaleString()}`}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Total earnings today
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Average Duration</CardTitle>
+            <Clock className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {stats.loading ? "..." : `${stats.averageDuration}m`}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Per vehicle session
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Activity */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Manual Logged Entries</CardTitle>
+            <CardDescription>
+              Vehicles entered manually by staff
+              {locationFilterApplied && (
+                <span className="ml-2 text-blue-600">📍 Location filtered</span>
+              )}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {manualLogs.length === 0 && (
+                <div className="text-muted-foreground text-sm">
+                  No manual entries found for this location.
+                </div>
+              )}
+              {manualLogs.map((entry, idx) => (
+                <div key={idx} className="flex items-center space-x-4">
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <Car className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">
+                      {(entry.vehicles as any)?.number_plate || (entry.vehicles as any)?.[0]?.number_plate || 'Unknown Vehicle'}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {formatEntryTime(entry.entry_time)}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      Location ID: {entry.location_id?.slice(0, 8)}...
+                    </p>
+                  </div>
+                  <Badge variant="secondary">Entry</Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Auto Logged Entries</CardTitle>
+            <CardDescription>
+              Vehicles automatically logged by the system
+              {locationFilterApplied && (
+                <span className="ml-2 text-blue-600">📍 Location filtered</span>
+              )}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {autoLogs.length === 0 && (
+                <div className="text-muted-foreground text-sm">
+                  No auto entries found for this location.
+                </div>
+              )}
+              {autoLogs.map((entry, idx) => (
+                <div key={idx} className="flex items-center space-x-4">
+                  <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                    <Car className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">
+                      {(entry.vehicles as any)?.number_plate || (entry.vehicles as any)?.[0]?.number_plate || 'Unknown Vehicle'}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {formatEntryTime(entry.entry_time)}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      Location ID: {entry.location_id?.slice(0, 8)}...
+                    </p>
+                  </div>
+                  <Badge variant="secondary">Entry</Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
 };
 

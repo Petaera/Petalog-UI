@@ -7,6 +7,7 @@ interface User {
   email: string;
   role: string;
   assigned_location?: string;
+  own_id?: string;
   first_name?: string;
   last_name?: string;
   phone?: string;
@@ -44,7 +45,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // First try to get basic user info from users table
           const { data: userData, error: userError } = await supabase
             .from('users')
-            .select('id, email, role, assigned_location')
+            .select('id, email, role, assigned_location, own_id')
             .eq('id', session.user.id)
             .maybeSingle();
           
@@ -55,6 +56,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               email: userData.email,
               role: trimmedRole && trimmedRole.includes('manager') ? 'manager' : trimmedRole,
               assigned_location: userData.assigned_location,
+              own_id: userData.own_id,
               first_name: undefined,
               last_name: undefined,
               phone: undefined,
@@ -67,6 +69,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               email: session.user.email || '',
               role: 'owner', // Default to owner if not found in users table
               assigned_location: undefined,
+              own_id: undefined,
             });
           }
         } catch (error) {
@@ -76,6 +79,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             email: session.user.email || '',
             role: 'owner',
             assigned_location: undefined,
+            own_id: undefined,
           });
         }
       }
@@ -94,7 +98,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Fetch user data from users table
         const { data: userData, error: userError } = await supabase
           .from('users')
-          .select('id, email, role, assigned_location')
+          .select('id, email, role, assigned_location, own_id')
           .eq('id', authData.user.id)
           .maybeSingle();
         
@@ -108,6 +112,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             email: authData.user.email || '',
             role: 'owner', // Default to owner if not found in users table
             assigned_location: undefined,
+            own_id: undefined,
           });
         } else {
           const trimmedRole = typeof userData.role === 'string' ? userData.role.trim() : userData.role;
@@ -116,6 +121,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             email: userData.email,
             role: trimmedRole && trimmedRole.includes('manager') ? 'manager' : trimmedRole,
             assigned_location: userData.assigned_location,
+            own_id: userData.own_id,
             first_name: undefined,
             last_name: undefined,
             phone: undefined,
@@ -128,6 +134,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           email: authData.user.email || '',
           role: 'owner',
           assigned_location: undefined,
+          own_id: undefined,
         });
       }
       
@@ -209,6 +216,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           email,
           role,
           assigned_location: role === 'manager' ? location : undefined,
+          own_id: undefined,
           first_name: userData?.first_name,
           last_name: userData?.last_name,
           phone: userData?.phone,

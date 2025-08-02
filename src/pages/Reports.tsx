@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { format } from "date-fns";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
+import { useAuth } from '@/contexts/AuthContext';
 
 // Types for our data
 interface Vehicle {
@@ -77,9 +78,9 @@ interface User {
   role: string;
 }
 
-export default function Reports() {
+export default function Reports({ selectedLocation }: { selectedLocation?: string }) {
+  const { user } = useAuth();
   const [dateRange, setDateRange] = useState("today");
-  const [location, setLocation] = useState("all");
   const [vehicleType, setVehicleType] = useState("all");
   const [service, setService] = useState("all");
   const [entryType, setEntryType] = useState("all");
@@ -233,8 +234,12 @@ export default function Reports() {
     console.log('🔍 After date filter:', filteredLogs.length, 'records');
 
     // Apply other filters
-    if (location !== "all") {
-      filteredLogs = filteredLogs.filter(log => log.location_id === location);
+    // Get the current location from the toolbar context
+    const currentLocation = user?.role === 'manager' ? user?.assigned_location : 
+                          (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
+    
+    if (currentLocation) {
+      filteredLogs = filteredLogs.filter(log => log.location_id === currentLocation);
       console.log('🔍 After location filter:', filteredLogs.length, 'records');
     }
 
@@ -392,7 +397,6 @@ export default function Reports() {
 
   const clearFilters = () => {
     setDateRange("today");
-    setLocation("all");
     setVehicleType("all");
     setService("all");
     setEntryType("all");
@@ -430,414 +434,396 @@ export default function Reports() {
   };
 
   return (
-    <Layout>
-      <div className="flex-1 p-4 md:p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <BarChart3 className="h-6 w-6 text-primary" />
-              <h1 className="text-2xl font-bold">Reports & Statistics</h1>
-            </div>
-          </div>
-          
-          <div className="flex flex-col sm:flex-row items-center gap-2">
-            <Button variant="outline" size="sm" onClick={exportToCSV} disabled={loading}>
-              <FileSpreadsheet className="h-4 w-4 mr-2" />
-              Export CSV
-            </Button>
-            <Button variant="outline" size="sm" onClick={fetchAllData} disabled={loading}>
-              {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <BarChart3 className="h-4 w-4 mr-2" />}
-              Refresh Data
-            </Button>
+    <div className="flex-1 p-4 md:p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-6 w-6 text-primary" />
+            <h1 className="text-2xl font-bold">Reports & Statistics</h1>
           </div>
         </div>
-
-        {/* Enhanced Filter Section */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Filter className="h-5 w-5" />
-                Filters
-              </CardTitle>
-              <Button variant="outline" size="sm" onClick={clearFilters}>
-                Clear All Filters
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4">
-              {/* Search Filter */}
-              <div className="space-y-2">
-                <Label htmlFor="search">Search</Label>
-                <Input
-                  id="search"
-                  placeholder="Vehicle, Owner, Phone..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-              {/* Date Range Filter */}
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4" />
-                  Date Range
-                </Label>
-                <Select value={dateRange} onValueChange={setDateRange}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="today">Today</SelectItem>
-                    <SelectItem value="yesterday">Yesterday</SelectItem>
-                    <SelectItem value="last7days">Last 7 Days</SelectItem>
-                    <SelectItem value="last30days">Last 30 Days</SelectItem>
-                    <SelectItem value="custom">Custom Range</SelectItem>
-                  </SelectContent>
-                </Select>
-                
-                {dateRange === "custom" && (
-                  <div className="space-y-2 pt-2">
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" size="sm" className="w-full">
-                          {customFromDate ? format(customFromDate, "PPP") : "From Date"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <CalendarComponent
-                          mode="single"
-                          selected={customFromDate}
-                          onSelect={setCustomFromDate}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" size="sm" className="w-full">
-                          {customToDate ? format(customToDate, "PPP") : "To Date"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <CalendarComponent
-                          mode="single"
-                          selected={customToDate}
-                          onSelect={setCustomToDate}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                )}
-              </div>
-
-              {/* Location Filter */}
-              <div className="space-y-2">
-                <Label htmlFor="location">Location</Label>
-                <Select value={location} onValueChange={setLocation}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Locations" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Locations</SelectItem>
-                    {locations.map((loc) => (
-                      <SelectItem key={`location-${loc.id}`} value={loc.id}>{loc.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Vehicle Type Filter */}
-              <div className="space-y-2">
-                <Label htmlFor="vehicleType">Vehicle Type</Label>
-                <Select value={vehicleType} onValueChange={setVehicleType}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Types" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Types</SelectItem>
-                    <SelectItem value="Car">Car</SelectItem>
-                    <SelectItem value="Bike">Bike</SelectItem>
-                    <SelectItem value="SUV">SUV</SelectItem>
-                    <SelectItem value="Truck">Truck</SelectItem>
-                    {(() => {
-                      // Get unique vehicle types with proper normalization
-                      const standardTypes = ['Car', 'Bike', 'SUV', 'Truck'];
-                      const uniqueTypes = [...new Set(
-                        logs
-                          .map(log => log.vehicle_type)
-                          .filter(type => type && typeof type === 'string')
-                          .map(type => type.trim()) // Remove whitespace
-                          .filter(type => type.length > 0)
-                      )]
-                        .filter(type => !standardTypes.some(std => std.toLowerCase() === type.toLowerCase()))
-                        .sort(); // Sort alphabetically
-                      
-                      return uniqueTypes.map((type, index) => (
-                        <SelectItem key={`vehicle-type-${type}-${index}`} value={type}>{type}</SelectItem>
-                      ));
-                    })()}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Service Type Filter */}
-              <div className="space-y-2">
-                <Label htmlFor="service">Service Type</Label>
-                <Select value={service} onValueChange={setService}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Services" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Services</SelectItem>
-                    <SelectItem value="Basic Wash">Basic Wash</SelectItem>
-                    <SelectItem value="Premium Wash">Premium Wash</SelectItem>
-                    <SelectItem value="Full Service">Full Service</SelectItem>
-                    <SelectItem value="Quick Wash">Quick Wash</SelectItem>
-                    <SelectItem value="Workshop">Workshop</SelectItem>
-                    {(() => {
-                      // Get unique service types with proper normalization
-                      const standardServices = ['Basic Wash', 'Premium Wash', 'Full Service', 'Quick Wash', 'Workshop'];
-                      const uniqueServices = [...new Set(
-                        logs
-                          .map(log => log.service)
-                          .filter(service => service && typeof service === 'string')
-                          .map(service => service.trim()) // Remove whitespace
-                          .filter(service => service.length > 0)
-                      )]
-                        .filter(service => !standardServices.some(std => std.toLowerCase() === service.toLowerCase()))
-                        .sort(); // Sort alphabetically
-                      
-                      return uniqueServices.map((service, index) => (
-                        <SelectItem key={`service-type-${service}-${index}`} value={service}>{service}</SelectItem>
-                      ));
-                    })()}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Entry Type Filter */}
-              <div className="space-y-2">
-                <Label htmlFor="entryType">Entry Type</Label>
-                <Select value={entryType} onValueChange={setEntryType}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Entry Types" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Entry Types</SelectItem>
-                    <SelectItem value="Manual">Manual Entry</SelectItem>
-                    <SelectItem value="Automatic">Automatic Entry</SelectItem>
-                    {(() => {
-                      // Get unique entry types with proper normalization
-                      const standardTypes = ['Manual', 'Automatic'];
-                      const uniqueTypes = [...new Set(
-                        logs
-                          .map(log => log.entry_type)
-                          .filter(type => type && typeof type === 'string')
-                          .map(type => type.trim()) // Remove whitespace
-                          .filter(type => type.length > 0)
-                      )]
-                        .filter(type => !standardTypes.some(std => std.toLowerCase() === type.toLowerCase()))
-                        .sort(); // Sort alphabetically
-                      
-                      return uniqueTypes.map((type, index) => (
-                        <SelectItem key={`entry-type-${type}-${index}`} value={type}>{type}</SelectItem>
-                      ));
-                    })()}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Manager Filter */}
-              <div className="space-y-2">
-                <Label htmlFor="manager">Manager</Label>
-                <Select value={manager} onValueChange={setManager}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Managers" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Managers</SelectItem>
-                    {users.filter(user => user.role === 'manager').map((mgr) => (
-                      <SelectItem key={`manager-${mgr.id}`} value={mgr.id}>{mgr.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Revenue Statistics */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="metric-card-financial">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-              <Badge variant="outline" className="text-financial border-financial">
-                {dateRange === "today" ? "Today" : "Filtered Period"}
-              </Badge>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-financial">₹{filteredData.totalRevenue.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">+12.5% from previous period</p>
-            </CardContent>
-          </Card>
-
-          <Card className="metric-card-success">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Vehicles</CardTitle>
-              <Badge variant="outline" className="text-success border-success">
-                {dateRange === "today" ? "Today" : "Filtered Period"}
-              </Badge>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-success">{filteredData.totalVehicles}</div>
-              <p className="text-xs text-muted-foreground">+8.2% from previous period</p>
-            </CardContent>
-          </Card>
-
-          <Card className="metric-card">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Avg. Service Value</CardTitle>
-              <Badge variant="secondary">
-                {dateRange === "today" ? "Today" : "Filtered Period"}
-              </Badge>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">₹{Math.round(filteredData.avgService).toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">Per vehicle</p>
-            </CardContent>
-          </Card>
+        
+        <div className="flex flex-col sm:flex-row items-center gap-2">
+          <Button variant="outline" size="sm" onClick={exportToCSV} disabled={loading}>
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Export CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={fetchAllData} disabled={loading}>
+            {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <BarChart3 className="h-4 w-4 mr-2" />}
+            Refresh Data
+          </Button>
         </div>
+      </div>
 
-        {/* Service Breakdown */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Service Breakdown - Filtered Results</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {filteredData.serviceBreakdown.length === 0 ? (
-                <div className="text-center p-4 text-muted-foreground">
-                  No service data available
+      {/* Enhanced Filter Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Filter className="h-5 w-5" />
+              Filters
+            </CardTitle>
+            <Button variant="outline" size="sm" onClick={clearFilters}>
+              Clear All Filters
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4">
+            {/* Search Filter */}
+            <div className="space-y-2">
+              <Label htmlFor="search">Search</Label>
+              <Input
+                id="search"
+                placeholder="Vehicle, Owner, Phone..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            {/* Date Range Filter */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                Date Range
+              </Label>
+              <Select value={dateRange} onValueChange={setDateRange}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="yesterday">Yesterday</SelectItem>
+                  <SelectItem value="last7days">Last 7 Days</SelectItem>
+                  <SelectItem value="last30days">Last 30 Days</SelectItem>
+                  <SelectItem value="custom">Custom Range</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              {dateRange === "custom" && (
+                <div className="space-y-2 pt-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="w-full">
+                        {customFromDate ? format(customFromDate, "PPP") : "From Date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <CalendarComponent
+                        mode="single"
+                        selected={customFromDate}
+                        onSelect={setCustomFromDate}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="w-full">
+                        {customToDate ? format(customToDate, "PPP") : "To Date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <CalendarComponent
+                        mode="single"
+                        selected={customToDate}
+                        onSelect={setCustomToDate}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
-              ) : (
-                filteredData.serviceBreakdown.map((item: any, index: number) => (
-                  <div key={`service-breakdown-${item.service || 'unknown'}-${index}`} className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
-                    <div>
-                      <p className="font-medium">{item.service || 'Unknown Service'}</p>
-                      <p className="text-sm text-muted-foreground">{item.count} vehicles • ₹{Math.round(item.price || 0).toLocaleString()} avg</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-financial">₹{(item.revenue || 0).toLocaleString()}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {filteredData.totalRevenue > 0 ? (((item.revenue || 0) / filteredData.totalRevenue) * 100).toFixed(1) : 0}% of total
-                      </p>
-                    </div>
-                  </div>
-                ))
               )}
             </div>
+
+            {/* Vehicle Type Filter */}
+            <div className="space-y-2">
+              <Label htmlFor="vehicleType">Vehicle Type</Label>
+              <Select value={vehicleType} onValueChange={setVehicleType}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Types" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="Car">Car</SelectItem>
+                  <SelectItem value="Bike">Bike</SelectItem>
+                  <SelectItem value="SUV">SUV</SelectItem>
+                  <SelectItem value="Truck">Truck</SelectItem>
+                  {(() => {
+                    // Get unique vehicle types with proper normalization
+                    const standardTypes = ['Car', 'Bike', 'SUV', 'Truck'];
+                    const uniqueTypes = [...new Set(
+                      logs
+                        .map(log => log.vehicle_type)
+                        .filter(type => type && typeof type === 'string')
+                        .map(type => type.trim()) // Remove whitespace
+                        .filter(type => type.length > 0)
+                    )]
+                      .filter(type => !standardTypes.some(std => std.toLowerCase() === type.toLowerCase()))
+                      .sort(); // Sort alphabetically
+                    
+                    return uniqueTypes.map((type, index) => (
+                      <SelectItem key={`vehicle-type-${type}-${index}`} value={type}>{type}</SelectItem>
+                    ));
+                  })()}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Service Type Filter */}
+            <div className="space-y-2">
+              <Label htmlFor="service">Service Type</Label>
+              <Select value={service} onValueChange={setService}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Services" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Services</SelectItem>
+                  <SelectItem value="Basic Wash">Basic Wash</SelectItem>
+                  <SelectItem value="Premium Wash">Premium Wash</SelectItem>
+                  <SelectItem value="Full Service">Full Service</SelectItem>
+                  <SelectItem value="Quick Wash">Quick Wash</SelectItem>
+                  <SelectItem value="Workshop">Workshop</SelectItem>
+                  {(() => {
+                    // Get unique service types with proper normalization
+                    const standardServices = ['Basic Wash', 'Premium Wash', 'Full Service', 'Quick Wash', 'Workshop'];
+                    const uniqueServices = [...new Set(
+                      logs
+                        .map(log => log.service)
+                        .filter(service => service && typeof service === 'string')
+                        .map(service => service.trim()) // Remove whitespace
+                        .filter(service => service.length > 0)
+                    )]
+                      .filter(service => !standardServices.some(std => std.toLowerCase() === service.toLowerCase()))
+                      .sort(); // Sort alphabetically
+                    
+                    return uniqueServices.map((service, index) => (
+                      <SelectItem key={`service-type-${service}-${index}`} value={service}>{service}</SelectItem>
+                    ));
+                  })()}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Entry Type Filter */}
+            <div className="space-y-2">
+              <Label htmlFor="entryType">Entry Type</Label>
+              <Select value={entryType} onValueChange={setEntryType}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Entry Types" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Entry Types</SelectItem>
+                  <SelectItem value="Manual">Manual Entry</SelectItem>
+                  <SelectItem value="Automatic">Automatic Entry</SelectItem>
+                  {(() => {
+                    // Get unique entry types with proper normalization
+                    const standardTypes = ['Manual', 'Automatic'];
+                    const uniqueTypes = [...new Set(
+                      logs
+                        .map(log => log.entry_type)
+                        .filter(type => type && typeof type === 'string')
+                        .map(type => type.trim()) // Remove whitespace
+                        .filter(type => type.length > 0)
+                    )]
+                      .filter(type => !standardTypes.some(std => std.toLowerCase() === type.toLowerCase()))
+                      .sort(); // Sort alphabetically
+                    
+                    return uniqueTypes.map((type, index) => (
+                      <SelectItem key={`entry-type-${type}-${index}`} value={type}>{type}</SelectItem>
+                    ));
+                  })()}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Manager Filter */}
+            <div className="space-y-2">
+              <Label htmlFor="manager">Manager</Label>
+              <Select value={manager} onValueChange={setManager}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Managers" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Managers</SelectItem>
+                  {users.filter(user => user.role === 'manager').map((mgr) => (
+                    <SelectItem key={`manager-${mgr.id}`} value={mgr.id}>{mgr.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Revenue Statistics */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className="metric-card-financial">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+            <Badge variant="outline" className="text-financial border-financial">
+              {dateRange === "today" ? "Today" : "Filtered Period"}
+            </Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-financial">₹{filteredData.totalRevenue.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">+12.5% from previous period</p>
           </CardContent>
         </Card>
 
-        {/* Vehicle Type Distribution */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Vehicle Type Distribution</CardTitle>
+        <Card className="metric-card-success">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Vehicles</CardTitle>
+            <Badge variant="outline" className="text-success border-success">
+              {dateRange === "today" ? "Today" : "Filtered Period"}
+            </Badge>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {filteredData.vehicleDistribution.map((item: any, index: number) => (
-                <div key={`vehicle-distribution-${item.type || 'unknown'}-${index}`} className="text-center p-4 bg-accent/30 rounded-lg">
-                  <p className="text-2xl font-bold text-primary">{item.count || 0}</p>
-                  <p className="font-medium">{item.type || 'Unknown Type'}</p>
-                  <p className="text-sm text-muted-foreground">{(item.percentage || 0).toFixed(1)}%</p>
-                </div>
-              ))}
-            </div>
+            <div className="text-2xl font-bold text-success">{filteredData.totalVehicles}</div>
+            <p className="text-xs text-muted-foreground">+8.2% from previous period</p>
           </CardContent>
         </Card>
 
-        {/* Records Table */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Vehicle Records ({filteredData.filteredVehicles.length} records)</CardTitle>
-              <Badge variant="secondary">
-                {loading ? "Loading..." : `${filteredData.filteredVehicles.length} of ${vehicles.length} records`}
-              </Badge>
-            </div>
+        <Card className="metric-card">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Avg. Service Value</CardTitle>
+            <Badge variant="secondary">
+              {dateRange === "today" ? "Today" : "Filtered Period"}
+            </Badge>
           </CardHeader>
           <CardContent>
-            {loading ? (
-              <div className="flex items-center justify-center p-8">
-                <Loader2 className="h-8 w-8 animate-spin" />
-                <span className="ml-2">Loading records...</span>
-              </div>
-            ) : filteredData.filteredVehicles.length === 0 ? (
-              <div className="text-center p-8 text-muted-foreground">
-                <Car className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No records found matching your filters</p>
-                <Button variant="outline" onClick={clearFilters} className="mt-4">
-                  Clear Filters
-                </Button>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left p-2 font-medium">Vehicle No.</th>
-                      <th className="text-left p-2 font-medium">Owner</th>
-                      <th className="text-left p-2 font-medium">Type</th>
-                      <th className="text-left p-2 font-medium">Service</th>
-                      <th className="text-left p-2 font-medium">Price</th>
-                      <th className="text-left p-2 font-medium">Entry Type</th>
-                      <th className="text-left p-2 font-medium">Date</th>
-                      <th className="text-left p-2 font-medium">Location</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredData.filteredVehicles.slice(0, 50).map((vehicle) => (
-                      <tr key={vehicle.id} className="border-b hover:bg-accent/50">
-                        <td className="p-2 font-mono text-sm">{vehicle.vehicle_number}</td>
-                        <td className="p-2">
-                          <div>
-                            <p className="font-medium">{vehicle.owner_name}</p>
-                            <p className="text-xs text-muted-foreground">{vehicle.phone_number}</p>
-                          </div>
-                        </td>
-                        <td className="p-2">
-                          <Badge variant="outline">{vehicle.vehicle_type}</Badge>
-                        </td>
-                        <td className="p-2">{vehicle.service_type}</td>
-                        <td className="p-2 font-semibold text-financial">₹{vehicle.price?.toLocaleString() || 0}</td>
-                        <td className="p-2">
-                          <Badge variant={vehicle.entry_type === 'Manual' ? 'default' : 'secondary'}>
-                            {vehicle.entry_type}
-                          </Badge>
-                        </td>
-                        <td className="p-2 text-sm">
-                          {format(new Date(vehicle.created_at), 'dd/MM/yy HH:mm')}
-                        </td>
-                        <td className="p-2 text-sm">
-                          {locations.find(loc => loc.id === vehicle.location_id)?.name || 'Unknown'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {filteredData.filteredVehicles.length > 50 && (
-                  <div className="text-center p-4 text-muted-foreground">
-                    Showing first 50 records of {filteredData.filteredVehicles.length} total
-                  </div>
-                )}
-              </div>
-            )}
+            <div className="text-2xl font-bold">₹{Math.round(filteredData.avgService).toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">Per vehicle</p>
           </CardContent>
         </Card>
       </div>
-    </Layout>
+
+      {/* Service Breakdown */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Service Breakdown - Filtered Results</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {filteredData.serviceBreakdown.length === 0 ? (
+              <div className="text-center p-4 text-muted-foreground">
+                No service data available
+              </div>
+            ) : (
+              filteredData.serviceBreakdown.map((item: any, index: number) => (
+                <div key={`service-breakdown-${item.service || 'unknown'}-${index}`} className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
+                  <div>
+                    <p className="font-medium">{item.service || 'Unknown Service'}</p>
+                    <p className="text-sm text-muted-foreground">{item.count} vehicles • ₹{Math.round(item.price || 0).toLocaleString()} avg</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-financial">₹{(item.revenue || 0).toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {filteredData.totalRevenue > 0 ? (((item.revenue || 0) / filteredData.totalRevenue) * 100).toFixed(1) : 0}% of total
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Vehicle Type Distribution */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Vehicle Type Distribution</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {filteredData.vehicleDistribution.map((item: any, index: number) => (
+              <div key={`vehicle-distribution-${item.type || 'unknown'}-${index}`} className="text-center p-4 bg-accent/30 rounded-lg">
+                <p className="text-2xl font-bold text-primary">{item.count || 0}</p>
+                <p className="font-medium">{item.type || 'Unknown Type'}</p>
+                <p className="text-sm text-muted-foreground">{(item.percentage || 0).toFixed(1)}%</p>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Records Table */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Vehicle Records ({filteredData.filteredVehicles.length} records)</CardTitle>
+            <Badge variant="secondary">
+              {loading ? "Loading..." : `${filteredData.filteredVehicles.length} of ${vehicles.length} records`}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex items-center justify-center p-8">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <span className="ml-2">Loading records...</span>
+            </div>
+          ) : filteredData.filteredVehicles.length === 0 ? (
+            <div className="text-center p-8 text-muted-foreground">
+              <Car className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No records found matching your filters</p>
+              <Button variant="outline" onClick={clearFilters} className="mt-4">
+                Clear Filters
+              </Button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left p-2 font-medium">Vehicle No.</th>
+                    <th className="text-left p-2 font-medium">Owner</th>
+                    <th className="text-left p-2 font-medium">Type</th>
+                    <th className="text-left p-2 font-medium">Service</th>
+                    <th className="text-left p-2 font-medium">Price</th>
+                    <th className="text-left p-2 font-medium">Entry Type</th>
+                    <th className="text-left p-2 font-medium">Date</th>
+                    <th className="text-left p-2 font-medium">Location</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredData.filteredVehicles.slice(0, 50).map((vehicle) => (
+                    <tr key={vehicle.id} className="border-b hover:bg-accent/50">
+                      <td className="p-2 font-mono text-sm">{vehicle.vehicle_number}</td>
+                      <td className="p-2">
+                        <div>
+                          <p className="font-medium">{vehicle.owner_name}</p>
+                          <p className="text-xs text-muted-foreground">{vehicle.phone_number}</p>
+                        </div>
+                      </td>
+                      <td className="p-2">
+                        <Badge variant="outline">{vehicle.vehicle_type}</Badge>
+                      </td>
+                      <td className="p-2">{vehicle.service_type}</td>
+                      <td className="p-2 font-semibold text-financial">₹{vehicle.price?.toLocaleString() || 0}</td>
+                      <td className="p-2">
+                        <Badge variant={vehicle.entry_type === 'Manual' ? 'default' : 'secondary'}>
+                          {vehicle.entry_type}
+                        </Badge>
+                      </td>
+                      <td className="p-2 text-sm">
+                        {format(new Date(vehicle.created_at), 'dd/MM/yy HH:mm')}
+                      </td>
+                      <td className="p-2 text-sm">
+                        {locations.find(loc => loc.id === vehicle.location_id)?.name || 'Unknown'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filteredData.filteredVehicles.length > 50 && (
+                <div className="text-center p-4 text-muted-foreground">
+                  Showing first 50 records of {filteredData.filteredVehicles.length} total
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }

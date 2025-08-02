@@ -157,151 +157,149 @@ export default function VehicleHistory() {
   }, []);
 
   return (
-    <Layout>
-      <div className="flex-1 p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Search className="h-6 w-6 text-primary" />
-              <h1 className="text-2xl font-bold">Vehicle History Search</h1>
-            </div>
+    <div className="flex-1 p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Search className="h-6 w-6 text-primary" />
+            <h1 className="text-2xl font-bold">Vehicle History Search</h1>
           </div>
         </div>
+      </div>
 
-        {/* Search Form */}
+      {/* Search Form */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Search Vehicle History</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <Input 
+                placeholder="Enter vehicle number (e.g., MH12AB1234)" 
+                className="text-center font-mono text-lg"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && searchVehicleHistory()}
+              />
+            </div>
+            <Button 
+              variant="default" 
+              onClick={searchVehicleHistory}
+              disabled={loading}
+            >
+              {loading ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Search className="h-4 w-4 mr-2" />
+              )}
+              Search
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Vehicle Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
-          <CardHeader>
-            <CardTitle>Search Vehicle History</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <Input 
-                  placeholder="Enter vehicle number (e.g., MH12AB1234)" 
-                  className="text-center font-mono text-lg"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && searchVehicleHistory()}
-                />
-              </div>
-              <Button 
-                variant="default" 
-                onClick={searchVehicleHistory}
-                disabled={loading}
-              >
-                {loading ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Search className="h-4 w-4 mr-2" />
-                )}
-                Search
-              </Button>
+          <CardContent className="p-4">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-primary">{vehicleStats.totalVisits}</p>
+              <p className="text-sm text-muted-foreground">Total Visits</p>
             </div>
           </CardContent>
         </Card>
-
-        {/* Vehicle Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-primary">{vehicleStats.totalVisits}</p>
-                <p className="text-sm text-muted-foreground">Total Visits</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-financial">₹{vehicleStats.totalSpent.toLocaleString()}</p>
-                <p className="text-sm text-muted-foreground">Total Spent</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-success">₹{Math.round(vehicleStats.averageService)}</p>
-                <p className="text-sm text-muted-foreground">Average Service</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="text-center">
-                <p className="text-2xl font-bold">{vehicleStats.daysSinceLast}</p>
-                <p className="text-sm text-muted-foreground">Days Since Last</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* History Table */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Car className="h-5 w-5" />
-              Visit History - {currentVehicle}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="flex items-center justify-center p-8">
-                <Loader2 className="h-8 w-8 animate-spin" />
-                <span className="ml-2">Loading vehicle history...</span>
-              </div>
-            ) : vehicleHistory.length === 0 ? (
-              <div className="text-center p-8 text-muted-foreground">
-                <Car className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p className="text-lg font-medium">No vehicle history found</p>
-                <p className="text-sm">No records found for vehicle number: {currentVehicle}</p>
-                <p className="text-xs mt-2">Showing demo data for demonstration purposes</p>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Time</TableHead>
-                    <TableHead>Service</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Location</TableHead>
-                    <TableHead>Entry Type</TableHead>
-                    <TableHead>Manager</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {vehicleHistory.map((visit) => (
-                    <TableRow key={visit.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Calendar className="h-4 w-4 text-muted-foreground" />
-                          {formatDate(visit.created_at)}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-muted-foreground" />
-                          {formatTime(visit.created_at)}
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-medium">{visit.service}</TableCell>
-                      <TableCell className="font-semibold text-financial">₹{visit.amount.toLocaleString()}</TableCell>
-                      <TableCell>{visit.location}</TableCell>
-                      <TableCell>
-                        <Badge variant={visit.entry_type === "Workshop" ? "default" : "secondary"}>
-                          {visit.entry_type}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{visit.manager}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+          <CardContent className="p-4">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-financial">₹{vehicleStats.totalSpent.toLocaleString()}</p>
+              <p className="text-sm text-muted-foreground">Total Spent</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-success">₹{Math.round(vehicleStats.averageService)}</p>
+              <p className="text-sm text-muted-foreground">Average Service</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-center">
+              <p className="text-2xl font-bold">{vehicleStats.daysSinceLast}</p>
+              <p className="text-sm text-muted-foreground">Days Since Last</p>
+            </div>
           </CardContent>
         </Card>
       </div>
-    </Layout>
+
+      {/* History Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Car className="h-5 w-5" />
+            Visit History - {currentVehicle}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex items-center justify-center p-8">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <span className="ml-2">Loading vehicle history...</span>
+            </div>
+          ) : vehicleHistory.length === 0 ? (
+            <div className="text-center p-8 text-muted-foreground">
+              <Car className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p className="text-lg font-medium">No vehicle history found</p>
+              <p className="text-sm">No records found for vehicle number: {currentVehicle}</p>
+              <p className="text-xs mt-2">Showing demo data for demonstration purposes</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Time</TableHead>
+                  <TableHead>Service</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Location</TableHead>
+                  <TableHead>Entry Type</TableHead>
+                  <TableHead>Manager</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {vehicleHistory.map((visit) => (
+                  <TableRow key={visit.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        {formatDate(visit.created_at)}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        {formatTime(visit.created_at)}
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-medium">{visit.service}</TableCell>
+                    <TableCell className="font-semibold text-financial">₹{visit.amount.toLocaleString()}</TableCell>
+                    <TableCell>{visit.location}</TableCell>
+                    <TableCell>
+                      <Badge variant={visit.entry_type === "Workshop" ? "default" : "secondary"}>
+                        {visit.entry_type}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{visit.manager}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }

@@ -137,7 +137,7 @@ const App = () => (
                     <AutomaticLogs />
                   </Layout>
                 </ProtectedRoute>
-              } 
+              }
             />
             <Route 
               path="/automatic-logs" 
@@ -153,9 +153,11 @@ const App = () => (
               path="/dashboard" 
               element={
                 <ProtectedRoute requiredRole="owner">
-                  <Dashboard />
+                  <Layout>
+                    <Dashboard />
+                  </Layout>
                 </ProtectedRoute>
-              } 
+              }
             />
             <Route 
               path="/manual-logs" 
@@ -197,9 +199,11 @@ const App = () => (
               path="/reports" 
               element={
                 <ProtectedRoute requiredRole="owner">
-                  <Reports />
+                  <Layout>
+                    <Reports />
+                  </Layout>
                 </ProtectedRoute>
-              } 
+              }
             />
             <Route 
               path="/reports" 
@@ -207,23 +211,27 @@ const App = () => (
                 <ProtectedRoute requiredRole="manager">
                   <Navigate to="/manager-reports" replace />
                 </ProtectedRoute>
-              } 
+              }
             />
             <Route 
               path="/manager-access" 
               element={
                 <ProtectedRoute requiredRole="owner">
-                  <ManagerAccess />
+                  <Layout>
+                    <ManagerAccess />
+                  </Layout>
                 </ProtectedRoute>
-              } 
+              }
             />
             <Route 
               path="/price-settings" 
               element={
                 <ProtectedRoute requiredRole="owner">
-                  <PriceSettings />
+                  <Layout>
+                    <PriceSettings />
+                  </Layout>
                 </ProtectedRoute>
-              } 
+              }
             />
             <Route 
               path="/price-settings" 
@@ -231,15 +239,17 @@ const App = () => (
                 <ProtectedRoute requiredRole="manager">
                   <Navigate to="/manager-price-settings" replace />
                 </ProtectedRoute>
-              } 
+              }
             />
             <Route 
               path="/vehicle-history" 
               element={
                 <ProtectedRoute requiredRole="owner">
-                  <VehicleHistory />
+                  <Layout>
+                    <VehicleHistory />
+                  </Layout>
                 </ProtectedRoute>
-              } 
+              }
             />
             <Route 
               path="/vehicle-history" 

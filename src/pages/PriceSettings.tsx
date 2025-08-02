@@ -266,149 +266,146 @@ export default function PriceSettings() {
     : 0;
 
   return (
-    <Layout>
-      <div className="flex-1 p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Settings className="h-6 w-6 text-primary" />
-              <h1 className="text-2xl font-bold">Price Settings</h1>
-            </div>
-          </div>
+    <div className="flex-1 p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={refreshData} 
-              disabled={refreshing}
-            >
-              {refreshing ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
-              )}
-              Refresh
-            </Button>
-            <Button variant="default" size="sm">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Service
-            </Button>
+            <Settings className="h-6 w-6 text-primary" />
+            <h1 className="text-2xl font-bold">Price Settings</h1>
           </div>
         </div>
-        {/* Error Display */}
-        {error && (
-          <Card className="border-destructive">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-2 text-destructive">
-                <AlertCircle className="h-4 w-4" />
-                <span>{error}</span>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-        {/* Fallback Data Notice */}
-        {usingFallbackData && (
-          <Card className="border-yellow-500 bg-yellow-50">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-2 text-yellow-700">
-                <AlertCircle className="h-4 w-4" />
-                <span>Showing fallback service prices. Service_prices table may not be accessible.</span>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Services</CardTitle>
-              <IndianRupee className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{totalServices}</div>
-              <p className="text-xs text-muted-foreground">
-                Unique service types
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Price Rules</CardTitle>
-              <Settings className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{totalRules}</div>
-              <p className="text-xs text-muted-foreground">
-                Service-vehicle combinations
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Avg. Price</CardTitle>
-              <IndianRupee className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">₹{Math.round(avgPrice)}</div>
-              <p className="text-xs text-muted-foreground">
-                Across all services
-              </p>
-            </CardContent>
-          </Card>
-
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={refreshData} 
+            disabled={refreshing}
+          >
+            {refreshing ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4 mr-2" />
+            )}
+            Refresh
+          </Button>
+          <Button variant="default" size="sm">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Service
+          </Button>
         </div>
-        {/* Service Pricing Matrix Table */}
+      </div>
+      {/* Error Display */}
+      {error && (
+        <Card className="border-destructive">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="h-4 w-4" />
+              <span>{error}</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {/* Fallback Data Notice */}
+      {usingFallbackData && (
+        <Card className="border-yellow-500 bg-yellow-50">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-yellow-700">
+              <AlertCircle className="h-4 w-4" />
+              <span>Showing fallback service prices. Service_prices table may not be accessible.</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {/* Statistics Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <IndianRupee className="h-5 w-5" />
-              Service Pricing Matrix
-            </CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Services</CardTitle>
+            <IndianRupee className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {loading ? (
-              <div className="flex items-center justify-center p-8">
-                <Loader2 className="h-8 w-8 animate-spin" />
-                <span className="ml-2">Loading service prices...</span>
-              </div>
-            ) : serviceList.length === 0 ? (
-              <div className="text-center p-8 text-muted-foreground">
-                <IndianRupee className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No service prices found</p>
-                <Button variant="outline" onClick={refreshData} className="mt-4">
-                  Refresh Data
-                </Button>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Service Name</TableHead>
-                      {vehicleList.map(vehicle => (
-                        <TableHead key={vehicle}>{originalVehicleNames[vehicle] || vehicle}</TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {serviceList.map(service => (
-                      <TableRow key={service}>
-                        <TableCell className="font-medium">{originalServiceNames[service] || service}</TableCell>
-                        {vehicleList.map(vehicle => (
-                          <TableCell key={vehicle} className="text-center">
-                            {serviceMatrix[service][vehicle] ? `₹${serviceMatrix[service][vehicle]}` : "-"}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
+            <div className="text-2xl font-bold">{totalServices}</div>
+            <p className="text-xs text-muted-foreground">
+              Unique service types
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Price Rules</CardTitle>
+            <Settings className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalRules}</div>
+            <p className="text-xs text-muted-foreground">
+              Service-vehicle combinations
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Avg. Price</CardTitle>
+            <IndianRupee className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">₹{Math.round(avgPrice)}</div>
+            <p className="text-xs text-muted-foreground">
+              Across all services
+            </p>
           </CardContent>
         </Card>
 
       </div>
-    </Layout>
+      {/* Service Pricing Matrix Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <IndianRupee className="h-5 w-5" />
+            Service Pricing Matrix
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex items-center justify-center p-8">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <span className="ml-2">Loading service prices...</span>
+            </div>
+          ) : serviceList.length === 0 ? (
+            <div className="text-center p-8 text-muted-foreground">
+              <IndianRupee className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No service prices found</p>
+              <Button variant="outline" onClick={refreshData} className="mt-4">
+                Refresh Data
+              </Button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Service Name</TableHead>
+                    {vehicleList.map(vehicle => (
+                      <TableHead key={vehicle}>{originalVehicleNames[vehicle] || vehicle}</TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {serviceList.map(service => (
+                    <TableRow key={service}>
+                      <TableCell className="font-medium">{originalServiceNames[service] || service}</TableCell>
+                      {vehicleList.map(vehicle => (
+                        <TableCell key={vehicle} className="text-center">
+                          {serviceMatrix[service][vehicle] ? `₹${serviceMatrix[service][vehicle]}` : "-"}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
