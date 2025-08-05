@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, Database, X } from "lucide-react";
+import { ArrowLeft, Database, X, Calendar, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/lib/supabaseClient";
 
 interface AutomaticLogsProps {
@@ -10,42 +13,72 @@ interface AutomaticLogsProps {
 export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(() => {
-    // Set default date to today
-    const today = new Date();
-    return today.toISOString().split('T')[0];
-  });
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState("");
 
   console.log("AutomaticLogs component rendered. selectedLocation:", selectedLocation);
 
+  // Set default date to current day
   useEffect(() => {
-    console.log("AutomaticLogs useEffect running. selectedLocation:", selectedLocation, "selectedDate:", selectedDate);
+    const today = new Date();
+    const todayString = today.toISOString().split('T')[0];
+    setStartDate(todayString);
+    setEndDate(todayString);
+  }, []);
+
+  useEffect(() => {
+    console.log("AutomaticLogs useEffect running. selectedLocation:", selectedLocation);
     if (!selectedLocation) {
       console.log("No location selected for automatic logs");
       return;
     }
     setLoading(true);
     const fetchLogs = async () => {
+      console.log('🔍 Starting fetchLogs with:', { selectedLocation, startDate, endDate });
+      
+      // Build query step by step to ensure proper filtering
       let query = supabase
         .from("logs-auto")
-        .select("id, entry_time, exit_time, vehicle_id, entry_url, exit_image, created_at, vehicles(number_plate)")
-        .eq("location_id", selectedLocation);
+        .select("id, entry_time, exit_time, vehicle_id, entry_url, exit_image, created_at, vehicles(number_plate), location_id");
 
-      // Add date filter if selected
-      if (selectedDate) {
-        const startOfDay = `${selectedDate}T00:00:00.000Z`;
-        const endOfDay = `${selectedDate}T23:59:59.999Z`;
-        query = query
-          .gte("created_at", startOfDay)
-          .lte("created_at", endOfDay);
+      // Apply location filter
+      query = query.eq("location_id", selectedLocation);
+      console.log('🔍 Location filter applied:', { selectedLocation });
+
+      // Apply date filters if provided
+      if (startDate) {
+        const startDateTime = new Date(startDate);
+        startDateTime.setHours(0, 0, 0, 0);
+        query = query.gte("entry_time", startDateTime.toISOString());
+        console.log('🔍 Start date filter applied:', startDateTime.toISOString());
+      }
+
+      if (endDate) {
+        const endDateTime = new Date(endDate);
+        endDateTime.setHours(23, 59, 59, 999);
+        query = query.lte("entry_time", endDateTime.toISOString());
+        console.log('🔍 End date filter applied:', endDateTime.toISOString());
       }
 
       const { data, error } = await query.order("entry_time", { ascending: false });
       
       console.log('AutomaticLogs Supabase logs-auto data:', data);
       console.log('AutomaticLogs Supabase error:', error);
+      
+      // Check if returned data has correct location_id
+      if (data && data.length > 0) {
+        const locationIds = [...new Set(data.map(item => item.location_id))];
+        console.log('🔍 Returned data location IDs:', locationIds);
+        console.log('🔍 Expected location ID:', selectedLocation);
+        
+        if (locationIds.length > 1 || !locationIds.includes(selectedLocation)) {
+          console.warn('⚠️ Data returned from multiple locations or wrong location!');
+        }
+      }
+      
       if (!error && data) {
         setLogs(data);
         console.log('AutomaticLogs logs state after setLogs:', data);
@@ -53,7 +86,7 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
       setLoading(false);
     };
     fetchLogs();
-  }, [selectedLocation, selectedDate]);
+  }, [selectedLocation, startDate, endDate]);
 
   function getDuration(entry, exit) {
     if (!entry || !exit) return "-";
@@ -127,31 +160,73 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
           </div>
         </div>
 
-        <div className="flex items-center gap-4 mb-4">
-          <label htmlFor="date-filter" className="font-medium">Filter by Date:</label>
-          <input
-            id="date-filter"
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="border rounded px-3 py-2"
-          />
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => {
-              const today = new Date();
-              setSelectedDate(today.toISOString().split('T')[0]);
-            }}
-          >
-            Today
-          </Button>
-        </div>
+        {/* Date Filter */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Filter className="h-5 w-5 text-blue-500" />
+              <span>Date Filter</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="startDate" className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  Start Date
+                </Label>
+                <Input
+                  id="startDate"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="endDate" className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  End Date
+                </Label>
+                <Input
+                  id="endDate"
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+              <div className="flex items-end">
+                <Button
+                  onClick={() => {
+                    const today = new Date();
+                    const todayString = today.toISOString().split('T')[0];
+                    setStartDate(todayString);
+                    setEndDate(todayString);
+                  }}
+                  variant="outline"
+                  className="w-full"
+                >
+                  Today
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-        <div className="metric-card">
-          <div className="py-6">
+
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Database className="h-5 w-5 text-blue-500" />
+              <span>Automatic Logs</span>
+              <span className="text-sm text-muted-foreground">({logs.length} entries)</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
             <div className="overflow-x-auto">
-              <table className="min-w-full border mt-4">
+              <table className="min-w-full border">
                 <thead>
                   <tr>
                     <th className="border px-4 py-2">Vehicle No</th>
@@ -168,10 +243,7 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
                     <tr><td colSpan={7} className="text-center py-4">Loading...</td></tr>
                   ) : logs.length === 0 ? (
                     <tr><td colSpan={7} className="text-center py-4">
-                      {selectedDate 
-                        ? `No logs found for ${selectedDate} at this location.`
-                        : "No logs found for this location."
-                      }
+                      No logs found for this location.
                     </td></tr>
                   ) : (
                     logs.map((log, idx) => (
@@ -213,8 +285,8 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
                 </tbody>
               </table>
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         {/* Image Modal */}
         {isModalOpen && (

@@ -139,14 +139,6 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-            <Route 
-              path="/automatic-logs" 
-              element={
-                <ProtectedRoute requiredRole="manager">
-                  <Navigate to="/manager-automatic-logs" replace />
-                </ProtectedRoute>
-              } 
-            />
             
             {/* Owner routes */}
             <Route 
@@ -170,14 +162,6 @@ const App = () => (
               } 
             />
             <Route 
-              path="/manual-logs" 
-              element={
-                <ProtectedRoute requiredRole="manager">
-                  <Navigate to="/manager-manual-logs" replace />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
               path="/comparison" 
               element={
                 <ProtectedRoute requiredRole="owner">
@@ -187,29 +171,13 @@ const App = () => (
                 </ProtectedRoute>
               } 
             />
-            <Route 
-              path="/comparison" 
-              element={
-                <ProtectedRoute requiredRole="manager">
-                  <Navigate to="/manager-comparison" replace />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
+                        <Route 
               path="/reports" 
               element={
                 <ProtectedRoute requiredRole="owner">
                   <Layout>
                     <Reports />
                   </Layout>
-                </ProtectedRoute>
-              }
-            />
-            <Route 
-              path="/reports" 
-              element={
-                <ProtectedRoute requiredRole="manager">
-                  <Navigate to="/manager-reports" replace />
                 </ProtectedRoute>
               }
             />
@@ -223,60 +191,36 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-            <Route 
-              path="/price-settings" 
-              element={
-                <ProtectedRoute requiredRole="owner">
-                  <Layout>
-                    <PriceSettings />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            <Route 
-              path="/price-settings" 
-              element={
-                <ProtectedRoute requiredRole="manager">
-                  <Navigate to="/manager-price-settings" replace />
-                </ProtectedRoute>
-              }
-            />
-            <Route 
-              path="/vehicle-history" 
-              element={
-                <ProtectedRoute requiredRole="owner">
-                  <Layout>
-                    <VehicleHistory />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            <Route 
-              path="/vehicle-history" 
-              element={
-                <ProtectedRoute requiredRole="manager">
-                  <Navigate to="/manager-vehicle-history" replace />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/owner-entry" 
-              element={
-                <ProtectedRoute requiredRole="owner">
-                  <Layout>
-                    <OwnerEntry />
-                  </Layout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/owner-entry" 
-              element={
-                <ProtectedRoute requiredRole="manager">
-                  <Navigate to="/manager-owner-entry" replace />
-                </ProtectedRoute>
-              } 
-            />
+                         <Route 
+               path="/price-settings" 
+               element={
+                 <ProtectedRoute requiredRole="owner">
+                   <Layout>
+                     <PriceSettings />
+                   </Layout>
+                 </ProtectedRoute>
+               }
+             />
+                         <Route 
+               path="/vehicle-history" 
+               element={
+                 <ProtectedRoute requiredRole="owner">
+                   <Layout>
+                     <VehicleHistory />
+                   </Layout>
+                 </ProtectedRoute>
+               }
+             />
+                         <Route 
+               path="/owner-entry" 
+               element={
+                 <ProtectedRoute requiredRole="owner">
+                   <Layout>
+                     <OwnerEntry />
+                   </Layout>
+                 </ProtectedRoute>
+               } 
+             />
             
             {/* Catch-all routes */}
             <Route path="*" element={<NotFound />} />

@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import { Layout } from "@/components/layout/Layout";
-import { ArrowLeft, Database, X, Calendar } from "lucide-react";
+import { ArrowLeft, Database, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -12,42 +11,47 @@ export default function ManagerAutomaticLogs() {
   const { user } = useAuth();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(() => {
-    // Set default date to today
-    const today = new Date();
-    return today.toISOString().split('T')[0];
-  });
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState("");
 
   console.log("ManagerAutomaticLogs component rendered. assignedLocation:", user?.assigned_location);
 
   useEffect(() => {
-    console.log("ManagerAutomaticLogs useEffect running. assignedLocation:", user?.assigned_location, "selectedDate:", selectedDate);
+    console.log("ManagerAutomaticLogs useEffect running. assignedLocation:", user?.assigned_location);
     if (!user?.assigned_location) {
       console.log("No location assigned to manager for automatic logs");
       return;
     }
     setLoading(true);
     const fetchLogs = async () => {
+      console.log('🔍 ManagerAutomaticLogs Starting fetchLogs with:', { assignedLocation: user?.assigned_location });
+      
+      // Build query step by step to ensure proper filtering
       let query = supabase
         .from("logs-auto")
-        .select("id, entry_time, exit_time, vehicle_id, entry_url, exit_image, created_at, vehicles(number_plate)")
-        .eq("location_id", user?.assigned_location);
+        .select("id, entry_time, exit_time, vehicle_id, entry_url, exit_image, created_at, vehicles(number_plate), location_id");
 
-      // Add date filter if selected
-      if (selectedDate) {
-        const startOfDay = `${selectedDate}T00:00:00.000Z`;
-        const endOfDay = `${selectedDate}T23:59:59.999Z`;
-        query = query
-          .gte("created_at", startOfDay)
-          .lte("created_at", endOfDay);
-      }
+      // Apply location filter
+      query = query.eq("location_id", user?.assigned_location);
+      console.log('🔍 ManagerAutomaticLogs Location filter applied:', { assignedLocation: user?.assigned_location });
 
       const { data, error } = await query.order("entry_time", { ascending: false });
       
       console.log('ManagerAutomaticLogs Supabase logs-auto data:', data);
       console.log('ManagerAutomaticLogs Supabase error:', error);
+      
+      // Check if returned data has correct location_id
+      if (data && data.length > 0) {
+        const locationIds = [...new Set(data.map(item => item.location_id))];
+        console.log('🔍 ManagerAutomaticLogs Returned data location IDs:', locationIds);
+        console.log('🔍 ManagerAutomaticLogs Expected location ID:', user?.assigned_location);
+        
+        if (locationIds.length > 1 || !locationIds.includes(user?.assigned_location)) {
+          console.warn('⚠️ ManagerAutomaticLogs Data returned from multiple locations or wrong location!');
+        }
+      }
+      
       if (!error && data) {
         setLogs(data);
         console.log('ManagerAutomaticLogs logs state after setLogs:', data);
@@ -55,7 +59,7 @@ export default function ManagerAutomaticLogs() {
       setLoading(false);
     };
     fetchLogs();
-  }, [user?.assigned_location, selectedDate]);
+  }, [user?.assigned_location]);
 
   function getDuration(entry, exit) {
     if (!entry || !exit) return "-";
@@ -134,39 +138,7 @@ export default function ManagerAutomaticLogs() {
           </div>
         </div>
 
-        {/* Date Filter */}
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Calendar className="h-5 w-5 text-muted-foreground" />
-                <Label htmlFor="date-filter" className="text-sm font-medium">
-                  Filter by Date:
-                </Label>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Input
-                  id="date-filter"
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="w-full sm:w-48"
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const today = new Date();
-                    setSelectedDate(today.toISOString().split('T')[0]);
-                  }}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  Today
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+
 
         {/* Automatic Logs Table */}
         <Card>
@@ -177,11 +149,7 @@ export default function ManagerAutomaticLogs() {
                 <span>Automatic Logs</span>
                 <span className="text-sm text-muted-foreground">({logs.length} entries)</span>
               </div>
-              {selectedDate && (
-                <span className="text-sm text-muted-foreground">
-                  {new Date(selectedDate).toLocaleDateString()}
-                </span>
-              )}
+
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -205,10 +173,7 @@ export default function ManagerAutomaticLogs() {
                         <tr><td colSpan={7} className="text-center py-4">Loading...</td></tr>
                       ) : logs.length === 0 ? (
                         <tr><td colSpan={7} className="text-center py-4 text-muted-foreground">
-                          {selectedDate 
-                            ? `No automatic logs found for ${new Date(selectedDate).toLocaleDateString()} at this location.`
-                            : "No automatic logs found for this location."
-                          }
+                          No automatic logs found for this location.
                         </td></tr>
                       ) : (
                         logs.map((log, idx) => (
