@@ -203,3 +203,5 @@ export const debugVehicleData = (data: any[], dataType: string) => {
     })) || []
   });
 };
+
+

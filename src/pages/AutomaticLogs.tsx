@@ -223,6 +223,7 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
               <span>Automatic Logs</span>
               <span className="text-sm text-muted-foreground">({logs.length} entries)</span>
             </CardTitle>
+
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -250,8 +251,16 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
                       <tr key={log.id || idx}>
                         <td className="border px-4 py-2">{log.vehicles?.number_plate || "-"}</td>
                         <td className="border px-4 py-2">-</td>
-                        <td className="border px-4 py-2">{log.entry_time ? new Date(log.entry_time).toLocaleString() : "-"}</td>
-                        <td className="border px-4 py-2">{log.exit_time ? new Date(log.exit_time).toLocaleString() : "-"}</td>
+                        <td className="border px-4 py-2">
+                          {log.entry_time ? 
+                            new Date(log.entry_time).toLocaleString() : "-"
+                          }
+                        </td>
+                        <td className="border px-4 py-2">
+                          {log.exit_time ? 
+                            new Date(log.exit_time).toLocaleString() : "-"
+                          }
+                        </td>
                         <td className="border px-4 py-2">
                           {log.entry_url ? (
                             <img 

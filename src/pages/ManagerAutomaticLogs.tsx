@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Layout } from "@/components/layout/Layout";
-import { ArrowLeft, Database, X } from "lucide-react";
+import { ArrowLeft, Database, X, Calendar, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { supabase } from "@/lib/supabaseClient";
@@ -11,11 +13,21 @@ export default function ManagerAutomaticLogs() {
   const { user } = useAuth();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState("");
 
   console.log("ManagerAutomaticLogs component rendered. assignedLocation:", user?.assigned_location);
+
+  // Set default date to current day
+  useEffect(() => {
+    const today = new Date();
+    const todayString = today.toISOString().split('T')[0];
+    setStartDate(todayString);
+    setEndDate(todayString);
+  }, []);
 
   useEffect(() => {
     console.log("ManagerAutomaticLogs useEffect running. assignedLocation:", user?.assigned_location);
@@ -25,7 +37,7 @@ export default function ManagerAutomaticLogs() {
     }
     setLoading(true);
     const fetchLogs = async () => {
-      console.log('🔍 ManagerAutomaticLogs Starting fetchLogs with:', { assignedLocation: user?.assigned_location });
+      console.log('🔍 ManagerAutomaticLogs Starting fetchLogs with:', { assignedLocation: user?.assigned_location, startDate, endDate });
       
       // Build query step by step to ensure proper filtering
       let query = supabase
@@ -35,6 +47,21 @@ export default function ManagerAutomaticLogs() {
       // Apply location filter
       query = query.eq("location_id", user?.assigned_location);
       console.log('🔍 ManagerAutomaticLogs Location filter applied:', { assignedLocation: user?.assigned_location });
+
+      // Apply date filters if provided
+      if (startDate) {
+        const startDateTime = new Date(startDate);
+        startDateTime.setHours(0, 0, 0, 0);
+        query = query.gte("entry_time", startDateTime.toISOString());
+        console.log('🔍 ManagerAutomaticLogs Start date filter applied:', startDateTime.toISOString());
+      }
+
+      if (endDate) {
+        const endDateTime = new Date(endDate);
+        endDateTime.setHours(23, 59, 59, 999);
+        query = query.lte("entry_time", endDateTime.toISOString());
+        console.log('🔍 ManagerAutomaticLogs End date filter applied:', endDateTime.toISOString());
+      }
 
       const { data, error } = await query.order("entry_time", { ascending: false });
       
@@ -59,7 +86,7 @@ export default function ManagerAutomaticLogs() {
       setLoading(false);
     };
     fetchLogs();
-  }, [user?.assigned_location]);
+  }, [user?.assigned_location, startDate, endDate]);
 
   function getDuration(entry, exit) {
     if (!entry || !exit) return "-";
@@ -137,6 +164,60 @@ export default function ManagerAutomaticLogs() {
             </div>
           </div>
         </div>
+
+        {/* Date Filter */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Filter className="h-5 w-5 text-blue-500" />
+              <span>Date Filter</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="startDate" className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  Start Date
+                </Label>
+                <Input
+                  id="startDate"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="endDate" className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  End Date
+                </Label>
+                <Input
+                  id="endDate"
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+              <div className="flex items-end">
+                <Button
+                  onClick={() => {
+                    const today = new Date();
+                    const todayString = today.toISOString().split('T')[0];
+                    setStartDate(todayString);
+                    setEndDate(todayString);
+                  }}
+                  variant="outline"
+                  className="w-full"
+                >
+                  Today
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
 
 

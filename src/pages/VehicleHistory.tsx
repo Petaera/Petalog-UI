@@ -27,6 +27,7 @@ interface VehicleHistory {
   manager: string;
   created_at: string;
   exit_time?: string;
+  log_type: 'Manual' | 'Automatic';
 }
 
 interface VehicleStats {
@@ -36,7 +37,11 @@ interface VehicleStats {
   daysSinceLast: number;
 }
 
-export default function VehicleHistory() {
+interface VehicleHistoryProps {
+  selectedLocation?: string;
+}
+
+export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps) {
   const [searchQuery, setSearchQuery] = useState("MH12AB1234"); // Default value for demo
   const [vehicleHistory, setVehicleHistory] = useState<VehicleHistory[]>([]);
   const [vehicleStats, setVehicleStats] = useState<VehicleStats>({
@@ -56,29 +61,56 @@ export default function VehicleHistory() {
       return;
     }
 
+    if (!selectedLocation) {
+      toast.error("Please select a location first");
+      return;
+    }
+
     setLoading(true);
     setSearched(true);
 
     try {
-      console.log('🔍 Searching for vehicle:', searchQuery);
+      console.log('🔍 Searching for vehicle:', searchQuery, 'in location:', selectedLocation);
 
-      // Fetch vehicle history from logs-man table
-      const { data: historyData, error: historyError } = await supabase
+      // Build query with location filter for manual logs
+      let manualQuery = supabase
         .from('logs-man')
         .select('*')
         .ilike('vehicle_number', `%${searchQuery.trim()}%`)
-        .order('created_at', { ascending: false });
+        .eq('location_id', selectedLocation);
 
-      if (historyError) {
-        console.error('❌ Error fetching vehicle history:', historyError);
-        toast.error('Failed to fetch vehicle history');
+      const { data: manualData, error: manualError } = await manualQuery.order('created_at', { ascending: false });
+
+      // Build query with location filter for automatic logs
+      let autoQuery = supabase
+        .from('logs-auto')
+        .select('*, vehicles(number_plate)')
+        .eq('location_id', selectedLocation);
+
+      const { data: autoData, error: autoError } = await autoQuery.order('entry_time', { ascending: false });
+
+      // Filter automatic logs by vehicle number
+      const filteredAutoData = autoData?.filter(log => 
+        log.vehicles?.number_plate?.toLowerCase().includes(searchQuery.trim().toLowerCase())
+      ) || [];
+
+      if (manualError) {
+        console.error('❌ Error fetching manual logs:', manualError);
+        toast.error('Failed to fetch manual logs');
         return;
       }
 
-      console.log('✅ Vehicle history fetched:', historyData?.length || 0, 'records');
+      if (autoError) {
+        console.error('❌ Error fetching automatic logs:', autoError);
+        toast.error('Failed to fetch automatic logs');
+        return;
+      }
 
-      // Process the data
-      const processedHistory = historyData?.map(log => ({
+      console.log('✅ Manual logs fetched:', manualData?.length || 0, 'records');
+      console.log('✅ Automatic logs fetched:', filteredAutoData?.length || 0, 'records');
+
+      // Process manual logs data
+      const processedManualHistory = manualData?.map(log => ({
         id: log.id,
         vehicle_number: log.vehicle_number,
         service: log.service,
@@ -87,8 +119,27 @@ export default function VehicleHistory() {
         entry_type: log.entry_type || 'Normal',
         manager: log.manager || 'Unknown',
         created_at: log.created_at,
-        exit_time: log.exit_time
+        exit_time: log.exit_time,
+        log_type: 'Manual' as const
       })) || [];
+
+      // Process automatic logs data
+      const processedAutoHistory = filteredAutoData?.map(log => ({
+        id: log.id,
+        vehicle_number: log.vehicles?.number_plate || 'Unknown',
+        service: 'Automatic Entry',
+        amount: 0, // Automatic logs don't have amounts
+        location: log.location_id,
+        entry_type: 'Automatic',
+        manager: 'System',
+        created_at: log.entry_time,
+        exit_time: log.exit_time,
+        log_type: 'Automatic' as const
+      })) || [];
+
+      // Combine and sort all history
+      const processedHistory = [...processedManualHistory, ...processedAutoHistory]
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
       setVehicleHistory(processedHistory);
       setCurrentVehicle(searchQuery.trim());
@@ -137,24 +188,63 @@ export default function VehicleHistory() {
 
   // Format date for display
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-IN');
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        return 'Invalid Date';
+      }
+      return date.toLocaleDateString();
+    } catch (error) {
+      return 'Invalid Date';
+    }
   };
 
   // Format time for display
   const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-IN', { 
-      hour: '2-digit', 
-      minute: '2-digit',
-      hour12: true 
-    });
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        return 'Invalid Time';
+      }
+      return date.toLocaleTimeString();
+    } catch (error) {
+      return 'Invalid Time';
+    }
   };
 
   // Load initial data on component mount
   useEffect(() => {
     searchVehicleHistory();
   }, []);
+
+  // Check if no location is selected
+  if (!selectedLocation) {
+    return (
+      <div className="flex-1 p-6 space-y-6">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Search className="h-6 w-6 text-primary" />
+            <h1 className="text-2xl font-bold">Vehicle History Search</h1>
+          </div>
+        </div>
+        
+        <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
+          <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mb-4">
+            <Search className="w-8 h-8 text-yellow-600" />
+          </div>
+          <h2 className="text-2xl font-semibold text-gray-900 mb-2">No Location Selected</h2>
+          <p className="text-gray-600 mb-4 max-w-md">
+            Please select a location from the dropdown above to search vehicle history.
+          </p>
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 max-w-md">
+            <p className="text-sm text-yellow-800">
+              <strong>Note:</strong> Vehicle history search is location-specific and requires a location to be selected.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 p-6 space-y-6">
@@ -167,37 +257,43 @@ export default function VehicleHistory() {
         </div>
       </div>
 
-      {/* Search Form */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Search Vehicle History</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <Input 
-                placeholder="Enter vehicle number (e.g., MH12AB1234)" 
-                className="text-center font-mono text-lg"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && searchVehicleHistory()}
-              />
+              {/* Search Form */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Search className="h-5 w-5 text-blue-500" />
+              Search Vehicle History
+              <span className="text-sm text-muted-foreground ml-auto">
+                Location: {selectedLocation}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <Input 
+                  placeholder="Enter vehicle number (e.g., MH12AB1234)" 
+                  className="text-center font-mono text-lg"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && searchVehicleHistory()}
+                />
+              </div>
+              <Button 
+                variant="default" 
+                onClick={searchVehicleHistory}
+                disabled={loading}
+              >
+                {loading ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Search className="h-4 w-4 mr-2" />
+                )}
+                Search
+              </Button>
             </div>
-            <Button 
-              variant="default" 
-              onClick={searchVehicleHistory}
-              disabled={loading}
-            >
-              {loading ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Search className="h-4 w-4 mr-2" />
-              )}
-              Search
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
       {/* Vehicle Summary */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -257,46 +353,52 @@ export default function VehicleHistory() {
               <p className="text-xs mt-2">Showing demo data for demonstration purposes</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Time</TableHead>
-                  <TableHead>Service</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead>Entry Type</TableHead>
-                  <TableHead>Manager</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {vehicleHistory.map((visit) => (
-                  <TableRow key={visit.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
-                        {formatDate(visit.created_at)}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-muted-foreground" />
-                        {formatTime(visit.created_at)}
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-medium">{visit.service}</TableCell>
-                    <TableCell className="font-semibold text-financial">₹{visit.amount.toLocaleString()}</TableCell>
-                    <TableCell>{visit.location}</TableCell>
-                    <TableCell>
-                      <Badge variant={visit.entry_type === "Workshop" ? "default" : "secondary"}>
-                        {visit.entry_type}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{visit.manager}</TableCell>
+                          <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Time</TableHead>
+                    <TableHead>Service</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Entry Type</TableHead>
+                    <TableHead>Log Type</TableHead>
+                    <TableHead>Manager</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {vehicleHistory.map((visit) => (
+                    <TableRow key={`${visit.log_type}-${visit.id}`}>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4 text-muted-foreground" />
+                          {formatDate(visit.created_at)}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-muted-foreground" />
+                          {formatTime(visit.created_at)}
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-medium">{visit.service}</TableCell>
+                      <TableCell className="font-semibold text-financial">
+                        {visit.amount > 0 ? `₹${visit.amount.toLocaleString()}` : '-'}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={visit.entry_type === "Workshop" ? "default" : visit.entry_type === "Automatic" ? "outline" : "secondary"}>
+                          {visit.entry_type}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={visit.log_type === "Manual" ? "default" : "secondary"}>
+                          {visit.log_type}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{visit.manager}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
           )}
         </CardContent>
       </Card>
