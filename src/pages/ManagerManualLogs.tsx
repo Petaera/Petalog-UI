@@ -15,7 +15,11 @@ export default function ManagerManualLogs() {
   const [pendingLogs, setPendingLogs] = useState([]);
   const [approvedLogs, setApprovedLogs] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedDate, setSelectedDate] = useState(() => {
+    // Set default date to today
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  });
 
   console.log("ManagerManualLogs component rendered. assignedLocation:", user?.assigned_location);
 
@@ -30,7 +34,9 @@ export default function ManagerManualLogs() {
   }, [user?.assigned_location, selectedDate]);
 
   const clearDateFilter = () => {
-    setSelectedDate("");
+    // Reset to today's date instead of clearing
+    const today = new Date();
+    setSelectedDate(today.toISOString().split('T')[0]);
   };
 
 
@@ -291,16 +297,14 @@ export default function ManagerManualLogs() {
                   onChange={(e) => setSelectedDate(e.target.value)}
                   className="w-full sm:w-48"
                 />
-                {selectedDate && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={clearDateFilter}
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    Clear Filter
-                  </Button>
-                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={clearDateFilter}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  Today
+                </Button>
               </div>
             </div>
           </CardContent>

@@ -2,14 +2,16 @@ import React, { useEffect, useState } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Camera, Clock, Database, Gauge, Gift, Download, Zap, Eye, BarChart3, Car, Truck, Building, Warehouse, Shield, Users, Timer, FileText } from "lucide-react";
+import { Camera, Clock, Database, Gauge, Gift, Download, Zap, Eye, BarChart3, Car, Truck, Building, Warehouse, Shield, Users, Timer, FileText, MapPin } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from '@/contexts/AuthContext';
 import { applyLocationFilter, getLocationFilterDescription, debugLocationFiltering, debugVehicleData } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
 
 // Accept selectedLocation as a prop
 const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [manualLogs, setManualLogs] = useState<any[]>([]);
   const [autoLogs, setAutoLogs] = useState<any[]>([]);
   const [stats, setStats] = useState({
@@ -388,6 +390,31 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
     }
   };
 
+  // Check if owner has no location selected
+  const isOwner = user?.role === 'owner';
+  const hasNoLocation = isOwner && (!selectedLocation || selectedLocation.trim() === '');
+  
+  if (hasNoLocation) {
+    return (
+      <div className="p-6 lg:p-8">
+        <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
+          <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mb-4">
+            <MapPin className="w-8 h-8 text-yellow-600" />
+          </div>
+          <h2 className="text-2xl font-semibold text-gray-900 mb-2">No Location Selected</h2>
+          <p className="text-gray-600 mb-4 max-w-md">
+            Please select a location from the dropdown above to view dashboard data.
+          </p>
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 max-w-md">
+            <p className="text-sm text-yellow-800">
+              <strong>Note:</strong> As an owner, you need to select a specific location to view its data.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 lg:p-6">
       <div className="mb-6 lg:mb-8">
@@ -465,9 +492,15 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
 
       {/* Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
+        <Card 
+          className="cursor-pointer hover:shadow-lg transition-shadow duration-200"
+          onClick={() => navigate('/manual-logs')}
+        >
           <CardHeader>
-            <CardTitle>Manual Logged Entries</CardTitle>
+            <CardTitle className="flex items-center justify-between">
+              Manual Logged Entries
+              <Badge variant="outline" className="text-xs">Click to view</Badge>
+            </CardTitle>
             <CardDescription>
               Vehicles entered manually by staff
               {locationFilterApplied && (
@@ -505,9 +538,15 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card 
+          className="cursor-pointer hover:shadow-lg transition-shadow duration-200"
+          onClick={() => navigate('/automatic-logs')}
+        >
           <CardHeader>
-            <CardTitle>Auto Logged Entries</CardTitle>
+            <CardTitle className="flex items-center justify-between">
+              Auto Logged Entries
+              <Badge variant="outline" className="text-xs">Click to view</Badge>
+            </CardTitle>
             <CardDescription>
               Vehicles automatically logged by the system
               {locationFilterApplied && (

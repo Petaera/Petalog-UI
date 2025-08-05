@@ -5,9 +5,11 @@ import { Badge } from "@/components/ui/badge";
 import { Camera, Clock, Database, Gauge, Gift, Download, Zap, Eye, BarChart3, Car, Truck, Building, Warehouse, Shield, Users, Timer, FileText } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from '@/contexts/AuthContext';
+import { useNavigate } from "react-router-dom";
 
 const DashboardManager = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [manualLogs, setManualLogs] = useState<any[]>([]);
   const [autoLogs, setAutoLogs] = useState<any[]>([]);
 
@@ -100,10 +102,16 @@ const DashboardManager = () => {
         */}
 
         {/* Recent Activity */}
-        <div className="grid grid-cols-1 gap-6">
-          <Card>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card 
+            className="cursor-pointer hover:shadow-lg transition-shadow duration-200"
+            onClick={() => navigate('/manager-manual-logs')}
+          >
             <CardHeader>
-              <CardTitle>Logged Entries</CardTitle>
+              <CardTitle className="flex items-center justify-between">
+                Manual Logged Entries
+                <Badge variant="outline" className="text-xs">Click to view</Badge>
+              </CardTitle>
               <CardDescription>
                 Vehicles entered by staff
               </CardDescription>
@@ -127,10 +135,15 @@ const DashboardManager = () => {
             </CardContent>
           </Card>
 
-          {/*
-          <Card>
+          <Card 
+            className="cursor-pointer hover:shadow-lg transition-shadow duration-200"
+            onClick={() => navigate('/manager-automatic-logs')}
+          >
             <CardHeader>
-              <CardTitle>Auto Logged Entries</CardTitle>
+              <CardTitle className="flex items-center justify-between">
+                Auto Logged Entries
+                <Badge variant="outline" className="text-xs">Click to view</Badge>
+              </CardTitle>
               <CardDescription>
                 Vehicles automatically logged by the system
               </CardDescription>
@@ -153,7 +166,6 @@ const DashboardManager = () => {
               </div>
             </CardContent>
           </Card>
-          */}
         </div>
       </div>
     </Layout>

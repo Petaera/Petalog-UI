@@ -84,13 +84,23 @@ export const getLocationFilter = (user: any) => {
     };
   }
 
-  if (user.role === 'owner' && user.own_id) {
-    return {
-      query: (baseQuery: any) => baseQuery.eq('own_id', user.own_id),
-      isFiltered: true,
-      filterType: 'owner',
-      reason: `Owner filtering by own_id: ${user.own_id}`
-    };
+  if (user.role === 'owner') {
+    if (user.own_id) {
+      return {
+        query: (baseQuery: any) => baseQuery.eq('own_id', user.own_id),
+        isFiltered: true,
+        filterType: 'owner',
+        reason: `Owner filtering by own_id: ${user.own_id}`
+      };
+    } else {
+      // Owner without own_id should see no locations
+      return {
+        query: (baseQuery: any) => baseQuery.eq('id', 'no-access'), // This will return no results
+        isFiltered: true,
+        filterType: 'owner_no_access',
+        reason: 'Owner without own_id - no access granted'
+      };
+    }
   }
 
   if (user.role === 'manager' && user.assigned_location) {
@@ -102,11 +112,12 @@ export const getLocationFilter = (user: any) => {
     };
   }
 
+  // For managers without assigned_location or any other role
   return {
-    query: null,
-    isFiltered: false,
-    filterType: 'none',
-    reason: 'No role-based filtering applied'
+    query: (baseQuery: any) => baseQuery.eq('id', 'no-access'), // This will return no results
+    isFiltered: true,
+    filterType: 'no_access',
+    reason: 'No access granted - missing required permissions'
   };
 };
 
@@ -137,8 +148,12 @@ export const getLocationFilterDescription = (user: any) => {
   switch (filter.filterType) {
     case 'owner':
       return 'Showing locations owned by you';
+    case 'owner_no_access':
+      return 'No locations granted - contact administrator';
     case 'manager':
       return 'Showing your assigned location';
+    case 'no_access':
+      return 'No access granted - contact administrator';
     case 'none':
       return 'Showing all locations';
     default:

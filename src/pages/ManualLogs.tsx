@@ -18,7 +18,11 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
   const [pendingLogs, setPendingLogs] = useState([]);
   const [approvedLogs, setApprovedLogs] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedDate, setSelectedDate] = useState(() => {
+    // Set default date to today
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  });
 
   console.log("ManualLogs component rendered. selectedLocation:", selectedLocation);
 
@@ -33,7 +37,9 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
   }, [selectedLocation, selectedDate]);
 
   const clearDateFilter = () => {
-    setSelectedDate("");
+    // Reset to today's date instead of clearing
+    const today = new Date();
+    setSelectedDate(today.toISOString().split('T')[0]);
   };
 
 
@@ -293,16 +299,14 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                 onChange={(e) => setSelectedDate(e.target.value)}
                 className="w-full sm:w-48"
               />
-              {selectedDate && (
-                <Button
+                              <Button
                   variant="outline"
                   size="sm"
                   onClick={clearDateFilter}
                   className="text-muted-foreground hover:text-foreground"
                 >
-                  Clear Filter
+                  Today
                 </Button>
-              )}
             </div>
           </div>
         </CardContent>

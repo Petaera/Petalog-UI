@@ -433,6 +433,40 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
     window.URL.revokeObjectURL(url);
   };
 
+  // Check if owner has no location selected
+  const isOwner = user?.role === 'owner';
+  const hasNoLocation = isOwner && (!selectedLocation || selectedLocation.trim() === '');
+  
+  if (hasNoLocation) {
+    return (
+      <div className="flex-1 p-4 md:p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="h-6 w-6 text-primary" />
+              <h1 className="text-2xl font-bold">Reports & Statistics</h1>
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
+          <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mb-4">
+            <BarChart3 className="w-8 h-8 text-yellow-600" />
+          </div>
+          <h2 className="text-2xl font-semibold text-gray-900 mb-2">No Location Selected</h2>
+          <p className="text-gray-600 mb-4 max-w-md">
+            Please select a location from the dropdown above to view reports and statistics.
+          </p>
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 max-w-md">
+            <p className="text-sm text-yellow-800">
+              <strong>Note:</strong> Reports are location-specific and require a location to be selected.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 p-4 md:p-6 space-y-6">
       <div className="flex items-center justify-between">

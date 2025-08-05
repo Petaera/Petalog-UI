@@ -10,7 +10,11 @@ interface AutomaticLogsProps {
 export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedDate, setSelectedDate] = useState(() => {
+    // Set default date to today
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState("");
 
@@ -18,7 +22,10 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
 
   useEffect(() => {
     console.log("AutomaticLogs useEffect running. selectedLocation:", selectedLocation, "selectedDate:", selectedDate);
-    if (!selectedLocation) return;
+    if (!selectedLocation) {
+      console.log("No location selected for automatic logs");
+      return;
+    }
     setLoading(true);
     const fetchLogs = async () => {
       let query = supabase
@@ -82,6 +89,35 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
     }
   }, [isModalOpen]);
 
+  // Check if no location is selected
+  if (!selectedLocation) {
+    return (
+      <div className="flex-1 p-6 space-y-6">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Database className="h-6 w-6 text-primary" />
+            <h1 className="text-2xl font-bold">Automatic Logs</h1>
+          </div>
+        </div>
+        
+        <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
+          <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mb-4">
+            <Database className="w-8 h-8 text-yellow-600" />
+          </div>
+          <h2 className="text-2xl font-semibold text-gray-900 mb-2">No Location Selected</h2>
+          <p className="text-gray-600 mb-4 max-w-md">
+            Please select a location from the dropdown above to view automatic logs.
+          </p>
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 max-w-md">
+            <p className="text-sm text-yellow-800">
+              <strong>Note:</strong> Automatic logs are location-specific and require a location to be selected.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 p-6 space-y-6">
         <div className="flex items-center gap-4">
@@ -100,15 +136,16 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
             onChange={(e) => setSelectedDate(e.target.value)}
             className="border rounded px-3 py-2"
           />
-          {selectedDate && (
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => setSelectedDate("")}
-            >
-              Clear Filter
-            </Button>
-          )}
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => {
+              const today = new Date();
+              setSelectedDate(today.toISOString().split('T')[0]);
+            }}
+          >
+            Today
+          </Button>
         </div>
 
         <div className="metric-card">
