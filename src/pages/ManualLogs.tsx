@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, PenTool, Check, X, Clock, CheckCircle, Calendar } from "lucide-react";
+import { ArrowLeft, PenTool, Check, X, Clock, CheckCircle, Calendar, Edit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 import { useAuth } from '@/contexts/AuthContext';
+import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -15,6 +16,7 @@ interface ManualLogsProps {
 
 export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [pendingLogs, setPendingLogs] = useState([]);
   const [approvedLogs, setApprovedLogs] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -40,6 +42,34 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
     // Reset to today's date instead of clearing
     const today = new Date();
     setSelectedDate(today.toISOString().split('T')[0]);
+  };
+
+  const handleEdit = (log: any) => {
+    // Navigate to owner entry with log data for editing
+    const logData = {
+      id: log.id,
+      vehicleNumber: log.vehicle_number || '',
+      vehicleType: log.vehicle_type || '',
+      service: log.service ? log.service.split(',') : [],
+      amount: log.Amount?.toString() || '',
+      entryType: log.entry_type || 'normal',
+      discount: log.discount?.toString() || '',
+      remarks: log.remarks || '',
+      paymentMode: log.payment_mode || 'cash',
+      customerName: log.Name || '',
+      phoneNumber: log.Phone_no || '',
+      dateOfBirth: log['D.O.B'] || '',
+      customerLocation: log.Location || '',
+      selectedVehicleBrand: log.vehicle_brand || '',
+      selectedModel: log.vehicle_model || '',
+      selectedModelId: log.Brand_id || '',
+      workshop: log.workshop || '',
+      isEditing: true
+    };
+    
+    // Store the log data in sessionStorage for the entry form to access
+    sessionStorage.setItem('editLogData', JSON.stringify(logData));
+    navigate('/owner-entry');
   };
 
 
@@ -393,6 +423,15 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                                 >
                                   <X className="h-3 w-3 mr-1" />
                                   Reject
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-xs"
+                                  onClick={() => handleEdit(log)}
+                                >
+                                  <Edit className="h-3 w-3 mr-1" />
+                                  Edit
                                 </Button>
                               </div>
                             </td>

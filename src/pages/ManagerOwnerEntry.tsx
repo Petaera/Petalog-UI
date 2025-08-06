@@ -58,7 +58,52 @@ export default function ManagerOwnerEntry() {
   const [availableModels, setAvailableModels] = useState<{name: string, id: string}[]>([]);
   const [vehicleData, setVehicleData] = useState<any[]>([]);
 
+  // Edit mode state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editLogId, setEditLogId] = useState<string | null>(null);
+
   const { user } = useAuth();
+
+  // Check for edit data on component mount
+  useEffect(() => {
+    const editData = sessionStorage.getItem('editLogData');
+    if (editData) {
+      try {
+        const logData = JSON.parse(editData);
+        console.log('Edit data found:', logData);
+        
+        // Pre-fill form fields with edit data
+        setVehicleNumber(logData.vehicleNumber || '');
+        setVehicleType(logData.vehicleType || '');
+        setService(logData.service || []);
+        setAmount(logData.amount || '');
+        setEntryType(logData.entryType || 'normal');
+        setDiscount(logData.discount || '');
+        setRemarks(logData.remarks || '');
+        setPaymentMode(logData.paymentMode || 'cash');
+        setCustomerName(logData.customerName || '');
+        setPhoneNumber(logData.phoneNumber || '');
+        setDateOfBirth(logData.dateOfBirth || '');
+        setCustomerLocation(logData.customerLocation || '');
+        setSelectedVehicleBrand(logData.selectedVehicleBrand || '');
+        setSelectedModel(logData.selectedModel || '');
+        setSelectedModelId(logData.selectedModelId || '');
+        setWorkshop(logData.workshop || '');
+        
+        // Set edit mode
+        setIsEditing(true);
+        setEditLogId(logData.id);
+        
+        // Clear the sessionStorage
+        sessionStorage.removeItem('editLogData');
+        
+        toast.success('Edit mode activated. Please review and update the entry.');
+      } catch (error) {
+        console.error('Error parsing edit data:', error);
+        toast.error('Error loading edit data');
+      }
+    }
+  }, []);
 
   // Fetch vehicle brands and models from Vehicles_in_india table
   useEffect(() => {
@@ -294,38 +339,73 @@ export default function ManagerOwnerEntry() {
       const priceNum = parseFloat(amount) || 0;
       const discountNum = discount === '' ? 0 : parseFloat(discount) || 0;
       const finalAmount = priceNum - discountNum;
-      // 3. Insert into logs-man
-      const { error: insertError } = await supabase.from('logs-man').insert([
-        {
-          vehicle_id: vehicleId,
-          vehicle_number: vehicleNumber,
-          location_id: user?.assigned_location,
-          entry_type: entryType,
-          image_url: imageUrl,
-          created_by: user?.id,
-          Amount: finalAmount,
-          discount: discountNum,
-          remarks: remarks,
-          payment_mode: paymentMode,
-          service: service.join(','), // Store as comma-separated string
-          vehicle_type: vehicleType,
-          workshop: entryType === 'workshop' ? workshop : null,
-          // Customer details
-          Name: trimmedCustomerName || null,
-          Phone_no: phoneNumber || null,
-          'D.O.B': dateOfBirth || null,
-          Location: customerLocation || null,
-          // Vehicle details
-          vehicle_brand: selectedVehicleBrand || null,
-          vehicle_model: selectedModel || null,
-          Brand_id: selectedModelId || null,
-          created_at: new Date().toISOString(),
-          // Approval status
-          approval_status: 'pending',
-        },
-      ]);
-      if (insertError) throw insertError;
-      toast.success('Manager entry submitted successfully!');
+
+      if (isEditing && editLogId) {
+        // Update existing log entry
+        const { error: updateError } = await supabase
+          .from('logs-man')
+          .update({
+            vehicle_id: vehicleId,
+            vehicle_number: vehicleNumber,
+            entry_type: entryType,
+            image_url: imageUrl,
+            Amount: finalAmount,
+            discount: discountNum,
+            remarks: remarks,
+            payment_mode: paymentMode,
+            service: service.join(','), // Store as comma-separated string
+            vehicle_type: vehicleType,
+            workshop: entryType === 'workshop' ? workshop : null,
+            // Customer details
+            Name: trimmedCustomerName || null,
+            Phone_no: phoneNumber || null,
+            'D.O.B': dateOfBirth || null,
+            Location: customerLocation || null,
+            // Vehicle details
+            vehicle_brand: selectedVehicleBrand || null,
+            vehicle_model: selectedModel || null,
+            Brand_id: selectedModelId || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', editLogId);
+
+        if (updateError) throw updateError;
+        toast.success('Entry updated successfully!');
+      } else {
+        // Insert new log entry
+        const { error: insertError } = await supabase.from('logs-man').insert([
+          {
+            vehicle_id: vehicleId,
+            vehicle_number: vehicleNumber,
+            location_id: user?.assigned_location,
+            entry_type: entryType,
+            image_url: imageUrl,
+            created_by: user?.id,
+            Amount: finalAmount,
+            discount: discountNum,
+            remarks: remarks,
+            payment_mode: paymentMode,
+            service: service.join(','), // Store as comma-separated string
+            vehicle_type: vehicleType,
+            workshop: entryType === 'workshop' ? workshop : null,
+            // Customer details
+            Name: trimmedCustomerName || null,
+            Phone_no: phoneNumber || null,
+            'D.O.B': dateOfBirth || null,
+            Location: customerLocation || null,
+            // Vehicle details
+            vehicle_brand: selectedVehicleBrand || null,
+            vehicle_model: selectedModel || null,
+            Brand_id: selectedModelId || null,
+            created_at: new Date().toISOString(),
+            // Approval status
+            approval_status: 'pending',
+          },
+        ]);
+        if (insertError) throw insertError;
+        toast.success('Manager entry submitted successfully!');
+      }
+
       // Reset form
       setVehicleNumber('');
       setVehicleType('');
@@ -342,6 +422,10 @@ export default function ManagerOwnerEntry() {
       setSelectedVehicleBrand('');
       setSelectedModel('');
       setSelectedModelId('');
+      
+      // Reset edit mode
+      setIsEditing(false);
+      setEditLogId(null);
     } catch (err: any) {
       toast.error('Submission failed: ' + (err?.message || err));
     }
@@ -359,6 +443,11 @@ export default function ManagerOwnerEntry() {
             <Badge variant="outline" className="bg-primary/10 text-primary border-primary">
               Manager Access
             </Badge>
+            {isEditing && (
+              <Badge variant="secondary" className="bg-orange-100 text-orange-800 border-orange-200">
+                Edit Mode
+              </Badge>
+            )}
           </div>
           
 
@@ -650,7 +739,7 @@ export default function ManagerOwnerEntry() {
             className="px-8"
             onClick={handleSubmit}
           >
-            Submit Entry
+            {isEditing ? 'Update Entry' : 'Submit Entry'}
           </Button>
         </div>
       </div>

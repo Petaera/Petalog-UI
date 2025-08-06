@@ -26,6 +26,7 @@ export function Layout({ children }: LayoutProps) {
   const getStoredLocation = (userId: string) => {
     try {
       const stored = localStorage.getItem(`selectedLocation_${userId}`);
+      console.log('📖 Reading stored location for user:', userId, 'value:', stored);
       return stored || "";
     } catch (error) {
       console.error('Error reading from localStorage:', error);
@@ -37,6 +38,7 @@ export function Layout({ children }: LayoutProps) {
   const storeLocation = (userId: string, locationId: string) => {
     try {
       localStorage.setItem(`selectedLocation_${userId}`, locationId);
+      console.log('💾 Stored location for user:', userId, 'location:', locationId);
     } catch (error) {
       console.error('Error writing to localStorage:', error);
     }
@@ -44,9 +46,11 @@ export function Layout({ children }: LayoutProps) {
 
   // Handle location change
   const handleLocationChange = (locationId: string) => {
+    console.log('🔄 Location changed to:', locationId);
     setSelectedLocation(locationId);
     if (user?.id) {
       storeLocation(user.id, locationId);
+      console.log('💾 Stored location for user:', user.id, 'location:', locationId);
     }
   };
 
@@ -97,7 +101,7 @@ export function Layout({ children }: LayoutProps) {
     };
     
     fetchLocations();
-  }, [user]);
+  }, [user?.id, user?.role]);
 
   return (
     <SidebarProvider>

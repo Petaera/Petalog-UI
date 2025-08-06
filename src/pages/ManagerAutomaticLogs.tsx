@@ -35,6 +35,13 @@ export default function ManagerAutomaticLogs() {
       console.log("No location assigned to manager for automatic logs");
       return;
     }
+    
+    // Don't fetch if dates are not set yet
+    if (!startDate || !endDate) {
+      console.log("Dates not set yet, skipping fetch");
+      return;
+    }
+    
     setLoading(true);
     const fetchLogs = async () => {
       console.log('🔍 ManagerAutomaticLogs Starting fetchLogs with:', { assignedLocation: user?.assigned_location, startDate, endDate });

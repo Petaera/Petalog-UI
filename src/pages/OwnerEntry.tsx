@@ -60,7 +60,32 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
   const [availableModels, setAvailableModels] = useState<{name: string, id: string}[]>([]);
   const [vehicleData, setVehicleData] = useState<any[]>([]);
 
+  // Edit mode state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editLogId, setEditLogId] = useState<string | null>(null);
+
   const { user } = useAuth();
+
+  // Store edit data for later use
+  const [pendingEditData, setPendingEditData] = useState<any>(null);
+
+  // Check for edit data on component mount
+  useEffect(() => {
+    const editData = sessionStorage.getItem('editLogData');
+    if (editData) {
+      try {
+        const logData = JSON.parse(editData);
+        console.log('Edit data found:', logData);
+        setPendingEditData(logData);
+        
+        // Clear the sessionStorage
+        sessionStorage.removeItem('editLogData');
+      } catch (error) {
+        console.error('Error parsing edit data:', error);
+        toast.error('Error loading edit data');
+      }
+    }
+  }, []);
 
   // Fetch vehicle brands and models from Vehicles_in_india table
   useEffect(() => {
@@ -131,14 +156,20 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         console.warn('Vehicle Brands or Models field not found in data');
         setAvailableModels([]);
       }
-      setSelectedModel(''); // Reset model when brand changes
-      setSelectedModelId(''); // Reset model ID when brand changes
+      
+      // Only reset model when not in edit mode
+      if (!isEditing) {
+        setSelectedModel(''); // Reset model when brand changes
+        setSelectedModelId(''); // Reset model ID when brand changes
+      }
     } else {
       setAvailableModels([]);
-      setSelectedModel('');
-      setSelectedModelId('');
+      if (!isEditing) {
+        setSelectedModel('');
+        setSelectedModelId('');
+      }
     }
-  }, [selectedVehicleBrand, vehicleData]);
+  }, [selectedVehicleBrand, vehicleData, isEditing]);
 
   useEffect(() => {
     const fetchServicePrices = async () => {
@@ -150,6 +181,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         const uniqueServices = [...new Set(data.map(row => row.SERVICE && row.SERVICE.trim()).filter(Boolean))];
         console.log('Unique vehicles:', uniqueVehicles);
         console.log('Unique services:', uniqueServices);
+        console.log('Available service options:', uniqueServices);
         setVehicleTypes(uniqueVehicles);
         setServiceOptions(uniqueServices);
         setPriceMatrix(data);
@@ -169,8 +201,67 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
     fetchWorkshopPrices();
   }, []);
 
+  // Apply edit data after all required data is loaded
+  useEffect(() => {
+    if (pendingEditData && priceMatrix.length > 0 && vehicleData.length > 0) {
+      const logData = pendingEditData;
+      console.log('Applying edit data after data loaded:', logData);
+      
+      // Use setTimeout to ensure all data is properly loaded
+      setTimeout(() => {
+        // Pre-fill form fields with edit data
+        setVehicleNumber(logData.vehicleNumber || '');
+        setEntryType(logData.entryType || 'normal');
+        setDiscount(logData.discount || '');
+        setRemarks(logData.remarks || '');
+        setPaymentMode(logData.paymentMode || 'cash');
+        setCustomerName(logData.customerName || '');
+        setPhoneNumber(logData.phoneNumber || '');
+        setDateOfBirth(logData.dateOfBirth || '');
+        setCustomerLocation(logData.customerLocation || '');
+        setSelectedVehicleBrand(logData.selectedVehicleBrand || '');
+        setSelectedModel(logData.selectedModel || '');
+        setSelectedModelId(logData.selectedModelId || '');
+        setWorkshop(logData.workshop || '');
+        
+        // Set vehicle type first, then service after it's processed
+        setTimeout(() => {
+          console.log('Setting vehicle type:', logData.vehicleType);
+          setVehicleType(logData.vehicleType || '');
+          
+          // Set service and amount after vehicle type is processed
+          setTimeout(() => {
+            console.log('Setting service:', logData.service);
+            console.log('Setting amount:', logData.amount);
+            console.log('Available service options at this time:', serviceOptions);
+            setService(logData.service || []);
+            setAmount(logData.amount || '');
+          }, 200);
+        }, 100);
+        
+        // Set edit mode
+        setIsEditing(true);
+        setEditLogId(logData.id);
+        
+        // Clear pending edit data
+        setPendingEditData(null);
+        
+        toast.success('Edit mode activated. Please review and update the entry.');
+      }, 200);
+    }
+  }, [pendingEditData, priceMatrix.length, vehicleData.length]);
+
+  // Debug useEffect to log vehicle type changes
+  useEffect(() => {
+    console.log('Vehicle type changed to:', vehicleType);
+    console.log('Service changed to:', service);
+  }, [vehicleType, service]);
+
   // Reset and repopulate dropdowns when entryType changes
   useEffect(() => {
+    // Don't reset if we're in edit mode
+    if (isEditing) return;
+    
     setWorkshop('');
     setVehicleType('');
     setService([]); // Reset service to empty array
@@ -185,10 +276,13 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       setVehicleTypes([]);
       setServiceOptions([]);
     }
-  }, [entryType, priceMatrix]);
+  }, [entryType, priceMatrix, isEditing]);
 
   // When workshop changes, update vehicle types
   useEffect(() => {
+    // Don't reset if we're in edit mode
+    if (isEditing) return;
+    
     if (entryType === 'workshop' && workshop) {
       const filtered = workshopPriceMatrix.filter(row => row.WORKSHOP === workshop);
       const uniqueVehicles = [...new Set(filtered.map(row => row.VEHICLE && row.VEHICLE.trim()).filter(Boolean))];
@@ -198,7 +292,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       setAmount('');
       setServiceOptions([]);
     }
-  }, [workshop, entryType, workshopPriceMatrix]);
+  }, [workshop, entryType, workshopPriceMatrix, isEditing]);
   
   // Calculate amount based on entry type and selections
   useEffect(() => {
@@ -301,54 +395,96 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       const priceNum = parseFloat(amount) || 0;
       const discountNum = discount === '' ? 0 : parseFloat(discount) || 0;
       const finalAmount = priceNum - discountNum;
-      // 3. Insert into logs-man
-      const { error: insertError } = await supabase.from('logs-man').insert([
-        {
-          vehicle_id: vehicleId,
-          vehicle_number: vehicleNumber,
-          location_id: selectedLocation,
-          entry_type: entryType,
-          image_url: imageUrl,
-          created_by: user?.id,
-          Amount: finalAmount,
-          discount: discountNum,
-          remarks: remarks,
-          payment_mode: paymentMode,
-          service: service.join(','), // Store as comma-separated string
-          vehicle_type: vehicleType,
-          workshop: entryType === 'workshop' ? workshop : null,
-          // Customer details
-          Name: trimmedCustomerName || null,
-          Phone_no: phoneNumber || null,
-          'D.O.B': dateOfBirth || null,
-          Location: customerLocation || null,
-          // Vehicle details
-          vehicle_brand: selectedVehicleBrand || null,
-          vehicle_model: selectedModel || null,
-          Brand_id: selectedModelId || null,
-          created_at: new Date().toISOString(),
-          // Approval status
-          approval_status: 'pending',
-        },
-      ]);
-      if (insertError) throw insertError;
-    toast.success('Owner entry submitted successfully!');
-    // Reset form
-    setVehicleNumber('');
-    setVehicleType('');
-      setService([]); // Reset service to empty array
-    setAmount('500');
-    setDiscount('');
-    setRemarks('');
-    setPaymentMode('cash');
-      setScratchImage(null);
-      setCustomerName('');
-      setPhoneNumber('');
-      setDateOfBirth('');
-      setCustomerLocation('');
-      setSelectedVehicleBrand('');
-      setSelectedModel('');
-      setSelectedModelId('');
+      // 3. Insert or update logs-man based on edit mode
+      if (isEditing && editLogId) {
+        // Update existing log
+        const { error: updateError } = await supabase
+          .from('logs-man')
+          .update({
+            vehicle_id: vehicleId,
+            vehicle_number: vehicleNumber,
+            location_id: selectedLocation,
+            entry_type: entryType,
+            image_url: imageUrl,
+            Amount: finalAmount,
+            discount: discountNum,
+            remarks: remarks,
+            payment_mode: paymentMode,
+            service: service.join(','), // Store as comma-separated string
+            vehicle_type: vehicleType,
+            workshop: entryType === 'workshop' ? workshop : null,
+            // Customer details
+            Name: trimmedCustomerName || null,
+            Phone_no: phoneNumber || null,
+            'D.O.B': dateOfBirth || null,
+            Location: customerLocation || null,
+            // Vehicle details
+            vehicle_brand: selectedVehicleBrand || null,
+            vehicle_model: selectedModel || null,
+            Brand_id: selectedModelId || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', editLogId);
+        
+        if (updateError) throw updateError;
+        toast.success('Entry updated successfully!');
+        
+        // Reset edit mode
+        setIsEditing(false);
+        setEditLogId(null);
+      } else {
+        // Insert new log
+        const { error: insertError } = await supabase.from('logs-man').insert([
+          {
+            vehicle_id: vehicleId,
+            vehicle_number: vehicleNumber,
+            location_id: selectedLocation,
+            entry_type: entryType,
+            image_url: imageUrl,
+            created_by: user?.id,
+            Amount: finalAmount,
+            discount: discountNum,
+            remarks: remarks,
+            payment_mode: paymentMode,
+            service: service.join(','), // Store as comma-separated string
+            vehicle_type: vehicleType,
+            workshop: entryType === 'workshop' ? workshop : null,
+            // Customer details
+            Name: trimmedCustomerName || null,
+            Phone_no: phoneNumber || null,
+            'D.O.B': dateOfBirth || null,
+            Location: customerLocation || null,
+            // Vehicle details
+            vehicle_brand: selectedVehicleBrand || null,
+            vehicle_model: selectedModel || null,
+            Brand_id: selectedModelId || null,
+            created_at: new Date().toISOString(),
+            // Approval status
+            approval_status: 'pending',
+          },
+        ]);
+        if (insertError) throw insertError;
+        toast.success('Owner entry submitted successfully!');
+      }
+      
+      // Reset form only if not in edit mode
+      if (!isEditing) {
+        setVehicleNumber('');
+        setVehicleType('');
+        setService([]); // Reset service to empty array
+        setAmount('500');
+        setDiscount('');
+        setRemarks('');
+        setPaymentMode('cash');
+        setScratchImage(null);
+        setCustomerName('');
+        setPhoneNumber('');
+        setDateOfBirth('');
+        setCustomerLocation('');
+        setSelectedVehicleBrand('');
+        setSelectedModel('');
+        setSelectedModelId('');
+      }
     } catch (err: any) {
       toast.error('Submission failed: ' + (err?.message || err));
     }
@@ -360,10 +496,12 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         <div className="flex items-center gap-2 lg:gap-4">
           <div className="flex items-center gap-2">
             <Car className="h-5 w-5 lg:h-6 lg:w-6 text-primary" />
-            <h1 className="text-xl lg:text-2xl font-bold">Manual Entry</h1>
+            <h1 className="text-xl lg:text-2xl font-bold">
+              {isEditing ? 'Edit Entry' : 'Manual Entry'}
+            </h1>
           </div>
           <Badge variant="outline" className="bg-primary/10 text-primary border-primary">
-            Owner Access
+            {isEditing ? 'Edit Mode' : 'Owner Access'}
           </Badge>
         </div>
       </div>
@@ -546,6 +684,15 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                     placeholder={vehicleType ? "Select services" : "Select vehicle type first"}
                     classNamePrefix="react-select"
                     isDisabled={!vehicleType}
+                    onMenuOpen={() => {
+                      console.log('Service menu opened. Vehicle type:', vehicleType);
+                      console.log('Available options:', vehicleType
+                        ? priceMatrix
+                            .filter(row => row.VEHICLE && row.VEHICLE.trim() === vehicleType.trim())
+                            .map(row => row.SERVICE)
+                            .filter((v, i, arr) => v && arr.indexOf(v) === i)
+                        : []);
+                    }}
                   />
                 </div>
               </div>
@@ -667,7 +814,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
           className="px-8"
           onClick={handleSubmit}
         >
-          Submit Entry
+          {isEditing ? 'Update Entry' : 'Submit Entry'}
         </Button>
       </div>
     </div>

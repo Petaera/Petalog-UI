@@ -35,6 +35,13 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
       console.log("No location selected for automatic logs");
       return;
     }
+    
+    // Don't fetch if dates are not set yet
+    if (!startDate || !endDate) {
+      console.log("Dates not set yet, skipping fetch");
+      return;
+    }
+    
     setLoading(true);
     const fetchLogs = async () => {
       console.log('🔍 Starting fetchLogs with:', { selectedLocation, startDate, endDate });
