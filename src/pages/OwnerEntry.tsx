@@ -133,7 +133,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
   // Change service to array for multi-select
   const [service, setService] = useState<string[]>([]);
   const [amount, setAmount] = useState('');
-  const [entryType, setEntryType] = useState('normal');
+  const [entryType, setEntryType] = useState('customer');
   const [discount, setDiscount] = useState('');
   const [remarks, setRemarks] = useState('');
   const [paymentMode, setPaymentMode] = useState('cash');
@@ -363,7 +363,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
     setService([]); // Reset service to empty array
     setAmount('');
 
-    if (entryType === 'normal') {
+    if (entryType === 'customer') {
       const uniqueVehicles = [...new Set(priceMatrix.map(row => row.VEHICLE && row.VEHICLE.trim()).filter(Boolean))];
       const uniqueServices = [...new Set(priceMatrix.map(row => row.SERVICE && row.SERVICE.trim()).filter(Boolean))];
       setVehicleTypes(uniqueVehicles);
@@ -392,7 +392,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
   
   // Calculate amount based on entry type and selections
   useEffect(() => {
-    if (entryType === 'normal' && vehicleType && service.length > 0) {
+    if (entryType === 'customer' && vehicleType && service.length > 0) {
       // Try to use priceMatrix if available, else fallback
       let total = 0;
       for (const s of service) {
@@ -465,7 +465,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       return;
     }
     
-    if (!vehicleNumber || !vehicleType || (entryType === 'normal' && service.length === 0)) {
+    if (!vehicleNumber || !vehicleType || (entryType === 'customer' && service.length === 0)) {
       toast.error('Please fill in all required fields (Vehicle Number, Vehicle Type, and Service)');
       return;
     }
@@ -614,24 +614,24 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Entry Type</Label>
-                <div className="flex gap-2">
-                  <Button 
-                    variant={entryType === 'normal' ? 'default' : 'outline'} 
-                    size="sm" 
-                    className="flex-1 text-xs sm:text-sm"
-                    onClick={() => setEntryType('normal')}
-                  >
-                    Normal
-                  </Button>
-                  <Button 
-                    variant={entryType === 'workshop' ? 'default' : 'outline'} 
-                    size="sm" 
-                    className="flex-1 text-xs sm:text-sm"
-                    onClick={() => setEntryType('workshop')}
-                  >
-                    Workshop
-                  </Button>
-                </div>
+                                  <div className="flex gap-2">
+                    <Button 
+                      variant={entryType === 'customer' ? 'default' : 'outline'} 
+                      size="sm" 
+                      className="flex-1 text-xs sm:text-sm"
+                      onClick={() => setEntryType('customer')}
+                    >
+                      Customer
+                    </Button>
+                    <Button 
+                      variant={entryType === 'workshop' ? 'default' : 'outline'} 
+                      size="sm" 
+                      className="flex-1 text-xs sm:text-sm"
+                      onClick={() => setEntryType('workshop')}
+                    >
+                      Workshop
+                    </Button>
+                  </div>
               </div>
             </div>
 
@@ -741,7 +741,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
             </div>
 
             {/* Service Selection */}
-            {entryType === 'normal' && (
+            {entryType === 'customer' && (
               <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
                 <Label className="text-base font-semibold">Service Selection</Label>
                 <div className="space-y-2">

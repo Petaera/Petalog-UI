@@ -125,7 +125,9 @@ const App = () => (
               path="/manager-owner-entry" 
               element={
                 <ProtectedRoute requiredRole="manager">
-                  <ManagerOwnerEntry />
+                  <Layout>
+                    <ManagerOwnerEntry />
+                  </Layout>
                 </ProtectedRoute>
               } 
             />

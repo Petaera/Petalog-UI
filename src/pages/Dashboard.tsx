@@ -424,7 +424,10 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6 mb-6 lg:mb-8">
-        <Card>
+        <Card 
+          className="cursor-pointer hover:shadow-lg transition-shadow duration-200"
+          onClick={() => navigate('/manual-logs')}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Vehicles Today</CardTitle>
             <Car className="h-4 w-4 text-muted-foreground" />
@@ -447,7 +450,7 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
           onClick={() => navigate('/manual-logs')}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Approvals</CardTitle>
+            <CardTitle className="text-sm font-medium">Pending Tickets</CardTitle>
             <Timer className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -460,7 +463,10 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card 
+          className="cursor-pointer hover:shadow-lg transition-shadow duration-200"
+          onClick={() => navigate('/reports')}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Revenue Today</CardTitle>
             <Gift className="h-4 w-4 text-muted-foreground" />

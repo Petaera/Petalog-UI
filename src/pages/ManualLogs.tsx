@@ -348,7 +348,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
             <CardTitle className="flex flex-col sm:flex-row sm:items-center gap-2">
               <div className="flex items-center gap-2">
                 <Clock className="h-5 w-5 text-orange-500" />
-                <span>Pending Approvals</span>
+                <span>Pending Tickets</span>
                 <Badge variant="secondary">{pendingLogs.length}</Badge>
               </div>
               {selectedDate && (
@@ -380,7 +380,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                         <tr><td colSpan={7} className="text-center py-4">Loading...</td></tr>
                       ) : pendingLogs.length === 0 ? (
                         <tr><td colSpan={7} className="text-center py-4 text-muted-foreground">
-                          {selectedDate ? `No pending approvals found for ${new Date(selectedDate).toLocaleDateString()}` : 'No pending approvals'}
+                          {selectedDate ? `No pending tickets found for ${new Date(selectedDate).toLocaleDateString()}` : 'No pending tickets'}
                         </td></tr>
                       ) : (
                         pendingLogs.map((log, idx) => (
