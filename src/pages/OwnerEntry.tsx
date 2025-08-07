@@ -33,6 +33,15 @@ const PRIORITY_SERVICES = [
   'Premium Wash'
 ];
 
+// Priority vehicle types that should appear first in the list
+const PRIORITY_VEHICLE_TYPES = [
+  'HATCH BACK',
+  'SEDAN/MINI SUV',
+  'SUV/PREMIUM SEDAN',
+  'PREMIUM SUV',
+  'PREMIUM SUV '
+];
+
 // Function to sort services with priority services first
 const sortServicesWithPriority = (services: string[]) => {
   console.log('🔍 Sorting services:', services);
@@ -60,6 +69,45 @@ const sortServicesWithPriority = (services: string[]) => {
     console.log(`Comparing "${a}" (priority index: ${aIndex}) vs "${b}" (priority index: ${bIndex})`);
     
     // If both are priority services, maintain their original order
+    if (aIndex !== -1 && bIndex !== -1) {
+      return aIndex - bIndex;
+    }
+    // If only a is priority, a comes first
+    if (aIndex !== -1) return -1;
+    // If only b is priority, b comes first
+    if (bIndex !== -1) return 1;
+    // If neither is priority, sort alphabetically
+    return a.localeCompare(b);
+  });
+};
+
+// Function to sort vehicle types with priority types first
+const sortVehicleTypesWithPriority = (vehicleTypes: string[]) => {
+  console.log('🚗 Sorting vehicle types:', vehicleTypes);
+  
+  return vehicleTypes.sort((a, b) => {
+    // More flexible matching for priority vehicle types
+    const aIndex = PRIORITY_VEHICLE_TYPES.findIndex(priority => {
+      const aLower = a.toLowerCase();
+      const priorityLower = priority.toLowerCase();
+      return aLower.includes(priorityLower) || 
+             priorityLower.includes(aLower) ||
+             aLower.replace(/\s+/g, '').includes(priorityLower.replace(/\s+/g, '')) ||
+             priorityLower.replace(/\s+/g, '').includes(aLower.replace(/\s+/g, ''));
+    });
+    
+    const bIndex = PRIORITY_VEHICLE_TYPES.findIndex(priority => {
+      const bLower = b.toLowerCase();
+      const priorityLower = priority.toLowerCase();
+      return bLower.includes(priorityLower) || 
+             priorityLower.includes(bLower) ||
+             bLower.replace(/\s+/g, '').includes(priorityLower.replace(/\s+/g, '')) ||
+             priorityLower.replace(/\s+/g, '').includes(bLower.replace(/\s+/g, ''));
+    });
+    
+    console.log(`Comparing vehicle types "${a}" (priority index: ${aIndex}) vs "${b}" (priority index: ${bIndex})`);
+    
+    // If both are priority types, maintain their original order
     if (aIndex !== -1 && bIndex !== -1) {
       return aIndex - bIndex;
     }
@@ -703,7 +751,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                       <SelectValue placeholder="Select vehicle type" />
                     </SelectTrigger>
                     <SelectContent>
-                      {vehicleTypes.map(type => (
+                      {sortVehicleTypesWithPriority(vehicleTypes).map(type => (
                         <SelectItem key={type} value={type}>{type}</SelectItem>
                       ))}
                     </SelectContent>
@@ -772,7 +820,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                       <SelectValue placeholder="Select vehicle type" />
                     </SelectTrigger>
                     <SelectContent>
-                      {vehicleTypes.map(type => (
+                      {sortVehicleTypesWithPriority(vehicleTypes).map(type => (
                         <SelectItem key={type} value={type}>{type}</SelectItem>
                       ))}
                     </SelectContent>
