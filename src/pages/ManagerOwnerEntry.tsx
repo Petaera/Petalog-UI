@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { ScratchMarking } from "@/components/ScratchMarking";
+// import { ScratchMarking } from "@/components/ScratchMarking";
 import { LocationAutocomplete } from "@/components/LocationAutocomplete";
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabaseClient';
@@ -39,7 +39,7 @@ export default function ManagerOwnerEntry() {
   const [discount, setDiscount] = useState('');
   const [remarks, setRemarks] = useState('');
   const [paymentMode, setPaymentMode] = useState('cash');
-  const [scratchImage, setScratchImage] = useState<Blob | null>(null);
+  // const [scratchImage, setScratchImage] = useState<Blob | null>(null);
   const [workshop, setWorkshop] = useState('');
   const [workshopOptions, setWorkshopOptions] = useState<string[]>([]);
   const [workshopPriceMatrix, setWorkshopPriceMatrix] = useState<any[]>([]);
@@ -294,9 +294,9 @@ export default function ManagerOwnerEntry() {
     setService([value]);
   };
 
-  const handleScratchSave = (imageBlob: Blob) => {
-    setScratchImage(imageBlob);
-  };
+  // const handleScratchSave = (imageBlob: Blob) => {
+  //   setScratchImage(imageBlob);
+  // };
 
   // Polyfill for uuid if needed
   function generateUUID() {
@@ -317,24 +317,25 @@ export default function ManagerOwnerEntry() {
       toast.error('Please fill in all required fields (Vehicle Number, Vehicle Type, and Service)');
       return;
     }
-    if (!scratchImage) {
-      toast.error('Please save the scratch marking before submitting.');
-      return;
-    }
+    // if (!scratchImage) {
+    //   toast.error('Please save the scratch marking before submitting.');
+    //   return;
+    // }
     try {
       // Use the utility function to get or create vehicle ID
       const vehicleId = await getOrCreateVehicleId(vehicleNumber, vehicleType);
       
       // 1. Upload image to Supabase Storage
-      const safeVehicleNumber = vehicleNumber.replace(/[^a-zA-Z0-9_-]/g, '');
-      const fileName = `${safeVehicleNumber}_${Date.now()}.png`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('man-images')
-        .upload(fileName, scratchImage, { contentType: 'image/png' });
-      if (uploadError) throw uploadError;
+      // const safeVehicleNumber = vehicleNumber.replace(/[^a-zA-Z0-9_-]/g, '');
+      // const fileName = `${safeVehicleNumber}_${Date.now()}.png`;
+      // const { data: uploadData, error: uploadError } = await supabase.storage
+      //   .from('man-images')
+      //   .upload(fileName, scratchImage, { contentType: 'image/png' });
+      // if (uploadError) throw uploadError;
       // 2. Get public URL
-      const { data: publicUrlData } = supabase.storage.from('man-images').getPublicUrl(fileName);
-      const imageUrl = publicUrlData?.publicUrl;
+      // const { data: publicUrlData } = supabase.storage.from('man-images').getPublicUrl(fileName);
+      // const imageUrl = publicUrlData?.publicUrl;
+      const imageUrl = null; // Set to null since scratch marking is commented out
       // Calculate final amount
       const priceNum = parseFloat(amount) || 0;
       const discountNum = discount === '' ? 0 : parseFloat(discount) || 0;
@@ -414,7 +415,7 @@ export default function ManagerOwnerEntry() {
       setDiscount('');
       setRemarks('');
       setPaymentMode('cash');
-      setScratchImage(null);
+              // setScratchImage(null);
       setCustomerName('');
       setPhoneNumber('');
       setDateOfBirth('');
@@ -728,7 +729,7 @@ export default function ManagerOwnerEntry() {
           </Card>
 
           {/* Scratch Marking Section */}
-          <ScratchMarking onSave={handleScratchSave} />
+          {/* <ScratchMarking onSave={handleScratchSave} /> */}
         </div>
 
         {/* Submit Button */}
