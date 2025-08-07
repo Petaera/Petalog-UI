@@ -49,6 +49,40 @@ export default function ManagerPortal() {
     'quick': 'Quick Wash',
   };
 
+  // Priority services that should appear first in the list
+  const PRIORITY_SERVICES = [
+    'Full wash',
+    'Body Wash',
+    'VACCUM ONLY',
+    'Vaccum Only',
+    'Premium Wash'
+  ];
+
+  // Function to sort services with priority services first
+  const sortServicesWithPriority = (services: string[]) => {
+    return services.sort((a, b) => {
+      const aIndex = PRIORITY_SERVICES.findIndex(priority => 
+        a.toLowerCase().includes(priority.toLowerCase()) || 
+        priority.toLowerCase().includes(a.toLowerCase())
+      );
+      const bIndex = PRIORITY_SERVICES.findIndex(priority => 
+        b.toLowerCase().includes(priority.toLowerCase()) || 
+        priority.toLowerCase().includes(b.toLowerCase())
+      );
+      
+      // If both are priority services, maintain their original order
+      if (aIndex !== -1 && bIndex !== -1) {
+        return aIndex - bIndex;
+      }
+      // If only a is priority, a comes first
+      if (aIndex !== -1) return -1;
+      // If only b is priority, b comes first
+      if (bIndex !== -1) return 1;
+      // If neither is priority, sort alphabetically
+      return a.localeCompare(b);
+    });
+  };
+
   // Mock data for previous visits and today's stats
   const previousVisits = vehicleNumber ? Math.floor(Math.random() * 5) + 1 : 0;
   const todayEntries = [
@@ -291,7 +325,7 @@ export default function ManagerPortal() {
                   <Label htmlFor="service">Service Chosen</Label>
                   {entryType === 'normal' ? (
                     <div className="flex flex-col gap-2">
-                      {Object.keys(SERVICE_PRICES).map((key) => (
+                      {sortServicesWithPriority(Object.keys(SERVICE_PRICES)).map((key) => (
                         <label key={key} className="flex items-center gap-2 cursor-pointer">
                           <Checkbox
                             checked={service.includes(key)}
@@ -308,10 +342,11 @@ export default function ManagerPortal() {
                         <SelectValue placeholder="Select service" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="basic">Basic Wash - ₹200</SelectItem>
-                        <SelectItem value="premium">Premium Wash - ₹500</SelectItem>
-                        <SelectItem value="full">Full Service - ₹800</SelectItem>
-                        <SelectItem value="quick">Quick Wash - ₹150</SelectItem>
+                        {sortServicesWithPriority(Object.keys(SERVICE_PRICES)).map((key) => (
+                          <SelectItem key={key} value={key}>
+                            {SERVICE_LABELS[key]} - ₹{SERVICE_PRICES[key]}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   )}

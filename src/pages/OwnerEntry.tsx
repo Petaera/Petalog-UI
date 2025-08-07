@@ -24,6 +24,54 @@ const SERVICE_PRICES: { [key: string]: number } = {
   'quick': 150
 };
 
+// Priority services that should appear first in the list
+const PRIORITY_SERVICES = [
+  'Full wash',
+  'Body Wash',
+  'VACCUM ONLY',
+  'Vaccum Only',
+  'Premium Wash'
+];
+
+// Function to sort services with priority services first
+const sortServicesWithPriority = (services: string[]) => {
+  console.log('🔍 Sorting services:', services);
+  
+  return services.sort((a, b) => {
+    // More flexible matching for priority services
+    const aIndex = PRIORITY_SERVICES.findIndex(priority => {
+      const aLower = a.toLowerCase();
+      const priorityLower = priority.toLowerCase();
+      return aLower.includes(priorityLower) || 
+             priorityLower.includes(aLower) ||
+             aLower.replace(/\s+/g, '').includes(priorityLower.replace(/\s+/g, '')) ||
+             priorityLower.replace(/\s+/g, '').includes(aLower.replace(/\s+/g, ''));
+    });
+    
+    const bIndex = PRIORITY_SERVICES.findIndex(priority => {
+      const bLower = b.toLowerCase();
+      const priorityLower = priority.toLowerCase();
+      return bLower.includes(priorityLower) || 
+             priorityLower.includes(bLower) ||
+             bLower.replace(/\s+/g, '').includes(priorityLower.replace(/\s+/g, '')) ||
+             priorityLower.replace(/\s+/g, '').includes(bLower.replace(/\s+/g, ''));
+    });
+    
+    console.log(`Comparing "${a}" (priority index: ${aIndex}) vs "${b}" (priority index: ${bIndex})`);
+    
+    // If both are priority services, maintain their original order
+    if (aIndex !== -1 && bIndex !== -1) {
+      return aIndex - bIndex;
+    }
+    // If only a is priority, a comes first
+    if (aIndex !== -1) return -1;
+    // If only b is priority, b comes first
+    if (bIndex !== -1) return 1;
+    // If neither is priority, sort alphabetically
+    return a.localeCompare(b);
+  });
+};
+
 interface OwnerEntryProps {
   selectedLocation?: string;
 }
@@ -670,11 +718,12 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                     isMulti
                     options={
                       vehicleType
-                        ? priceMatrix
-                            .filter(row => row.VEHICLE && row.VEHICLE.trim() === vehicleType.trim())
-                            .map(row => row.SERVICE)
-                            .filter((v, i, arr) => v && arr.indexOf(v) === i)
-                            .map(option => ({ value: option, label: option }))
+                        ? sortServicesWithPriority(
+                            priceMatrix
+                              .filter(row => row.VEHICLE && row.VEHICLE.trim() === vehicleType.trim())
+                              .map(row => row.SERVICE)
+                              .filter((v, i, arr) => v && arr.indexOf(v) === i)
+                          ).map(option => ({ value: option, label: option }))
                         : []
                     }
                     value={service.map(option => ({
@@ -687,12 +736,15 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                     isDisabled={!vehicleType}
                     onMenuOpen={() => {
                       console.log('Service menu opened. Vehicle type:', vehicleType);
-                      console.log('Available options:', vehicleType
+                      const availableServices = vehicleType
                         ? priceMatrix
                             .filter(row => row.VEHICLE && row.VEHICLE.trim() === vehicleType.trim())
                             .map(row => row.SERVICE)
                             .filter((v, i, arr) => v && arr.indexOf(v) === i)
-                        : []);
+                        : [];
+                      console.log('Available services before sorting:', availableServices);
+                      const sortedServices = sortServicesWithPriority(availableServices);
+                      console.log('Available services after sorting:', sortedServices);
                     }}
                   />
                 </div>
