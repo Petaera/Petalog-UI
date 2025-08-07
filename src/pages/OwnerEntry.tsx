@@ -672,25 +672,22 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="selectedModel">Vehicle Model</Label>
-                  <Select 
-                    value={selectedModel} 
-                    onValueChange={(value) => {
-                      setSelectedModel(value);
+                  <ReactSelect
+                    isClearable
+                    isSearchable
+                    placeholder={selectedVehicleBrand ? "Type to search vehicle model..." : "Select vehicle brand first"}
+                    options={availableModels.map(model => ({ value: model.name, label: model.name }))}
+                    value={selectedModel ? { value: selectedModel, label: selectedModel } : null}
+                    onChange={(selected) => {
+                      setSelectedModel(selected?.value || '');
                       // Find and set the corresponding model ID
-                      const modelObj = availableModels.find(m => m.name === value);
+                      const modelObj = availableModels.find(m => m.name === selected?.value);
                       setSelectedModelId(modelObj?.id || '');
                     }}
-                    disabled={!selectedVehicleBrand}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={selectedVehicleBrand ? "Select model" : "Select vehicle brand first"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableModels.map(model => (
-                        <SelectItem key={model.id} value={model.name}>{model.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    classNamePrefix="react-select"
+                    isDisabled={!selectedVehicleBrand}
+                    noOptionsMessage={() => "No models found"}
+                  />
                 </div>
               </div>
             </div>
