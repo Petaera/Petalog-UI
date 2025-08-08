@@ -37,6 +37,15 @@ interface VehicleStats {
   daysSinceLast: number;
 }
 
+interface CustomerDetails {
+  name: string;
+  phone: string;
+  location?: string;
+  dateOfBirth?: string;
+  vehicleBrand?: string;
+  vehicleModel?: string;
+}
+
 interface VehicleHistoryProps {
   selectedLocation?: string;
 }
@@ -53,6 +62,43 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [currentVehicle, setCurrentVehicle] = useState("MH12AB1234");
+  const [customerDetails, setCustomerDetails] = useState<CustomerDetails | null>(null);
+
+  // Fetch customer details for a vehicle
+  const fetchCustomerDetails = async (vehicleNumber: string) => {
+    try {
+      // Search in manual logs for customer details
+      const { data: manualData, error: manualError } = await supabase
+        .from('logs-man')
+        .select('Name, Phone_no, Location, "D.O.B", vehicle_brand, vehicle_model')
+        .ilike('vehicle_number', `%${vehicleNumber.trim()}%`)
+        .eq('location_id', selectedLocation)
+        .not('Name', 'is', null)
+        .limit(1);
+
+      if (manualError) {
+        console.error('Error fetching customer details:', manualError);
+        return null;
+      }
+
+      if (manualData && manualData.length > 0) {
+        const customer = manualData[0];
+        return {
+          name: customer.Name || 'Not provided',
+          phone: customer.Phone_no || 'Not provided',
+          location: customer.Location || undefined,
+          dateOfBirth: customer['D.O.B'] || undefined,
+          vehicleBrand: customer.vehicle_brand || undefined,
+          vehicleModel: customer.vehicle_model || undefined,
+        };
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error fetching customer details:', error);
+      return null;
+    }
+  };
 
   // Search vehicle history
   const searchVehicleHistory = async () => {
@@ -68,6 +114,7 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
 
     setLoading(true);
     setSearched(true);
+    setCustomerDetails(null); // Reset customer details
 
     try {
       console.log('🔍 Searching for vehicle:', searchQuery, 'in location:', selectedLocation);
@@ -143,6 +190,10 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
 
       setVehicleHistory(processedHistory);
       setCurrentVehicle(searchQuery.trim());
+
+      // Fetch customer details
+      const customerData = await fetchCustomerDetails(searchQuery.trim());
+      setCustomerDetails(customerData);
 
       // Calculate statistics
       if (processedHistory.length > 0) {
@@ -271,13 +322,13 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
           <CardContent>
             <div className="flex gap-4">
               <div className="flex-1">
-                <Input 
-                  placeholder="Enter vehicle number (e.g., MH12AB1234)" 
-                  className="text-center font-mono text-lg"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && searchVehicleHistory()}
-                />
+                                 <Input 
+                   placeholder="Enter vehicle number (e.g., MH12AB1234)" 
+                   className="text-center font-mono text-lg"
+                   value={searchQuery}
+                   onChange={(e) => setSearchQuery(e.target.value.toUpperCase())}
+                   onKeyPress={(e) => e.key === 'Enter' && searchVehicleHistory()}
+                 />
               </div>
               <Button 
                 variant="default" 
@@ -294,6 +345,54 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
             </div>
           </CardContent>
         </Card>
+
+      {/* Customer Details Card */}
+      {customerDetails && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Car className="h-5 w-5 text-green-500" />
+              Customer Details
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-muted-foreground">Customer Name</label>
+                <p className="text-lg font-semibold">{customerDetails.name}</p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-muted-foreground">Phone Number</label>
+                <p className="text-lg font-semibold">{customerDetails.phone}</p>
+              </div>
+              {customerDetails.location && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">Location</label>
+                  <p className="text-lg font-semibold">{customerDetails.location}</p>
+                </div>
+              )}
+              {customerDetails.dateOfBirth && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">Date of Birth</label>
+                  <p className="text-lg font-semibold">{customerDetails.dateOfBirth}</p>
+                </div>
+              )}
+              {customerDetails.vehicleBrand && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">Vehicle Brand</label>
+                  <p className="text-lg font-semibold">{customerDetails.vehicleBrand}</p>
+                </div>
+              )}
+              {customerDetails.vehicleModel && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">Vehicle Model</label>
+                  <p className="text-lg font-semibold">{customerDetails.vehicleModel}</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Vehicle Summary */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
