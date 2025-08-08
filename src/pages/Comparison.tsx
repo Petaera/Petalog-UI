@@ -350,16 +350,16 @@ export default function Comparison({ selectedLocation }: ComparisonProps) {
                             {log.vehicle_number || log.vehicles?.number_plate || "-"}
                           </td>
                                                      <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
-                             <Badge 
-                               variant="outline"
-                               className={
-                                 log.log_type === 'common' 
-                                   ? 'bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-100' 
-                                   : log.log_type === 'manual' 
-                                   ? 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-100'
-                                   : 'bg-red-100 text-red-800 border-red-200 hover:bg-red-100'
-                               }
-                             >
+                                                           <Badge 
+                                variant="outline"
+                                className={
+                                  log.log_type === 'common' 
+                                    ? 'bg-green-100 text-green-800 border-green-200 hover:bg-green-100' 
+                                    : log.log_type === 'manual' 
+                                    ? 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-100'
+                                    : 'bg-red-100 text-red-800 border-red-200 hover:bg-red-100'
+                                }
+                              >
                                {log.log_type === 'common' ? 'Common' : log.log_type === 'manual' ? 'Manual' : 'Automatic'}
                              </Badge>
                            </td>
