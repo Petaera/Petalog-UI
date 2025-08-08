@@ -1,6 +1,5 @@
 
 import { useState, useEffect } from 'react';
-import { Layout } from "@/components/layout/Layout";
 import { ArrowLeft, Car, CreditCard, Banknote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -533,26 +532,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
   };
 
   return (
-    <Layout>
-      <div className="flex-1 p-4 md:p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Car className="h-6 w-6 text-primary" />
-              <h1 className="text-2xl font-bold">Manual Entry</h1>
-            </div>
-            <Badge variant="outline" className="bg-primary/10 text-primary border-primary">
-              Manager Access
-            </Badge>
-            {isEditing && (
-              <Badge variant="secondary" className="bg-orange-100 text-orange-800 border-orange-200">
-                Edit Mode
-              </Badge>
-            )}
-          </div>
-          
-
-        </div>
+    <div className="p-4 md:p-6 space-y-6">
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           {/* Entry Form */}
@@ -840,8 +820,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
           >
             {isEditing ? 'Update Entry' : 'Submit Entry'}
           </Button>
-        </div>
-      </div>
-    </Layout>
-  );
-}
+                 </div>
+       </div>
+   );
+ }

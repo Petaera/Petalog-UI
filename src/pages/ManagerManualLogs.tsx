@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 import { useAuth } from '@/contexts/AuthContext';
-import { Layout } from "@/components/layout/Layout";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useNavigate } from "react-router-dom";
@@ -298,16 +297,7 @@ export default function ManagerManualLogs() {
   };
 
   return (
-    <Layout>
-      <div className="flex-1 p-4 lg:p-6 space-y-4 lg:space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex items-center gap-2 lg:gap-4">
-            <div className="flex items-center gap-2">
-              <PenTool className="h-5 w-5 lg:h-6 lg:w-6 text-primary" />
-              <h1 className="text-xl lg:text-2xl font-bold">Manual Logs</h1>
-            </div>
-          </div>
-        </div>
+    <div className="p-4 lg:p-6 space-y-4 lg:space-y-6">
 
         {/* Date Filter */}
         <Card>
@@ -520,6 +510,5 @@ export default function ManagerManualLogs() {
           </CardContent>
         </Card>
       </div>
-    </Layout>
   );
 } 

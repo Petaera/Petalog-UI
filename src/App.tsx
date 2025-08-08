@@ -85,7 +85,9 @@ const App = () => (
               path="/manager-manual-logs" 
               element={
                 <ProtectedRoute requiredRole="manager">
-                  <ManagerManualLogs />
+                  <Layout>
+                    <ManagerManualLogs />
+                  </Layout>
                 </ProtectedRoute>
               } 
             />

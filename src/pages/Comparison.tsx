@@ -29,7 +29,14 @@ interface LogEntry {
 export default function Comparison({ selectedLocation }: ComparisonProps) {
   const [comparisonData, setComparisonData] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedDate, setSelectedDate] = useState(() => {
+    // Set today's date as default
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
   const [selectedLogType, setSelectedLogType] = useState<string>("all");
 
   useEffect(() => {
@@ -59,21 +66,19 @@ export default function Comparison({ selectedLocation }: ComparisonProps) {
         .eq("approval_status", "approved")
         .order("created_at", { ascending: false });
 
-      // Add date filter if selected
-      if (selectedDate) {
-        const startOfDay = `${selectedDate}T00:00:00.000Z`;
-        const endOfDay = `${selectedDate}T23:59:59.999Z`;
-        manualQuery = manualQuery
-          .gte("entry_time", startOfDay)
-          .lte("entry_time", endOfDay);
-      }
+             // Note: Date filtering will be applied after fetching to handle both entry_time and created_at fields
 
-      const { data: manualLogs, error: manualError } = await manualQuery;
+             const { data: manualLogs, error: manualError } = await manualQuery;
 
-      if (manualError) {
-        console.error('Error fetching manual logs:', manualError);
-        return;
-      }
+       if (manualError) {
+         console.error('Error fetching manual logs:', manualError);
+         return;
+       }
+
+       console.log('Manual logs fetched:', manualLogs?.length || 0);
+       if (manualLogs && manualLogs.length > 0) {
+         console.log('Sample manual log:', manualLogs[0]);
+       }
 
       // Fetch automatic logs
       let automaticQuery = supabase
@@ -82,34 +87,65 @@ export default function Comparison({ selectedLocation }: ComparisonProps) {
         .eq("location_id", selectedLocation)
         .order("created_at", { ascending: false });
 
-      // Add date filter if selected
-      if (selectedDate) {
-        const startOfDay = `${selectedDate}T00:00:00.000Z`;
-        const endOfDay = `${selectedDate}T23:59:59.999Z`;
-        automaticQuery = automaticQuery
-          .gte("entry_time", startOfDay)
-          .lte("entry_time", endOfDay);
-      }
+             // Note: Date filtering will be applied after fetching to handle both entry_time and created_at fields
 
-      const { data: automaticLogs, error: automaticError } = await automaticQuery;
+             const { data: automaticLogs, error: automaticError } = await automaticQuery;
 
-      if (automaticError) {
-        console.error('Error fetching automatic logs:', automaticError);
-        return;
-      }
+       if (automaticError) {
+         console.error('Error fetching automatic logs:', automaticError);
+         return;
+       }
 
-      // Process and combine logs
-      const processedManualLogs = (manualLogs || []).map(log => ({
-        ...log,
-        vehicle_number: log.vehicle_number || log.vehicles?.number_plate || "",
-        log_type: 'manual' as const
-      }));
+       console.log('Automatic logs fetched:', automaticLogs?.length || 0);
+       if (automaticLogs && automaticLogs.length > 0) {
+         console.log('Sample automatic log:', automaticLogs[0]);
+       }
 
-      const processedAutomaticLogs = (automaticLogs || []).map(log => ({
-        ...log,
-        vehicle_number: log.vehicle_number || log.vehicles?.number_plate || "",
-        log_type: 'automatic' as const
-      }));
+             // Apply date filtering if selected
+       const filterByDate = (logs: any[]) => {
+         if (!selectedDate) return logs;
+         
+         const startOfDay = new Date(`${selectedDate}T00:00:00.000Z`);
+         const endOfDay = new Date(`${selectedDate}T23:59:59.999Z`);
+         
+         console.log('Date filtering:', {
+           selectedDate,
+           startOfDay: startOfDay.toISOString(),
+           endOfDay: endOfDay.toISOString(),
+           totalLogs: logs.length
+         });
+         
+         const filteredLogs = logs.filter(log => {
+           const entryTime = log.entry_time ? new Date(log.entry_time) : new Date(log.created_at);
+           const isInRange = entryTime >= startOfDay && entryTime <= endOfDay;
+           
+           console.log('Log date check:', {
+             vehicle: log.vehicle_number,
+             entry_time: log.entry_time,
+             created_at: log.created_at,
+             calculatedEntryTime: entryTime.toISOString(),
+             isInRange
+           });
+           
+           return isInRange;
+         });
+         
+         console.log('Filtered logs count:', filteredLogs.length);
+         return filteredLogs;
+       };
+
+       // Process and combine logs
+       const processedManualLogs = filterByDate(manualLogs || []).map(log => ({
+         ...log,
+         vehicle_number: log.vehicle_number || log.vehicles?.number_plate || "",
+         log_type: 'manual' as const
+       }));
+
+       const processedAutomaticLogs = filterByDate(automaticLogs || []).map(log => ({
+         ...log,
+         vehicle_number: log.vehicle_number || log.vehicles?.number_plate || "",
+         log_type: 'automatic' as const
+       }));
 
       // Create maps for finding common vehicles
       const manualVehicleMap = new Map();
@@ -174,8 +210,29 @@ export default function Comparison({ selectedLocation }: ComparisonProps) {
         filteredLogs = finalLogs.filter(log => log.log_type === selectedLogType);
       }
 
-      // Sort by date
-      filteredLogs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+             // Sort by type priority (common first, then automatic, then manual) and then by date
+       filteredLogs.sort((a, b) => {
+         // Define type priority: common = 0, automatic = 1, manual = 2
+         const getTypePriority = (type: string) => {
+           switch (type) {
+             case 'common': return 0;
+             case 'automatic': return 1;
+             case 'manual': return 2;
+             default: return 3;
+           }
+         };
+         
+         const typeA = getTypePriority(a.log_type);
+         const typeB = getTypePriority(b.log_type);
+         
+         // First sort by type priority
+         if (typeA !== typeB) {
+           return typeA - typeB;
+         }
+         
+         // Then sort by date (newest first)
+         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+       });
 
       setComparisonData(filteredLogs);
       console.log('Comparison data set:', filteredLogs);
@@ -271,10 +328,10 @@ export default function Comparison({ selectedLocation }: ComparisonProps) {
                   <thead className="bg-muted/50">
                     <tr>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle No</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entry Time</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Exit Time</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -292,6 +349,20 @@ export default function Comparison({ selectedLocation }: ComparisonProps) {
                           <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                             {log.vehicle_number || log.vehicles?.number_plate || "-"}
                           </td>
+                                                     <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                             <Badge 
+                               variant="outline"
+                               className={
+                                 log.log_type === 'common' 
+                                   ? 'bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-100' 
+                                   : log.log_type === 'manual' 
+                                   ? 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-100'
+                                   : 'bg-red-100 text-red-800 border-red-200 hover:bg-red-100'
+                               }
+                             >
+                               {log.log_type === 'common' ? 'Common' : log.log_type === 'manual' ? 'Manual' : 'Automatic'}
+                             </Badge>
+                           </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
                             {(() => {
                               const entryTime = log.entry_time ? new Date(log.entry_time).toLocaleString() : 
@@ -329,14 +400,6 @@ export default function Comparison({ selectedLocation }: ComparisonProps) {
                                 : log.exit_time;
                               return getDuration(entryTime, exitTime);
                             })()}
-                          </td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
-                            <Badge 
-                              variant={log.log_type === 'common' ? 'secondary' : log.log_type === 'manual' ? 'default' : 'outline'}
-                              className={log.log_type === 'common' ? 'bg-gray-100 text-gray-800' : ''}
-                            >
-                              {log.log_type === 'common' ? 'Common' : log.log_type === 'manual' ? 'Manual' : 'Automatic'}
-                            </Badge>
                           </td>
                         </tr>
                       ))
