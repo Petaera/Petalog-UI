@@ -27,7 +27,7 @@ interface VehicleHistory {
   manager: string;
   created_at: string;
   exit_time?: string;
-  log_type: 'Manual' | 'Automatic';
+  log_type: 'Manual';
 }
 
 interface VehicleStats {
@@ -119,7 +119,7 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
     try {
       console.log('🔍 Searching for vehicle:', searchQuery, 'in location:', selectedLocation);
 
-      // Build query with location filter for manual logs
+      // Build query with location filter for manual logs only
       let manualQuery = supabase
         .from('logs-man')
         .select('*')
@@ -128,36 +128,16 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
 
       const { data: manualData, error: manualError } = await manualQuery.order('created_at', { ascending: false });
 
-      // Build query with location filter for automatic logs
-      let autoQuery = supabase
-        .from('logs-auto')
-        .select('*, vehicles(number_plate)')
-        .eq('location_id', selectedLocation);
-
-      const { data: autoData, error: autoError } = await autoQuery.order('entry_time', { ascending: false });
-
-      // Filter automatic logs by vehicle number
-      const filteredAutoData = autoData?.filter(log => 
-        log.vehicles?.number_plate?.toLowerCase().includes(searchQuery.trim().toLowerCase())
-      ) || [];
-
       if (manualError) {
         console.error('❌ Error fetching manual logs:', manualError);
         toast.error('Failed to fetch manual logs');
         return;
       }
 
-      if (autoError) {
-        console.error('❌ Error fetching automatic logs:', autoError);
-        toast.error('Failed to fetch automatic logs');
-        return;
-      }
-
       console.log('✅ Manual logs fetched:', manualData?.length || 0, 'records');
-      console.log('✅ Automatic logs fetched:', filteredAutoData?.length || 0, 'records');
 
-      // Process manual logs data
-      const processedManualHistory = manualData?.map(log => ({
+      // Process manual logs data only
+      const processedHistory = manualData?.map(log => ({
         id: log.id,
         vehicle_number: log.vehicle_number,
         service: log.service,
@@ -169,24 +149,6 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
         exit_time: log.exit_time,
         log_type: 'Manual' as const
       })) || [];
-
-      // Process automatic logs data
-      const processedAutoHistory = filteredAutoData?.map(log => ({
-        id: log.id,
-        vehicle_number: log.vehicles?.number_plate || 'Unknown',
-        service: 'Automatic Entry',
-        amount: 0, // Automatic logs don't have amounts
-        location: log.location_id,
-        entry_type: 'Automatic',
-        manager: 'System',
-        created_at: log.entry_time,
-        exit_time: log.exit_time,
-        log_type: 'Automatic' as const
-      })) || [];
-
-      // Combine and sort all history
-      const processedHistory = [...processedManualHistory, ...processedAutoHistory]
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
       setVehicleHistory(processedHistory);
       setCurrentVehicle(searchQuery.trim());
