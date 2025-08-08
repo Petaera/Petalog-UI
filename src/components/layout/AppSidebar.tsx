@@ -61,7 +61,7 @@ export function AppSidebar() {
       <SidebarContent className="py-4">
         <SidebarGroup>
           <SidebarGroupLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3 py-2">
-            <span className="hidden sm:inline">PetaLog Management</span>
+            <span className="hidden sm:inline" style={{ fontSize: '24px', fontWeight: 'bold' ,alignContent: 'center'}}>PetaLog </span><br/>
             <span className="sm:hidden">PetaLog</span>
           </SidebarGroupLabel>
 
