@@ -123,39 +123,57 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
         queryAfterLocation: !!query
       });
 
-      // Apply single date filter if provided
+      // Apply date filter if selected
       if (selectedDate) {
-        const startOfDay = `${selectedDate}T00:00:00.000Z`;
-        const endOfDay = `${selectedDate}T23:59:59.999Z`;
+        const startOfDay = new Date(selectedDate);
+        const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+        
         query = query
-          .gte("entry_time", startOfDay)
-          .lte("entry_time", endOfDay);
-        console.log('🔍 AutomaticLogs Date filter applied:', { startOfDay, endOfDay, selectedDate });
-        console.log('🔍 AutomaticLogs Query after date filter:', { hasQuery: !!query });
-
-        // Also try a broader date range to see if there's any data
-        console.log('🔍 AutomaticLogs Date format check:', {
+          .gte('entry_time', startOfDay.toISOString())
+          .lt('entry_time', endOfDay.toISOString());
+        
+        console.log('🔍 AutomaticLogs Date filter applied:', {
           selectedDate,
-          startOfDay,
-          endOfDay,
-          isDateValid: !isNaN(new Date(selectedDate).getTime()),
-          dateObject: new Date(selectedDate),
-          dateISO: new Date(selectedDate).toISOString()
+          startOfDay: startOfDay.toISOString(),
+          endOfDay: endOfDay.toISOString(),
+          queryAfterDate: !!query
         });
       }
 
-      // Add distinct to prevent duplicate rows
-      console.log('🔍 AutomaticLogs Executing final query...');
-      const { data, error } = await query.order("entry_time", { ascending: false });
+      // Order by entry time (newest first) and limit results
+      query = query.order('entry_time', { ascending: false }).limit(100);
+      
+      console.log('🔍 AutomaticLogs Final query ready, executing...');
+      const { data, error } = await query;
+      
+      console.log('🔍 AutomaticLogs Query executed:', {
+        error: error ? error.message : null,
+        dataLength: data?.length || 0,
+        hasData: !!data
+      });
 
-      console.log('🔍 AutomaticLogs Raw query result:', { data, error });
-      console.log('🔍 AutomaticLogs Data length:', data?.length || 0);
-      console.log('🔍 AutomaticLogs Query completed successfully:', !error);
+      if (error) {
+        console.error('❌ AutomaticLogs Error fetching logs:', error);
+        console.error('❌ Error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        setLogs([]);
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        console.log('ℹ️ AutomaticLogs No logs found for the selected criteria');
+        setLogs([]);
+        return;
+      }
 
       // If no data with date filter, try without date filter to see if there's any data at all
       if ((!data || data.length === 0) && selectedDate) {
         console.log('🔍 AutomaticLogs No data with date filter, checking without date filter...');
-
+        
         // Try without date filter
         const fallbackQuery = supabase
           .from("logs-auto")
@@ -163,121 +181,45 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
           .eq("location_id", selectedLocation)
           .order("entry_time", { ascending: false })
           .limit(5);
-
+        
         const { data: fallbackData, error: fallbackError } = await fallbackQuery;
         console.log('🔍 AutomaticLogs Fallback query result:', { fallbackData, fallbackError, count: fallbackData?.length || 0 });
-
+        
         // Also try without location filter to see if there's any data at all
         const noLocationQuery = supabase
           .from("logs-auto")
           .select("id, entry_time, exit_time, vehicle_id, entry_url, exit_image, created_at, vehicles(number_plate), location_id")
           .order("entry_time", { ascending: false })
           .limit(5);
-
+        
         const { data: noLocationData, error: noLocationError } = await noLocationQuery;
         console.log('🔍 AutomaticLogs No location filter query result:', { noLocationData, noLocationError, count: noLocationData?.length || 0 });
-
+        
         // Check what locations exist in the data
         if (noLocationData && noLocationData.length > 0) {
           const locations = [...new Set(noLocationData.map(item => item.location_id))];
           console.log('🔍 AutomaticLogs Available locations in database:', locations);
         }
       }
-
+      
       // Additional check: Remove any duplicate IDs that might have slipped through
       let uniqueData = data;
-      console.log('🔍 AutomaticLogs Processing data:', {
-        hasData: !!data,
-        dataLength: data?.length || 0,
-        dataType: typeof data,
-        isArray: Array.isArray(data)
-      });
-
       if (data && data.length > 0) {
         const seenIds = new Set();
-        uniqueData = data.filter((log: any) => {
-          if (seenIds.has(log.id)) {
-            console.warn('⚠️ Duplicate ID found in query result:', log.id);
+        uniqueData = data.filter(item => {
+          if (seenIds.has(item.id)) {
+            console.log('🔍 AutomaticLogs Duplicate ID found and removed:', item.id);
             return false;
           }
-          seenIds.add(log.id);
+          seenIds.add(item.id);
           return true;
         });
-
-        if (uniqueData.length !== data.length) {
-          console.warn(`⚠️ Removed ${data.length - uniqueData.length} duplicate IDs from query result`);
-        }
-
-        console.log('🔍 AutomaticLogs Data after deduplication:', {
-          originalLength: data.length,
-          uniqueLength: uniqueData.length
+        
+        console.log('🔍 AutomaticLogs Duplicate removal:', {
+          originalCount: data.length,
+          uniqueCount: uniqueData.length,
+          duplicatesRemoved: data.length - uniqueData.length
         });
-      }
-
-      console.log('AutomaticLogs Supabase logs-auto data:', uniqueData);
-      console.log('AutomaticLogs Supabase error:', error);
-
-      // Check for duplicate entries
-      if (uniqueData && uniqueData.length > 0) {
-        const duplicateCheck = uniqueData.reduce((acc: any, log: any) => {
-          const key = `${log.vehicle_id}_${log.entry_time}_${log.location_id}`;
-          if (acc[key]) {
-            acc[key].count++;
-            acc[key].logs.push(log);
-          } else {
-            acc[key] = { count: 1, logs: [log] };
-          }
-          return acc;
-        }, {});
-
-        const duplicates = Object.entries(duplicateCheck).filter(([key, value]: [string, any]) => value.count > 1);
-        if (duplicates.length > 0) {
-          console.warn('⚠️ Found duplicate entries:', duplicates);
-          console.warn('⚠️ Duplicate details:', duplicates.map(([key, value]: [string, any]) => ({
-            key,
-            count: value.count,
-            logs: value.logs.map((log: any) => ({
-              id: log.id,
-              vehicle_id: log.vehicle_id,
-              entry_time: log.entry_time,
-              created_at: log.created_at,
-              location_id: log.location_id
-            }))
-          })));
-        }
-
-        // Check for entries with very close timestamps (within 5 minutes)
-        const timeBasedDuplicates = [];
-        for (let i = 0; i < uniqueData.length; i++) {
-          for (let j = i + 1; j < uniqueData.length; j++) {
-            const timeDiff = Math.abs(new Date(uniqueData[i].entry_time).getTime() - new Date(uniqueData[j].entry_time).getTime());
-            const fiveMinutes = 5 * 60 * 1000; // 5 minutes in milliseconds
-            if (timeDiff < fiveMinutes &&
-                uniqueData[i].vehicle_id === uniqueData[j].vehicle_id &&
-                uniqueData[i].location_id === uniqueData[j].location_id) {
-              timeBasedDuplicates.push({
-                log1: { id: uniqueData[i].id, entry_time: uniqueData[i].entry_time, created_at: uniqueData[i].created_at },
-                log2: { id: uniqueData[j].id, entry_time: uniqueData[j].entry_time, created_at: uniqueData[j].created_at },
-                timeDiff: Math.round(timeDiff / 1000 / 60) + ' minutes'
-              });
-            }
-          }
-        }
-
-        if (timeBasedDuplicates.length > 0) {
-          console.warn('⚠️ Found entries with close timestamps (potential duplicates):', timeBasedDuplicates);
-        }
-      }
-
-      // Check if returned data has correct location_id
-      if (uniqueData && uniqueData.length > 0) {
-        const locationIds = [...new Set(uniqueData.map(item => item.location_id))];
-        console.log('🔍 AutomaticLogs Returned data location IDs:', locationIds);
-        console.log('🔍 AutomaticLogs Expected location ID:', selectedLocation);
-
-        if (locationIds.length > 1 || !locationIds.includes(selectedLocation)) {
-          console.warn('⚠️ AutomaticLogs Data returned from multiple locations or wrong location!');
-        }
       }
 
       if (!error && uniqueData) {

@@ -15,6 +15,11 @@ const DashboardManager = () => {
 
   useEffect(() => {
     const fetchLogs = async () => {
+      if (!user?.assigned_location) {
+        console.log('No assigned location for manager');
+        return;
+      }
+
       let manQuery = supabase
         .from('logs-man')
         .select('id, entry_time, location_id, vehicle_id, vehicles(number_plate)')
@@ -24,17 +29,23 @@ const DashboardManager = () => {
         .from('logs-auto')
         .select('id, entry_time, location_id, vehicle_id, vehicles(number_plate)')
         .order('entry_time', { ascending: false });
-      if (user?.assigned_location) {
+      
+      if (user.assigned_location) {
         manQuery = manQuery.eq('location_id', user.assigned_location);
         autoQuery = autoQuery.eq('location_id', user.assigned_location);
       }
+      
       const { data: manData } = await manQuery;
       setManualLogs(manData || []);
       const { data: autoData } = await autoQuery;
       setAutoLogs(autoData || []);
     };
-    fetchLogs();
-  }, [user?.assigned_location]);
+    
+    // Only fetch if we have an assigned location
+    if (user?.assigned_location) {
+      fetchLogs();
+    }
+  }, [user?.assigned_location]); // Only depend on assigned_location
 
   return (
     <Layout>

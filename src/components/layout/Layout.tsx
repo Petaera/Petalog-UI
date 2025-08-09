@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import { Header } from "./Header";
@@ -18,9 +18,11 @@ interface LayoutProps {
 }
 
 export function Layout({ children }: LayoutProps) {
+  const { user } = useAuth();
   const [locations, setLocations] = useState<{ id: string; name: string; address: string }[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<string>("");
-  const { user } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
+  const hasFetchedLocations = useRef(false);
 
   // Debug selectedLocation changes
   useEffect(() => {
@@ -67,6 +69,11 @@ export function Layout({ children }: LayoutProps) {
   };
 
   useEffect(() => {
+    // Prevent multiple fetches
+    if (hasFetchedLocations.current || !user?.id) {
+      return;
+    }
+
     const fetchLocations = async () => {
       try {
         console.log('🔍 Layout fetchLocations started with user:', {
@@ -146,17 +153,20 @@ export function Layout({ children }: LayoutProps) {
       } catch (error) {
         console.error('💥 Error in fetchLocations:', error);
         console.error('💥 Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+      } finally {
+        setIsLoading(false);
+        hasFetchedLocations.current = true;
       }
     };
-    
-    // Only fetch locations if we have user data
+
+    // Only fetch locations if we have user data and haven't fetched yet
     if (user) {
       console.log('🔍 User data available, fetching locations...');
       fetchLocations();
     } else {
       console.log('⏳ Waiting for user data to load...');
     }
-  }, [user?.id, user?.role]);
+  }, [user?.id]); // Only depend on user ID, not the entire user object
 
   return (
     <SidebarProvider>

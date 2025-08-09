@@ -36,7 +36,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
     }
     
     fetchLogs();
-  }, [selectedLocation, selectedDate]);
+  }, []);
 
   const clearDateFilter = () => {
     // Reset to today's date instead of clearing

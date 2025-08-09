@@ -323,7 +323,7 @@ export default function ManagerAutomaticLogs() {
     
     console.log("ManagerAutomaticLogs Calling fetchLogs...");
     fetchLogs();
-  }, [user?.assigned_location, selectedDate, fetchLogs]);
+  }, [user?.assigned_location, selectedDate]); // Removed fetchLogs from dependencies to prevent infinite loops
 
   function getDuration(entry, exit) {
     if (!entry || !exit) return "-";

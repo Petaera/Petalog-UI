@@ -91,7 +91,7 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
       debugVehicleData(filteredManualLogs, 'Manual Logs');
       debugVehicleData(filteredAutoLogs, 'Auto Logs');
     }
-  }, [manualLogs, autoLogs, user, selectedLocation]);
+  }, [manualLogs, autoLogs, user?.role, user?.assigned_location, selectedLocation]);
 
   const fetchStats = async () => {
     try {
@@ -187,8 +187,11 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
   };
 
   useEffect(() => {
-    fetchStats();
-  }, [user?.role, user?.assigned_location, selectedLocation]);
+    // Only fetch stats when we have the necessary data
+    if (user?.id && (user?.role === 'manager' ? user?.assigned_location : selectedLocation)) {
+      fetchStats();
+    }
+  }, [user?.id, user?.role, user?.assigned_location, selectedLocation]); // Removed fetchStats from dependencies
 
   // Retry function for failed queries
   const handleRetry = () => {

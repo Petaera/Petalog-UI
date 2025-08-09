@@ -299,7 +299,7 @@ export default function Terms() {
                   If you have any questions about these Terms, please contact us at:
                 </p>
                 <div className="bg-muted/50 p-4 rounded-lg">
-                  <p className="font-semibold">PETA ERA TECHNOLOGIES LLP</p>
+                  <p className="font-semibold">PETAERA TECHNOLOGIES LLP</p>
                   <p><strong>Email:</strong> <a href="mailto:petaerallp@gmail.com" className="text-blue-600 hover:underline">petaerallp@gmail.com</a></p>
                   <p><strong>Phone:</strong> +91 7012422309</p>
                   <p><strong>Website:</strong> <a href="https://petaera.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Petaera.com</a></p>

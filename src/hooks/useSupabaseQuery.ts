@@ -56,9 +56,9 @@ export function useSupabaseQuery<T = any>(
       )) {
         console.log(`Retrying query in ${retryDelay}ms... (attempt ${attempt + 1}/${retries})`);
         
-        setTimeout(() => {
-          executeQuery(attempt + 1);
-        }, retryDelay);
+        //setTimeout(() => {
+          //executeQuery(attempt + 1);
+       // }, retryDelay);
         return;
       }
 
@@ -85,16 +85,15 @@ export function useSupabaseQuery<T = any>(
 
 // Specific hook for logs queries
 export function useLogsQuery(table: 'logs-auto' | 'logs-man', options?: UseSupabaseQueryOptions) {
-  return useSupabaseQuery(
-    async () => {
-      const query = supabase
-        .from(table)
-        .select('id, entry_time, location_id, vehicle_id, vehicles(number_plate)')
-        .order('entry_time', { ascending: false })
-        .limit(10);
-      
-      return query;
-    },
-    options
-  );
+  const queryFn = useCallback(async () => {
+    const query = supabase
+      .from(table)
+      .select('id, entry_time, location_id, vehicle_id, vehicles(number_plate)')
+      .order('entry_time', { ascending: false })
+      .limit(10);
+
+    return query;
+  }, [table]);
+
+  return useSupabaseQuery(queryFn, options);
 }

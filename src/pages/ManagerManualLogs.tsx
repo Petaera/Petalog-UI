@@ -31,8 +31,11 @@ export default function ManagerManualLogs() {
       return;
     }
     
-    fetchLogs();
-  }, [user?.assigned_location, selectedDate]);
+    // Only fetch if we have a valid assigned location
+    if (user.assigned_location && selectedDate) {
+      fetchLogs();
+    }
+  }, [user?.assigned_location, selectedDate]); // Removed fetchLogs from dependencies
 
   const clearDateFilter = () => {
     // Reset to today's date instead of clearing
