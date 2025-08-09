@@ -1,79 +1,62 @@
-// Quick test to verify Supabase connection and table access
-import { supabase } from './lib/supabaseClient.ts';
+import { createClient } from '@supabase/supabase-js';
 
-async function testSupabaseConnection() {
-  console.log('🔍 Testing Supabase connection...');
-  
+// Replace with your actual Supabase credentials
+const supabaseUrl = 'YOUR_SUPABASE_URL';
+const supabaseKey = 'YOUR_SUPABASE_ANON_KEY';
+
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+async function testComparisonData() {
   try {
-    // Test basic connection
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    console.log('Auth status:', authError ? 'Not authenticated' : 'Authenticated');
-    console.log('User:', authData?.user?.email || 'No user');
+    console.log('Testing get_comparison_data function...');
     
-    // Test each table individually
-    const tables = ['vehicles', 'logs-man', 'locations', 'Service_prices', 'users'];
+    // You'll need to replace this with an actual location_id from your database
+    const locationId = 'YOUR_LOCATION_ID';
     
-    for (const table of tables) {
-      console.log(`\n📊 Testing table: ${table}`);
-      try {
-        const { data, error, count } = await supabase
-          .from(table)
-          .select('*', { count: 'exact' })
-          .limit(1);
-        
-        if (error) {
-          console.error(`❌ Error accessing ${table}:`, error);
-        } else {
-          console.log(`✅ ${table} accessible - Total records: ${count}`);
-          if (data && data.length > 0) {
-            console.log(`📋 Sample record from ${table}:`, data[0]);
-            console.log(`📋 Columns in ${table}:`, Object.keys(data[0]));
-          }
-        }
-      } catch (err) {
-        console.error(`💥 Exception accessing ${table}:`, err);
-      }
+    const { data, error } = await supabase.rpc('get_comparison_data', {
+      p_location_id: locationId,
+      p_filter_date: null, // No date filter for testing
+    });
+
+    if (error) {
+      console.error('Error:', error);
+      return;
     }
+
+    console.log('Raw data:', data);
+    console.log('Data length:', data?.length);
     
-    // Test users table specifically
-    console.log('\n🔍 Testing users table structure...');
-    try {
-      const { data: usersData, error: usersError } = await supabase
-        .from('users')
-        .select('*')
-        .limit(1);
+    if (data && data.length > 0) {
+      const logTypeCounts = data.reduce((acc, log) => {
+        acc[log.log_type] = (acc[log.log_type] || 0) + 1;
+        return acc;
+      }, {});
       
-      if (usersError) {
-        console.error('❌ Error accessing users table:', usersError);
-      } else if (usersData && usersData.length > 0) {
-        console.log('✅ Users table structure:', Object.keys(usersData[0]));
-      } else {
-        console.log('ℹ️ Users table is empty, testing insert...');
-        // Try to insert a test record to see what columns are required
-        const testInsert = {
-          id: 'test-user-id',
-          email: 'test@example.com',
-          role: 'owner'
-        };
-        
-        const { error: insertError } = await supabase
-          .from('users')
-          .insert([testInsert]);
-        
-        if (insertError) {
-          console.error('❌ Insert error (this is expected for test):', insertError);
-        } else {
-          console.log('✅ Test insert successful');
+      console.log('Log type counts:', logTypeCounts);
+      
+      // Show some examples of each type
+      const examples = {};
+      data.forEach(log => {
+        if (!examples[log.log_type]) {
+          examples[log.log_type] = [];
         }
-      }
-    } catch (err) {
-      console.error('💥 Exception testing users table:', err);
+        if (examples[log.log_type].length < 3) {
+          examples[log.log_type].push({
+            vehicle_number: log.vehicle_number,
+            entry_time: log.entry_time,
+            log_type: log.log_type
+          });
+        }
+      });
+      
+      console.log('Examples by type:', examples);
+    } else {
+      console.log('No data returned');
     }
     
   } catch (error) {
-    console.error('💥 Critical error:', error);
+    console.error('Unexpected error:', error);
   }
 }
 
-// Run the test
-testSupabaseConnection();
+testComparisonData();

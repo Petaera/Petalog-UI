@@ -48,6 +48,18 @@ export function useComparisonData({
         toast.error('Failed to fetch comparison data.');
         return;
       }
+      
+      // Debug logging to see what data is being returned
+      console.log('Raw comparison data:', data);
+      console.log('Data length:', data?.length);
+      if (data && data.length > 0) {
+        const logTypeCounts = data.reduce((acc: any, log: LogEntry) => {
+          acc[log.log_type] = (acc[log.log_type] || 0) + 1;
+          return acc;
+        }, {});
+        console.log('Log type counts:', logTypeCounts);
+      }
+      
       setData(data || []);
     } catch (error) {
       console.error('Error:', error);
@@ -62,6 +74,7 @@ export function useComparisonData({
 
     if (selectedLogType !== 'all') {
       result = result.filter(log => log.log_type === selectedLogType);
+      console.log(`Filtered data for ${selectedLogType}:`, result);
     }
 
     result.sort((a, b) => {
@@ -75,6 +88,7 @@ export function useComparisonData({
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
 
+    console.log('Final filtered and sorted data:', result);
     return result;
   }, [data, selectedLogType]);
 

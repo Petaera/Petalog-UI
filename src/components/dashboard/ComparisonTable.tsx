@@ -35,9 +35,66 @@ const LogTypeBadge: React.FC<{ logType: string }> = ({ logType }) => {
 };
 
 const ComparisonTable: React.FC<ComparisonTableProps> = ({ loading, data, selectedDate, selectedLogType }) => {
+  // Debug logging to see what data is being rendered
+  console.log('ComparisonTable render - data:', data);
+  console.log('ComparisonTable render - selectedLogType:', selectedLogType);
+  console.log('ComparisonTable render - data length:', data?.length);
+  
+  if (data && data.length > 0) {
+    const logTypeCounts = data.reduce((acc: any, log: LogEntry) => {
+      acc[log.log_type] = (acc[log.log_type] || 0) + 1;
+      return acc;
+    }, {});
+    console.log('ComparisonTable log type counts:', logTypeCounts);
+  }
+
+  // Calculate summary counts
+  const summaryCounts = data.reduce((acc: any, log: LogEntry) => {
+    acc[log.log_type] = (acc[log.log_type] || 0) + 1;
+    return acc;
+  }, {});
+
   return (
     <Card className="mt-6">
       <CardContent className="p-6">
+        {/* Summary Section */}
+        {!loading && data.length > 0 && (
+          <div className="mb-6 p-4 bg-muted/30 rounded-lg">
+            <h3 className="text-lg font-semibold mb-3">Summary</h3>
+            <div className="flex flex-wrap gap-4">
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="bg-green-100 text-green-800 border-green-200">
+                  Common
+                </Badge>
+                <span className="text-sm text-muted-foreground">
+                  {summaryCounts.common || 0} entries
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200">
+                  Manual
+                </Badge>
+                <span className="text-sm text-muted-foreground">
+                  {summaryCounts.manual || 0} entries
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="bg-red-100 text-red-800 border-red-200">
+                  Automatic
+                </Badge>
+                <span className="text-sm text-muted-foreground">
+                  {summaryCounts.automatic || 0} entries
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-muted-foreground">
+                  Total: {data.length} entries
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="overflow-x-auto -mx-4 sm:mx-0">
           <div className="min-w-full inline-block align-middle">
             <div className="overflow-hidden">

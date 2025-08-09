@@ -25,6 +25,7 @@ BEGIN
         WHERE m.location_id = p_location_id
           AND m.approval_status = 'approved'
           AND (p_filter_date IS NULL OR COALESCE(m.entry_time, m.created_at)::DATE = p_filter_date)
+          AND COALESCE(m.vehicle_number, v.number_plate) IS NOT NULL
     ),
     automatic_logs AS (
         SELECT
@@ -38,29 +39,49 @@ BEGIN
         LEFT JOIN vehicles v ON a.vehicle_id = v.id
         WHERE a.location_id = p_location_id
           AND (p_filter_date IS NULL OR COALESCE(a.entry_time, a.created_at)::DATE = p_filter_date)
+          AND v.number_plate IS NOT NULL
     ),
-    combined_logs AS (
-        SELECT * FROM manual_logs
-        UNION ALL
-        SELECT * FROM automatic_logs
-    ),
+    -- Find vehicles that appear in both manual and automatic logs
     common_vehicles AS (
-        SELECT cl.vehicle_number
-        FROM combined_logs cl
-        GROUP BY cl.vehicle_number
-        HAVING COUNT(DISTINCT cl.log_type) > 1
+        SELECT DISTINCT m.vehicle_number
+        FROM manual_logs m
+        INNER JOIN automatic_logs a ON m.vehicle_number = a.vehicle_number
+        WHERE m.vehicle_number IS NOT NULL AND a.vehicle_number IS NOT NULL
+    ),
+    -- Combine all logs and mark common ones
+    all_logs AS (
+        SELECT 
+            id,
+            vehicle_number,
+            entry_time,
+            exit_time,
+            log_type,
+            created_at
+        FROM manual_logs
+        
+        UNION ALL
+        
+        SELECT 
+            id,
+            vehicle_number,
+            entry_time,
+            exit_time,
+            log_type,
+            created_at
+        FROM automatic_logs
     )
     SELECT
-        c.id,
-        c.vehicle_number,
-        c.entry_time,
-        c.exit_time,
+        al.id,
+        al.vehicle_number,
+        al.entry_time,
+        al.exit_time,
         CASE
             WHEN cv.vehicle_number IS NOT NULL THEN 'common'
-            ELSE c.log_type
+            ELSE al.log_type
         END AS log_type,
-        c.created_at
-    FROM combined_logs c
-    LEFT JOIN common_vehicles cv ON c.vehicle_number = cv.vehicle_number;
+        al.created_at
+    FROM all_logs al
+    LEFT JOIN common_vehicles cv ON al.vehicle_number = cv.vehicle_number
+    ORDER BY al.created_at DESC;
 END;
 $$ LANGUAGE plpgsql;
