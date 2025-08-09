@@ -35,6 +35,9 @@ export default function ManagerPortal() {
   const [scratchImage, setScratchImage] = useState<Blob | null>(null);
   const [showStats, setShowStats] = useState(false);
 
+  // Button disable state for 5 seconds after submit
+  const [isSubmitDisabled, setIsSubmitDisabled] = useState(false);
+
   // Service price map
   const SERVICE_PRICES: { [key: string]: number } = {
     'basic': 200,
@@ -98,6 +101,16 @@ export default function ManagerPortal() {
     }
   }, [service, entryType]);
 
+  // Timer effect to re-enable submit button after 5 seconds
+  React.useEffect(() => {
+    if (isSubmitDisabled) {
+      const timer = setTimeout(() => {
+        setIsSubmitDisabled(false);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [isSubmitDisabled]);
+
   const handleVehicleNumberChange = (value: string) => {
     setVehicleNumber(value.toUpperCase());
   };
@@ -117,10 +130,14 @@ export default function ManagerPortal() {
   };
 
   const handleSubmit = () => {
+    // Disable submit button for 5 seconds
+    setIsSubmitDisabled(true);
+    
     const trimmedVehicleType = vehicleType.trim();
     const trimmedServices = service.map(s => s.trim());
     if (!vehicleNumber || !trimmedVehicleType || trimmedServices.length === 0) {
       toast.error('Please fill in all required fields');
+      setIsSubmitDisabled(false); // Re-enable button on validation error
       return;
     }
 
@@ -448,6 +465,7 @@ export default function ManagerPortal() {
             size="lg" 
             className="px-8"
             onClick={handleSubmit}
+            disabled={isSubmitDisabled}
           >
             Submit Entry
           </Button>

@@ -161,6 +161,9 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
   const [isEditing, setIsEditing] = useState(false);
   const [editLogId, setEditLogId] = useState<string | null>(null);
 
+  // Button disable state for 5 seconds after submit
+  const [isSubmitDisabled, setIsSubmitDisabled] = useState(false);
+
   const { user } = useAuth();
 
   // Check for edit data on component mount
@@ -375,6 +378,16 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
     }
   }, [entryType, vehicleType, service, workshop, priceMatrix, workshopPriceMatrix]);
 
+  // Timer effect to re-enable submit button after 5 seconds
+  useEffect(() => {
+    if (isSubmitDisabled) {
+      const timer = setTimeout(() => {
+        setIsSubmitDisabled(false);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [isSubmitDisabled]);
+
   // Mock data for previous visits
   const previousVisits = vehicleNumber ? Math.floor(Math.random() * 5) + 1 : 0;
 
@@ -410,10 +423,14 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
   }
 
   const handleSubmit = async () => {
+    // Disable submit button for 5 seconds
+    setIsSubmitDisabled(true);
+    
     const trimmedCustomerName = customerName.trim();
     
     if (!vehicleNumber || !vehicleType || (entryType === 'customer' && service.length === 0)) {
       toast.error('Please fill in all required fields (Vehicle Number, Vehicle Type, and Service)');
+      setIsSubmitDisabled(false); // Re-enable button on validation error
       return;
     }
     // if (!scratchImage) {
@@ -817,10 +834,11 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
             size="lg" 
             className="px-8"
             onClick={handleSubmit}
+            disabled={isSubmitDisabled}
           >
             {isEditing ? 'Update Entry' : 'Submit Entry'}
           </Button>
-                 </div>
+        </div>
        </div>
    );
  }

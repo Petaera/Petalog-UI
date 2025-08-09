@@ -160,6 +160,9 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editLogId, setEditLogId] = useState<string | null>(null);
 
+  // Button disable state for 5 seconds after submit
+  const [isSubmitDisabled, setIsSubmitDisabled] = useState(false);
+
   const { user } = useAuth();
 
   // Store edit data for later use
@@ -353,6 +356,16 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
     console.log('Service changed to:', service);
   }, [vehicleType, service]);
 
+  // Timer effect to re-enable submit button after 5 seconds
+  useEffect(() => {
+    if (isSubmitDisabled) {
+      const timer = setTimeout(() => {
+        setIsSubmitDisabled(false);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [isSubmitDisabled]);
+
   // Reset and repopulate dropdowns when entryType changes
   useEffect(() => {
     // Don't reset if we're in edit mode
@@ -458,15 +471,20 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
   }
 
   const handleSubmit = async () => {
+    // Disable submit button for 5 seconds
+    setIsSubmitDisabled(true);
+    
     const trimmedCustomerName = customerName.trim();
     
     if (!selectedLocation) {
       toast.error('Please select a location from the toolbar');
+      setIsSubmitDisabled(false); // Re-enable button on validation error
       return;
     }
     
     if (!vehicleNumber || !vehicleType || (entryType === 'customer' && service.length === 0)) {
       toast.error('Please fill in all required fields (Vehicle Number, Vehicle Type, and Service)');
+      setIsSubmitDisabled(false); // Re-enable button on validation error
       return;
     }
     // if (!scratchImage) {
@@ -911,6 +929,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
           size="lg" 
           className="px-8"
           onClick={handleSubmit}
+          disabled={isSubmitDisabled}
         >
           {isEditing ? 'Update Entry' : 'Submit Entry'}
         </Button>
