@@ -69,50 +69,93 @@ export function Layout({ children }: LayoutProps) {
   useEffect(() => {
     const fetchLocations = async () => {
       try {
+        console.log('🔍 Layout fetchLocations started with user:', {
+          userId: user?.id,
+          userRole: user?.role,
+          userOwnId: user?.own_id,
+          userAssignedLocation: user?.assigned_location,
+          hasUser: !!user
+        });
+
+        // Check if Supabase client is properly configured
+        if (!supabase) {
+          console.error('❌ Supabase client is not available');
+          return;
+        }
+
         let query = supabase.from("locations").select("id, name, address");
         
         // Apply location filter based on user role and permissions
         query = applyLocationFilter(query, user);
         
-        console.log('🔍 Location filter:', getLocationFilterDescription(user));
+        console.log('🔍 Location filter applied:', getLocationFilterDescription(user));
         
         const { data, error } = await query;
         
         if (error) {
           console.error('❌ Error fetching locations:', error);
+          console.error('❌ Error details:', {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code
+          });
           return;
         }
         
+        console.log('✅ Raw locations data received:', {
+          dataLength: data?.length || 0,
+          data: data,
+          hasData: !!data
+        });
+        
         if (data && data.length > 0) {
-          console.log('✅ Fetched locations:', data.length);
+          console.log('✅ Fetched locations successfully:', data.length);
           setLocations(data);
           
           // Try to restore the previously selected location
           if (user?.id) {
             const storedLocation = getStoredLocation(user.id);
+            console.log('🔍 Checking stored location:', {
+              storedLocation,
+              isValidStored: storedLocation && data.some(loc => loc.id === storedLocation),
+              availableLocations: data.map(loc => loc.id)
+            });
+            
             if (storedLocation && data.some(loc => loc.id === storedLocation)) {
               console.log('🔄 Restoring stored location:', storedLocation);
               setSelectedLocation(storedLocation);
             } else {
-              console.log('🔄 No valid stored location found, using first location');
+              console.log('🔄 No valid stored location found, using first location:', data[0].id);
               setSelectedLocation(data[0].id);
               storeLocation(user.id, data[0].id);
             }
           } else {
-            console.log('🔄 No user ID, using first location');
+            console.log('🔄 No user ID, using first location:', data[0].id);
             setSelectedLocation(data[0].id);
           }
         } else {
           console.log('ℹ️ No locations found for current user');
+          console.log('ℹ️ This could indicate:');
+          console.log('  - User has no permissions to see locations');
+          console.log('  - Database query returned empty results');
+          console.log('  - RLS policies are blocking access');
           setLocations([]);
           setSelectedLocation("");
         }
       } catch (error) {
         console.error('💥 Error in fetchLocations:', error);
+        console.error('💥 Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       }
     };
     
-    fetchLocations();
+    // Only fetch locations if we have user data
+    if (user) {
+      console.log('🔍 User data available, fetching locations...');
+      fetchLocations();
+    } else {
+      console.log('⏳ Waiting for user data to load...');
+    }
   }, [user?.id, user?.role]);
 
   return (
