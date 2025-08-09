@@ -24,7 +24,6 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true); // Changed to true
   const [selectedDate, setSelectedDate] = useState(() => {
-    // Set default date to today
     const today = new Date();
     const defaultDate = today.toISOString().split('T')[0];
     console.log('🔍 AutomaticLogs Initial date state:', {
@@ -329,7 +328,7 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
   }, [isModalOpen]);
 
   const clearDateFilter = () => {
-    // Reset to today's date instead of clearing
+    // Reset to today's date
     const today = new Date();
     setSelectedDate(today.toISOString().split('T')[0]);
   };
