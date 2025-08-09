@@ -10,43 +10,111 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from '@/contexts/AuthContext';
 
+// Debug Supabase client
+console.log('🔍 ManagerAutomaticLogs Supabase client debug:', {
+  hasSupabase: !!supabase,
+  supabaseType: typeof supabase,
+  hasFrom: !!supabase?.from,
+  hasSelect: !!supabase?.from?.('test')?.select
+});
+
 export default function ManagerAutomaticLogs() {
   const { user } = useAuth();
+  
+  // Debug AuthContext
+  console.log('🔍 ManagerAutomaticLogs AuthContext debug:', {
+    hasAuth: !!useAuth,
+    hasUser: !!user,
+    userKeys: user ? Object.keys(user) : [],
+    userType: typeof user
+  });
   const [logs, setLogs] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(() => {
     // Set default date to today
     const today = new Date();
-    return today.toISOString().split('T')[0];
+    const defaultDate = today.toISOString().split('T')[0];
+    console.log('🔍 ManagerAutomaticLogs Initial date state:', { 
+      today, 
+      todayISO: today.toISOString(), 
+      defaultDate 
+    });
+    return defaultDate;
   });
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState("");
-  const [isFetching, setIsFetching] = useState(false); // Prevent multiple simultaneous fetches
 
-  console.log("ManagerAutomaticLogs component rendered. assignedLocation:", user?.assigned_location);
+  // Debug logs state changes
+  useEffect(() => {
+    console.log('🔍 ManagerAutomaticLogs logs state changed:', { 
+      logsLength: logs?.length || 0, 
+      loading, 
+      hasLogs: !!logs 
+    });
+  }, [logs, loading]);
+  
+  // Debug table rendering
+  useEffect(() => {
+    console.log('🔍 ManagerAutomaticLogs Table rendering with:', { 
+      loading, 
+      logsLength: logs?.length || 0, 
+      selectedDate,
+      hasLogs: !!logs 
+    });
+  }, [loading, logs, selectedDate]);
+  
+  // Debug component lifecycle
+  useEffect(() => {
+    console.log('🔍 ManagerAutomaticLogs Component mounted');
+    return () => {
+      console.log('🔍 ManagerAutomaticLogs Component unmounting');
+    };
+  }, []);
+
+  console.log("ManagerAutomaticLogs component rendered:", {
+    hasUser: !!user,
+    userId: user?.id,
+    userEmail: user?.email,
+    assignedLocation: user?.assigned_location,
+    locationType: typeof user?.assigned_location
+  });
 
   const fetchLogs = useCallback(async () => {
-    // Prevent multiple simultaneous fetches
-    if (isFetching) {
-      console.log('🔍 ManagerAutomaticLogs: Fetch already in progress, skipping...');
-      return;
-    }
+    console.log('🔍 ManagerAutomaticLogs Starting fetchLogs with:', { 
+      assignedLocation: user?.assigned_location, 
+      selectedDate,
+      userId: user?.id,
+      userEmail: user?.email,
+      hasUser: !!user
+    });
     
-    console.log('🔍 ManagerAutomaticLogs Starting fetchLogs with:', { assignedLocation: user?.assigned_location, selectedDate });
-    
-    setIsFetching(true);
     setLoading(true);
     
     try {
+      // Test Supabase connection first
+      console.log('🔍 ManagerAutomaticLogs Testing Supabase connection...');
+      const { data: testData, error: testError } = await supabase
+        .from("logs-auto")
+        .select("id")
+        .limit(1);
+      console.log('🔍 ManagerAutomaticLogs Supabase connection test:', { testData, testError });
+      
       // Build query step by step to ensure proper filtering
       let query = supabase
         .from("logs-auto")
         .select("id, entry_time, exit_time, vehicle_id, entry_url, exit_image, created_at, vehicles(number_plate), location_id");
+      
+      console.log('🔍 ManagerAutomaticLogs Query built:', { table: "logs-auto", hasQuery: !!query });
 
       // Apply location filter
       query = query.eq("location_id", user?.assigned_location);
-      console.log('🔍 ManagerAutomaticLogs Location filter applied:', { assignedLocation: user?.assigned_location });
+      console.log('🔍 ManagerAutomaticLogs Location filter applied:', { 
+        assignedLocation: user?.assigned_location,
+        locationType: typeof user?.assigned_location,
+        hasLocation: !!user?.assigned_location,
+        queryAfterLocation: !!query
+      });
 
       // Apply single date filter if provided
       if (selectedDate) {
@@ -55,14 +123,69 @@ export default function ManagerAutomaticLogs() {
         query = query
           .gte("entry_time", startOfDay)
           .lte("entry_time", endOfDay);
-        console.log('🔍 ManagerAutomaticLogs Date filter applied:', { startOfDay, endOfDay });
+        console.log('🔍 ManagerAutomaticLogs Date filter applied:', { startOfDay, endOfDay, selectedDate });
+        console.log('🔍 ManagerAutomaticLogs Query after date filter:', { hasQuery: !!query });
+        
+        // Also try a broader date range to see if there's any data
+        console.log('🔍 ManagerAutomaticLogs Date format check:', {
+          selectedDate,
+          startOfDay,
+          endOfDay,
+          isDateValid: !isNaN(new Date(selectedDate).getTime()),
+          dateObject: new Date(selectedDate),
+          dateISO: new Date(selectedDate).toISOString()
+        });
       }
 
       // Add distinct to prevent duplicate rows
+      console.log('🔍 ManagerAutomaticLogs Executing final query...');
       const { data, error } = await query.order("entry_time", { ascending: false });
+      
+      console.log('🔍 ManagerAutomaticLogs Raw query result:', { data, error });
+      console.log('🔍 ManagerAutomaticLogs Data length:', data?.length || 0);
+      console.log('🔍 ManagerAutomaticLogs Query completed successfully:', !error);
+      
+      // If no data with date filter, try without date filter to see if there's any data at all
+      if ((!data || data.length === 0) && selectedDate) {
+        console.log('🔍 ManagerAutomaticLogs No data with date filter, checking without date filter...');
+        
+        // Try without date filter
+        const fallbackQuery = supabase
+          .from("logs-auto")
+          .select("id, entry_time, exit_time, vehicle_id, entry_url, exit_image, created_at, vehicles(number_plate), location_id")
+          .eq("location_id", user?.assigned_location)
+          .order("entry_time", { ascending: false })
+          .limit(5);
+        
+        const { data: fallbackData, error: fallbackError } = await fallbackQuery;
+        console.log('🔍 ManagerAutomaticLogs Fallback query result:', { fallbackData, fallbackError, count: fallbackData?.length || 0 });
+        
+        // Also try without location filter to see if there's any data at all
+        const noLocationQuery = supabase
+          .from("logs-auto")
+          .select("id, entry_time, exit_time, vehicle_id, entry_url, exit_image, created_at, vehicles(number_plate), location_id")
+          .order("entry_time", { ascending: false })
+          .limit(5);
+        
+        const { data: noLocationData, error: noLocationError } = await noLocationQuery;
+        console.log('🔍 ManagerAutomaticLogs No location filter query result:', { noLocationData, noLocationError, count: noLocationData?.length || 0 });
+        
+        // Check what locations exist in the data
+        if (noLocationData && noLocationData.length > 0) {
+          const locations = [...new Set(noLocationData.map(item => item.location_id))];
+          console.log('🔍 ManagerAutomaticLogs Available locations in database:', locations);
+        }
+      }
       
       // Additional check: Remove any duplicate IDs that might have slipped through
       let uniqueData = data;
+      console.log('🔍 ManagerAutomaticLogs Processing data:', { 
+        hasData: !!data, 
+        dataLength: data?.length || 0,
+        dataType: typeof data,
+        isArray: Array.isArray(data)
+      });
+      
       if (data && data.length > 0) {
         const seenIds = new Set();
         uniqueData = data.filter((log: any) => {
@@ -77,6 +200,11 @@ export default function ManagerAutomaticLogs() {
         if (uniqueData.length !== data.length) {
           console.warn(`⚠️ Removed ${data.length - uniqueData.length} duplicate IDs from query result`);
         }
+        
+        console.log('🔍 ManagerAutomaticLogs Data after deduplication:', { 
+          originalLength: data.length, 
+          uniqueLength: uniqueData.length 
+        });
       }
       
       console.log('ManagerAutomaticLogs Supabase logs-auto data:', uniqueData);
@@ -146,19 +274,41 @@ export default function ManagerAutomaticLogs() {
       }
       
       if (!error && uniqueData) {
+        console.log('🔍 ManagerAutomaticLogs Setting logs state with data:', { 
+          dataLength: uniqueData.length, 
+          sampleData: uniqueData.slice(0, 2) 
+        });
         setLogs(uniqueData);
         console.log('ManagerAutomaticLogs logs state after setLogs:', uniqueData);
+        console.log('ManagerAutomaticLogs Final logs count:', uniqueData.length);
+      } else {
+        console.warn('ManagerAutomaticLogs No data or error:', { error, uniqueData });
+        console.log('🔍 ManagerAutomaticLogs Setting logs state to empty array');
+        setLogs([]);
       }
     } catch (error) {
       console.error('ManagerAutomaticLogs Error in fetchLogs:', error);
+      console.log('🔍 ManagerAutomaticLogs Error details:', {
+        errorType: typeof error,
+        errorMessage: error?.message,
+        errorStack: error?.stack
+      });
+      setLogs([]);
     } finally {
       setLoading(false);
-      setIsFetching(false);
+      console.log('ManagerAutomaticLogs Loading states reset:', { loading: false });
     }
-  }, [user?.assigned_location, selectedDate, isFetching]);
+  }, [user?.assigned_location, selectedDate]);
 
   useEffect(() => {
-    console.log("ManagerAutomaticLogs useEffect running. assignedLocation:", user?.assigned_location);
+    console.log("ManagerAutomaticLogs useEffect running:", {
+      assignedLocation: user?.assigned_location,
+      selectedDate,
+      hasUser: !!user,
+      userId: user?.id,
+      fetchLogsFunction: typeof fetchLogs
+    });
+    
     if (!user?.assigned_location) {
       console.log("No location assigned to manager for automatic logs");
       return;
@@ -170,6 +320,7 @@ export default function ManagerAutomaticLogs() {
       return;
     }
     
+    console.log("ManagerAutomaticLogs Calling fetchLogs...");
     fetchLogs();
   }, [user?.assigned_location, selectedDate, fetchLogs]);
 
@@ -210,7 +361,13 @@ export default function ManagerAutomaticLogs() {
   const clearDateFilter = () => {
     // Reset to today's date instead of clearing
     const today = new Date();
-    setSelectedDate(today.toISOString().split('T')[0]);
+    const newDate = today.toISOString().split('T')[0];
+    console.log('🔍 ManagerAutomaticLogs clearDateFilter called:', { 
+      oldDate: selectedDate, 
+      newDate,
+      todayISO: today.toISOString()
+    });
+    setSelectedDate(newDate);
   };
 
   // Check if no location is assigned
@@ -271,7 +428,14 @@ export default function ManagerAutomaticLogs() {
                   id="selectedDate"
                   type="date"
                   value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
+                  onChange={(e) => {
+                    console.log('🔍 ManagerAutomaticLogs Date input changed:', { 
+                      oldValue: selectedDate, 
+                      newValue: e.target.value,
+                      eventType: e.type
+                    });
+                    setSelectedDate(e.target.value);
+                  }}
                   className="w-full sm:w-48"
                 />
                 <Button
@@ -298,7 +462,7 @@ export default function ManagerAutomaticLogs() {
               </div>
               {selectedDate && (
                 <Badge variant="outline" className="sm:ml-2">
-                  {new Date(selectedDate).toLocaleDateString()}
+                  {new Date(selectedDate).toLocaleDateString()} ({selectedDate})
                 </Badge>
               )}
             </CardTitle>
