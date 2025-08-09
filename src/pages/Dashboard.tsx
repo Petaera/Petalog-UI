@@ -328,10 +328,10 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
         // Only count pending tickets from today
         let activeQuery = supabase
           .from('logs-man')
-          .select('id, location_id, created_at')
+          .select('id, location_id, entry_time, created_at')
           .eq('approval_status', 'pending')
-          .gte('created_at', startOfDay.toISOString())
-          .lt('created_at', endOfDay.toISOString());
+          .gte('entry_time', startOfDay.toISOString())
+          .lt('entry_time', endOfDay.toISOString());
         
         if (locationFilter) {
           console.log('📍 Applying location filter to active sessions:', locationFilter);
@@ -339,13 +339,38 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
         }
         
         const { data: activeData, error: activeError } = await activeQuery;
-        const activeSessions = activeData?.length || 0;
+        let activeSessions = activeData?.length || 0;
+        
+        // If no results with entry_time filter, try created_at as fallback
+        if (activeSessions === 0) {
+          console.log('🔄 No pending tickets found with entry_time filter, trying created_at fallback...');
+          let fallbackQuery = supabase
+            .from('logs-man')
+            .select('id, location_id')
+            .eq('approval_status', 'pending')
+            .gte('created_at', startOfDay.toISOString())
+            .lt('created_at', endOfDay.toISOString());
+          
+          if (locationFilter) {
+            fallbackQuery = fallbackQuery.eq('location_id', locationFilter);
+          }
+          
+          const { data: fallbackData, error: fallbackError } = await fallbackQuery;
+          activeSessions = fallbackData?.length || 0;
+          
+          console.log('🔄 Fallback query result:', {
+            error: fallbackError,
+            count: activeSessions,
+            sample: fallbackData?.slice(0, 3)
+          });
+        }
         
         console.log('🔄 Active sessions query result:');
         console.log('- Error:', activeError);
         console.log('- Active sessions count:', activeSessions);
         console.log('- Sample active data:', activeData?.slice(0, 3));
         console.log('- Date range for pending tickets:', startOfDay.toISOString(), 'to', endOfDay.toISOString());
+        console.log('- Filter method used:', activeSessions > 0 ? 'entry_time' : 'created_at (fallback)');
         
         setStats({
           totalVehiclesToday,
@@ -454,7 +479,7 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
           onClick={() => navigate('/manual-logs')}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Tickets</CardTitle>
+            <CardTitle className="text-sm font-medium">Pending Tickets Today</CardTitle>
             <Timer className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -462,7 +487,10 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
               {stats.loading ? "..." : stats.activeSessions}
             </div>
             <p className="text-xs text-muted-foreground">
-              Awaiting approval
+              Awaiting approval today
+              {locationFilterApplied && (
+                <span className="ml-1 text-blue-600">📍 Filtered</span>
+              )}
             </p>
           </CardContent>
         </Card>
