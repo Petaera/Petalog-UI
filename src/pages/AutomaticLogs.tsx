@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/lib/supabaseClient";
 
 interface AutomaticLogsProps {
@@ -13,21 +14,16 @@ interface AutomaticLogsProps {
 export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [selectedDate, setSelectedDate] = useState(() => {
+    // Set default date to today
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  });
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState("");
 
   console.log("AutomaticLogs component rendered. selectedLocation:", selectedLocation);
-
-  // Set default date to current day
-  useEffect(() => {
-    const today = new Date();
-    const todayString = today.toISOString().split('T')[0];
-    setStartDate(todayString);
-    setEndDate(todayString);
-  }, []);
 
   useEffect(() => {
     console.log("AutomaticLogs useEffect running. selectedLocation:", selectedLocation);
@@ -36,15 +32,15 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
       return;
     }
 
-    // Don't fetch if dates are not set yet
-    if (!startDate || !endDate) {
-      console.log("Dates not set yet, skipping fetch");
+    // Don't fetch if date is not set yet
+    if (!selectedDate) {
+      console.log("Date not set yet, skipping fetch");
       return;
     }
 
     setLoading(true);
     const fetchLogs = async () => {
-      console.log('🔍 Starting fetchLogs with:', { selectedLocation, startDate, endDate });
+      console.log('🔍 Starting fetchLogs with:', { selectedLocation, selectedDate });
 
       // Build query step by step to ensure proper filtering
       let query = supabase
@@ -55,19 +51,14 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
       query = query.eq("location_id", selectedLocation);
       console.log('🔍 Location filter applied:', { selectedLocation });
 
-      // Apply date filters if provided
-      if (startDate) {
-        const startDateTime = new Date(startDate);
-        startDateTime.setHours(0, 0, 0, 0);
-        query = query.gte("entry_time", startDateTime.toISOString());
-        console.log('🔍 Start date filter applied:', startDateTime.toISOString());
-      }
-
-      if (endDate) {
-        const endDateTime = new Date(endDate);
-        endDateTime.setHours(23, 59, 59, 999);
-        query = query.lte("entry_time", endDateTime.toISOString());
-        console.log('🔍 End date filter applied:', endDateTime.toISOString());
+      // Apply single date filter if provided
+      if (selectedDate) {
+        const startOfDay = `${selectedDate}T00:00:00.000Z`;
+        const endOfDay = `${selectedDate}T23:59:59.999Z`;
+        query = query
+          .gte("entry_time", startOfDay)
+          .lte("entry_time", endOfDay);
+        console.log('🔍 Date filter applied:', { startOfDay, endOfDay });
       }
 
       const { data, error } = await query.order("entry_time", { ascending: false });
@@ -94,7 +85,7 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
     };
 
     fetchLogs();
-  }, [selectedLocation, startDate, endDate]);
+  }, [selectedLocation, selectedDate]);
 
   function formatToDateTime(dateString) {
   const date = new Date(dateString);
@@ -149,6 +140,12 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
     }
   }, [isModalOpen]);
 
+  const clearDateFilter = () => {
+    // Reset to today's date instead of clearing
+    const today = new Date();
+    setSelectedDate(today.toISOString().split('T')[0]);
+  };
+
   // Check if no location is selected
   if (!selectedLocation) {
     return (
@@ -187,71 +184,53 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
         </div>
       </div>
 
-      {/* Date Filter */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="h-5 w-5 text-blue-500" />
-            <span>Date Filter</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="startDate" className="flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
-                Start Date
-              </Label>
-              <Input
-                id="startDate"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full"
-              />
+        {/* Date Filter */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-muted-foreground" />
+                <Label htmlFor="selectedDate" className="text-sm font-medium">
+                  Filter by Date:
+                </Label>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                  id="selectedDate"
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="w-full sm:w-48"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={clearDateFilter}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  Today
+                </Button>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="endDate" className="flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
-                End Date
-              </Label>
-              <Input
-                id="endDate"
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full"
-              />
-            </div>
-            <div className="flex items-end">
-              <Button
-                onClick={() => {
-                  const today = new Date();
-                  const todayString = today.toISOString().split('T')[0];
-                  setStartDate(todayString);
-                  setEndDate(todayString);
-                }}
-                variant="outline"
-                className="w-full"
-              >
-                Today
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Database className="h-5 w-5 text-blue-500" />
-            <span>Automatic Logs</span>
-            <span className="text-sm text-muted-foreground">({logs.length} entries)</span>
-          </CardTitle>
-
-        </CardHeader>
+        {/* Automatic Logs Table */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <div className="flex items-center gap-2">
+                <Database className="h-5 w-5 text-blue-500" />
+                <span>Automatic Logs</span>
+                <span className="text-sm text-muted-foreground">({logs.length} entries)</span>
+              </div>
+              {selectedDate && (
+                <Badge variant="outline" className="sm:ml-2">
+                  {new Date(selectedDate).toLocaleDateString()}
+                </Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
             <table className="min-w-full border">
@@ -271,7 +250,7 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
                   <tr><td colSpan={7} className="text-center py-4">Loading...</td></tr>
                 ) : logs.length === 0 ? (
                   <tr><td colSpan={7} className="text-center py-4">
-                    No logs found for this location.
+                    {selectedDate ? `No logs found for ${new Date(selectedDate).toLocaleDateString()}` : 'No logs found for this location.'}
                   </td></tr>
                 ) : (
                   logs.map((log, idx) => (
