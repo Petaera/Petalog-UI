@@ -325,10 +325,13 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
         console.log('- Revenue today:', revenueToday);
         
         // For active sessions, we'll use pending approval status as a proxy
+        // Only count pending tickets from today
         let activeQuery = supabase
           .from('logs-man')
-          .select('id, location_id')
-          .eq('approval_status', 'pending');
+          .select('id, location_id, created_at')
+          .eq('approval_status', 'pending')
+          .gte('created_at', startOfDay.toISOString())
+          .lt('created_at', endOfDay.toISOString());
         
         if (locationFilter) {
           console.log('📍 Applying location filter to active sessions:', locationFilter);
@@ -342,6 +345,7 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
         console.log('- Error:', activeError);
         console.log('- Active sessions count:', activeSessions);
         console.log('- Sample active data:', activeData?.slice(0, 3));
+        console.log('- Date range for pending tickets:', startOfDay.toISOString(), 'to', endOfDay.toISOString());
         
         setStats({
           totalVehiclesToday,
