@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, PenTool, Check, X, Clock, CheckCircle, Calendar, Edit } from "lucide-react";
+import { ArrowLeft, PenTool, Check, X, Clock, CheckCircle, Calendar, Edit, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -278,8 +278,31 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
     }
   };
 
+  const handleDelete = async (logId: string, tableName: 'logs-man' | 'logs-man-approved') => {
+    if (!confirm('Are you sure you want to delete this log? This action cannot be undone.')) {
+      return;
+    }
 
+    try {
+      const { error } = await supabase
+        .from(tableName)
+        .delete()
+        .eq('id', logId);
 
+      if (error) {
+        console.error('Error deleting log:', error);
+        toast.error('Failed to delete log');
+        return;
+      }
+
+      toast.success('Log deleted successfully');
+      // Refresh the logs
+      fetchLogs();
+    } catch (error) {
+      console.error('Error deleting log:', error);
+      toast.error('Failed to delete log');
+    }
+  };
 
 
   function getDuration(entry, exit) {
@@ -377,9 +400,9 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {loading ? (
-                        <tr><td colSpan={7} className="text-center py-4">Loading...</td></tr>
+                        <tr><td colSpan={8} className="text-center py-4">Loading...</td></tr>
                       ) : pendingLogs.length === 0 ? (
-                        <tr><td colSpan={7} className="text-center py-4 text-muted-foreground">
+                        <tr><td colSpan={8} className="text-center py-4 text-muted-foreground">
                           {selectedDate ? `No pending tickets found for ${new Date(selectedDate).toLocaleDateString()}` : 'No pending tickets'}
                         </td></tr>
                       ) : (
@@ -435,6 +458,15 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                                   <Edit className="h-3 w-3 mr-1" />
                                   Edit
                                 </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  className="text-xs"
+                                  onClick={() => handleDelete(log.id, 'logs-man')}
+                                  title="Delete log"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
                               </div>
                             </td>
                           </tr>
@@ -481,13 +513,14 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Exit Time</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Duration</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {loading ? (
-                        <tr><td colSpan={10} className="text-center py-4">Loading...</td></tr>
+                        <tr><td colSpan={11} className="text-center py-4">Loading...</td></tr>
                       ) : approvedLogs.length === 0 ? (
-                        <tr><td colSpan={10} className="text-center py-4 text-muted-foreground">
+                        <tr><td colSpan={11} className="text-center py-4 text-muted-foreground">
                           {selectedDate ? `No approved logs found for ${new Date(selectedDate).toLocaleDateString()}` : 'No approved logs found'}
                         </td></tr>
                       ) : (
@@ -528,6 +561,17 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                               <Badge className="bg-green-100 text-green-800 hover:bg-green-100 text-xs">
                                 Approved
                               </Badge>
+                            </td>
+                            <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => handleDelete(log.id, 'logs-man-approved')}
+                                className="text-xs"
+                                title="Delete log"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
                             </td>
                           </tr>
                         ))

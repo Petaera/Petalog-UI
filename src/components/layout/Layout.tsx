@@ -22,6 +22,18 @@ export function Layout({ children }: LayoutProps) {
   const [selectedLocation, setSelectedLocation] = useState<string>("");
   const { user } = useAuth();
 
+  // Debug selectedLocation changes
+  useEffect(() => {
+    console.log('🔍 Layout selectedLocation state changed:', {
+      selectedLocation,
+      hasLocation: !!selectedLocation,
+      locationType: typeof selectedLocation,
+      locationLength: selectedLocation?.length || 0,
+      userId: user?.id,
+      userRole: user?.role
+    });
+  }, [selectedLocation, user?.id, user?.role]);
+
   // Function to get stored location for current user
   const getStoredLocation = (userId: string) => {
     try {
@@ -114,7 +126,25 @@ export function Layout({ children }: LayoutProps) {
             onLocationChange={handleLocationChange}
           />
           <main className="flex-1 overflow-auto">
-            {React.isValidElement(children) && (children.type === Dashboard || children.type === AutomaticLogs || children.type === ManualLogs || children.type === OwnerEntry || children.type === Comparison || children.type === Reports || children.type === VehicleHistory)
+            {React.isValidElement(children) && (() => {
+              const childType = children.type;
+              const childTypeName = typeof childType === 'function' ? childType.name : 'string or other';
+              console.log('🔍 Layout component type check:', {
+                childType,
+                childTypeName,
+                isDashboard: childTypeName === 'Dashboard',
+                isAutomaticLogs: childTypeName === 'AutomaticLogs',
+                isManualLogs: childTypeName === 'ManualLogs',
+                isOwnerEntry: childTypeName === 'OwnerEntry',
+                isComparison: childTypeName === 'Comparison',
+                isReports: childTypeName === 'Reports',
+                isVehicleHistory: childTypeName === 'VehicleHistory',
+                selectedLocation,
+                hasLocation: !!selectedLocation
+              });
+              
+              return (childTypeName === 'Dashboard' || childTypeName === 'AutomaticLogs' || childTypeName === 'ManualLogs' || childTypeName === 'OwnerEntry' || childTypeName === 'Comparison' || childTypeName === 'Reports' || childTypeName === 'VehicleHistory');
+            })()
               ? React.cloneElement(children as React.ReactElement<any>, { selectedLocation })
               : children}
           </main>

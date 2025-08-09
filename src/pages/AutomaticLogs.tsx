@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { ArrowLeft, Database, X, Calendar, Filter } from "lucide-react";
+import { ArrowLeft, Database, X, Calendar, Filter, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,6 +37,16 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState("");
+
+  // Debug selectedLocation prop changes
+  useEffect(() => {
+    console.log('🔍 AutomaticLogs selectedLocation prop changed:', {
+      selectedLocation,
+      hasLocation: !!selectedLocation,
+      locationType: typeof selectedLocation,
+      locationLength: selectedLocation?.length || 0
+    });
+  }, [selectedLocation]);
 
   // Debug logs state changes
   useEffect(() => {
@@ -77,6 +87,14 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
       selectedLocation,
       selectedDate
     });
+
+    // Safety check - don't proceed without location
+    if (!selectedLocation) {
+      console.warn('⚠️ AutomaticLogs fetchLogs called without selectedLocation, aborting');
+      setLoading(false);
+      setLogs([]);
+      return;
+    }
 
     setLoading(true);
 
@@ -293,21 +311,25 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
     console.log("AutomaticLogs useEffect running:", {
       selectedLocation,
       selectedDate,
-      fetchLogsFunction: typeof fetchLogs
+      fetchLogsFunction: typeof fetchLogs,
+      hasLocation: !!selectedLocation,
+      locationType: typeof selectedLocation
     });
 
     if (!selectedLocation) {
-      console.log("No location selected for automatic logs");
+      console.log("🔍 AutomaticLogs No location selected, skipping fetch");
+      setLoading(false);
+      setLogs([]);
       return;
     }
 
     // Don't fetch if date is not set yet
     if (!selectedDate) {
-      console.log("Date not set yet, skipping fetch");
+      console.log("🔍 AutomaticLogs Date not set yet, skipping fetch");
       return;
     }
 
-    console.log("AutomaticLogs Calling fetchLogs...");
+    console.log("🔍 AutomaticLogs Calling fetchLogs with location:", selectedLocation);
     fetchLogs();
   }, [selectedLocation, selectedDate, fetchLogs]);
 
@@ -367,13 +389,33 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
   const clearDateFilter = () => {
     // Reset to today's date instead of clearing
     const today = new Date();
-    const newDate = today.toISOString().split('T')[0];
-    console.log('🔍 AutomaticLogs clearDateFilter called:', {
-      oldDate: selectedDate,
-      newDate,
-      todayISO: today.toISOString()
-    });
-    setSelectedDate(newDate);
+    setSelectedDate(today.toISOString().split('T')[0]);
+  };
+
+  const handleDelete = async (logId: string) => {
+    if (!confirm('Are you sure you want to delete this log? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('logs-auto')
+        .delete()
+        .eq('id', logId);
+
+      if (error) {
+        console.error('Error deleting log:', error);
+        toast.error('Failed to delete log');
+        return;
+      }
+
+      toast.success('Log deleted successfully');
+      // Refresh the logs
+      fetchLogs();
+    } catch (error) {
+      console.error('Error deleting log:', error);
+      toast.error('Failed to delete log');
+    }
   };
 
   // Check if no location is selected
@@ -480,13 +522,14 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
                   <th className="border px-4 py-2">Entry Image</th>
                   <th className="border px-4 py-2">Exit Image</th>
                   <th className="border px-4 py-2">Duration</th>
+                  <th className="border px-4 py-2">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={7} className="text-center py-4">Loading...</td></tr>
+                  <tr><td colSpan={8} className="text-center py-4">Loading...</td></tr>
                 ) : logs.length === 0 ? (
-                  <tr><td colSpan={7} className="text-center py-4">
+                  <tr><td colSpan={8} className="text-center py-4">
                     {selectedDate ? `No logs found for ${new Date(selectedDate).toLocaleDateString()}` : 'No logs found for this location.'}
                   </td></tr>
                 ) : (
@@ -531,6 +574,17 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
                         )}
                       </td>
                       <td className="border px-4 py-2">{getDuration(log.entry_time, log.exit_time)}</td>
+                      <td className="border px-4 py-2">
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleDelete(log.id)}
+                          className="text-xs"
+                          title="Delete log"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </td>
                     </tr>
                   ))
                 )}

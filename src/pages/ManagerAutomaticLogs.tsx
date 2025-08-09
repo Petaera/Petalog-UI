@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { Layout } from "@/components/layout/Layout";
-import { ArrowLeft, Database, X, Calendar, Filter } from "lucide-react";
+import { ArrowLeft, Database, X, Calendar, Filter, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from '@/contexts/AuthContext';
+import { toast } from "sonner";
 
 // Debug Supabase client
 console.log('🔍 ManagerAutomaticLogs Supabase client debug:', {
@@ -370,6 +371,32 @@ export default function ManagerAutomaticLogs() {
     setSelectedDate(newDate);
   };
 
+  const handleDelete = async (logId: string) => {
+    if (!confirm('Are you sure you want to delete this log? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('logs-auto')
+        .delete()
+        .eq('id', logId);
+
+      if (error) {
+        console.error('Error deleting log:', error);
+        toast.error('Failed to delete log');
+        return;
+      }
+
+      toast.success('Log deleted successfully');
+      // Refresh the logs
+      fetchLogs();
+    } catch (error) {
+      console.error('Error deleting log:', error);
+      toast.error('Failed to delete log');
+    }
+  };
+
   // Check if no location is assigned
   if (!user?.assigned_location) {
     return (
@@ -481,13 +508,14 @@ export default function ManagerAutomaticLogs() {
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entry Image</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Exit Image</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Duration</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {loading ? (
-                        <tr><td colSpan={7} className="text-center py-4">Loading...</td></tr>
+                        <tr><td colSpan={8} className="text-center py-4">Loading...</td></tr>
                       ) : logs.length === 0 ? (
-                        <tr><td colSpan={7} className="text-center py-4 text-muted-foreground">
+                        <tr><td colSpan={8} className="text-center py-4 text-muted-foreground">
                           {selectedDate ? `No automatic logs found for ${new Date(selectedDate).toLocaleDateString()}` : 'No automatic logs found for this location.'}
                         </td></tr>
                       ) : (
@@ -531,6 +559,17 @@ export default function ManagerAutomaticLogs() {
                             </td>
                             <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
                               {getDuration(log.entry_time, log.exit_time)}
+                            </td>
+                            <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => handleDelete(log.id)}
+                                className="text-xs"
+                                title="Delete log"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
                             </td>
                           </tr>
                         ))
