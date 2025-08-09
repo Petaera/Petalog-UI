@@ -58,6 +58,46 @@ export function useComparisonData({
           return acc;
         }, {});
         console.log('Log type counts:', logTypeCounts);
+        
+        // Additional debugging for common logs
+        if (logTypeCounts.common) {
+          const commonLogs = data.filter(log => log.log_type === 'common');
+          console.log('🔍 Common logs details:', commonLogs.map(log => ({
+            id: log.id,
+            vehicle_number: log.vehicle_number,
+            entry_time: log.entry_time,
+            created_at: log.created_at
+          })));
+          
+          // Check for potential duplicates in common logs
+          const vehicleNumbers = commonLogs.map(log => log.vehicle_number);
+          const uniqueVehicles = [...new Set(vehicleNumbers)];
+          console.log('🔍 Common logs - Total entries:', commonLogs.length);
+          console.log('🔍 Common logs - Unique vehicles:', uniqueVehicles.length);
+          
+          if (commonLogs.length !== uniqueVehicles.length) {
+            console.warn('⚠️ WARNING: Common logs have duplicate vehicles!');
+            const duplicateVehicles = vehicleNumbers.filter((v, i) => vehicleNumbers.indexOf(v) !== i);
+            console.warn('⚠️ Duplicate vehicles:', [...new Set(duplicateVehicles)]);
+          }
+          
+          // Additional timezone debugging
+          console.log('🔍 Timezone debugging for common logs:');
+          commonLogs.forEach((log, index) => {
+            const entryTime = new Date(log.entry_time);
+            const createdTime = new Date(log.created_at);
+            console.log(`  Entry ${index + 1}:`, {
+              vehicle: log.vehicle_number,
+              entry_time_iso: log.entry_time,
+              entry_time_local: entryTime.toLocaleString(),
+              entry_time_utc: entryTime.toUTCString(),
+              created_at_iso: log.created_at,
+              created_at_local: createdTime.toLocaleString(),
+              created_at_utc: createdTime.toUTCString(),
+              timezone_offset: entryTime.getTimezoneOffset()
+            });
+          });
+        }
       }
       
       setData(data || []);
@@ -77,6 +117,42 @@ export function useComparisonData({
       console.log(`Filtered data for ${selectedLogType}:`, result);
     }
 
+    // Additional timezone-based deduplication for common logs
+    if (selectedLogType === 'common' || selectedLogType === 'all') {
+      const commonLogs = result.filter(log => log.log_type === 'common');
+      if (commonLogs.length > 0) {
+        console.log('🔍 Applying timezone-based deduplication to common logs');
+        
+        // Group by vehicle number and normalize timestamps
+        const vehicleGroups = commonLogs.reduce((acc: any, log) => {
+          if (!acc[log.vehicle_number]) {
+            acc[log.vehicle_number] = [];
+          }
+          acc[log.vehicle_number].push(log);
+          return acc;
+        }, {});
+        
+        // For each vehicle, keep only the most recent entry
+        const deduplicatedCommonLogs = Object.values(vehicleGroups).map((logs: any) => {
+          if (logs.length === 1) return logs[0];
+          
+          // Sort by created_at and take the most recent
+          logs.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          console.log(`🔍 Vehicle ${logs[0].vehicle_number}: keeping most recent of ${logs.length} entries`);
+          return logs[0];
+        });
+        
+        // Replace common logs with deduplicated version
+        result = result.filter(log => log.log_type !== 'common');
+        result.push(...deduplicatedCommonLogs);
+        
+        console.log('🔍 After timezone deduplication:', {
+          original_common_count: commonLogs.length,
+          deduplicated_common_count: deduplicatedCommonLogs.length
+        });
+      }
+    }
+
     result.sort((a, b) => {
       const typePriority = { common: 0, automatic: 1, manual: 2 };
       const priorityA = typePriority[a.log_type as keyof typeof typePriority] ?? 3;
@@ -92,5 +168,5 @@ export function useComparisonData({
     return result;
   }, [data, selectedLogType]);
 
-  return { loading, data: filteredAndSortedData };
+  return { loading, data: filteredAndSortedData, refresh: fetchData };
 }
