@@ -23,6 +23,7 @@ import ManagerAccess from "./pages/ManagerAccess";
 import PriceSettings from "./pages/PriceSettings";
 import VehicleHistory from "./pages/VehicleHistory";
 import OwnerEntry from "./pages/OwnerEntry";
+import ManagerSettings from "./pages/ManagerSettings";
 
 // Manager pages
 import ManagerPortal from "./pages/ManagerPortal";
@@ -226,7 +227,43 @@ const App = () => (
                } 
              />
             
-            {/* Catch-all routes */}
+            <Route 
+              path="/manager-settings" 
+              element={
+                <ProtectedRoute requiredRole="owner">
+                  <ManagerSettings />
+                </ProtectedRoute>
+              } 
+            />
+            
+            <Route 
+              path="/manager-settings/staff" 
+              element={
+                <ProtectedRoute requiredRole="owner">
+                  <ManagerSettings />
+                </ProtectedRoute>
+              } 
+            />
+            
+                             <Route
+                   path="/manager-settings/daily-attendance"
+                   element={
+                     <ProtectedRoute requiredRole="owner">
+                       <ManagerSettings />
+                     </ProtectedRoute>
+                   }
+                 />
+                 
+                 <Route
+                   path="/manager-settings/expenses"
+                   element={
+                     <ProtectedRoute requiredRole="owner">
+                       <ManagerSettings />
+                     </ProtectedRoute>
+                   }
+                 />
+                 
+                 {/* Catch-all routes */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
