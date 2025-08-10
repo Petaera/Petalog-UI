@@ -29,14 +29,16 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
   console.log("ManualLogs component rendered. selectedLocation:", selectedLocation);
 
   useEffect(() => {
-    console.log("ManualLogs useEffect running. selectedLocation:", selectedLocation);
-    if (!selectedLocation) {
-      toast.error("No location selected");
+    console.log("ManualLogs useEffect running.", {
+      selectedLocation,
+      selectedDate,
+    });
+    // Wait until a valid location is available
+    if (!selectedLocation || selectedLocation.trim() === "") {
       return;
     }
-    
     fetchLogs();
-  }, []);
+  }, [selectedLocation, selectedDate]);
 
   const clearDateFilter = () => {
     // Reset to today's date instead of clearing
