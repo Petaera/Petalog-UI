@@ -179,26 +179,24 @@ export function Layout({ children }: LayoutProps) {
             onLocationChange={handleLocationChange}
           />
           <main className="flex-1 overflow-auto">
-            {React.isValidElement(children) && (() => {
-              const childType = children.type;
-              const childTypeName = typeof childType === 'function' ? childType.name : 'string or other';
-              console.log('🔍 Layout component type check:', {
-                childType,
-                childTypeName,
-                isDashboard: childTypeName === 'Dashboard',
-                isAutomaticLogs: childTypeName === 'AutomaticLogs',
-                isManualLogs: childTypeName === 'ManualLogs',
-                isOwnerEntry: childTypeName === 'OwnerEntry',
-                isComparison: childTypeName === 'Comparison',
-                isReports: childTypeName === 'Reports',
-                isVehicleHistory: childTypeName === 'VehicleHistory',
-                selectedLocation,
-                hasLocation: !!selectedLocation
-              });
-              
-              return (childTypeName === 'Dashboard' || childTypeName === 'AutomaticLogs' || childTypeName === 'ManualLogs' || childTypeName === 'OwnerEntry' || childTypeName === 'Comparison' || childTypeName === 'Reports' || childTypeName === 'VehicleHistory');
-            })()
-              ? React.cloneElement(children as React.ReactElement<any>, { selectedLocation })
+            {React.isValidElement(children)
+              ? (() => {
+                  // In production builds component names may be minified, so
+                  // checking by name is unreliable. Always pass selectedLocation
+                  // down to page components; components that don't use it will
+                  // simply ignore the prop.
+                  try {
+                    const cloned = React.cloneElement(children as React.ReactElement<any>, { selectedLocation });
+                    console.log('🔄 Passing selectedLocation to child via cloneElement', {
+                      hasLocation: !!selectedLocation,
+                      locationId: selectedLocation,
+                    });
+                    return cloned;
+                  } catch (e) {
+                    console.warn('⚠️ Failed to clone child element with selectedLocation. Rendering original child.', e);
+                    return children;
+                  }
+                })()
               : children}
           </main>
         </div>
