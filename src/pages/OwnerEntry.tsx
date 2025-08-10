@@ -239,6 +239,12 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
     if (t === '4' || t === '1') return '4';
     return '';
   };
+  const mapWheelCategoryToTypeCode = (wheelCat: string): string | null => {
+    if (wheelCat === 'other') return '3';
+    if (wheelCat === '2') return '2';
+    if (wheelCat === '4') return '4';
+    return null;
+  };
   const doesTypeMatchWheelCategory = (typeString: string | undefined | null, wheelCat: string): boolean => {
     const t = normalizeTypeString(typeString);
     if (!wheelCat) return true;
@@ -355,7 +361,8 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
     if (!isEditing) {
       setVehicleType('');
       setService([]);
-      setAmount('');
+      // For other, amount will be manual; keep as is
+      if (wheelCategory !== 'other') setAmount('');
     }
   }, [wheelCategory, priceMatrix, entryType, isEditing]);
 
@@ -411,6 +418,11 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         setSelectedModel(logData.selectedModel || '');
         setSelectedModelId(logData.selectedModelId || '');
         setWorkshop(logData.workshop || '');
+        // If incoming edit data contains wheel_type, apply it first
+        if (logData.wheel_type) {
+          const derivedFromLog = mapTypeToWheelCategory(normalizeTypeString(logData.wheel_type));
+          if (derivedFromLog) setWheelCategory(derivedFromLog);
+        }
 
         // Derive wheeler from Vehicles_in_india type if possible
         try {
@@ -515,6 +527,10 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
   
   // Calculate amount based on entry type and selections
   useEffect(() => {
+    // If category is Other, allow manual amount entry and skip auto-calculation
+    if (wheelCategory === 'other') {
+      return;
+    }
     if (entryType === 'customer' && vehicleType && service.length > 0) {
       // Try to use priceMatrix if available, else fallback
       let total = 0;
@@ -544,7 +560,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
     } else {
       setAmount('');
     }
-  }, [entryType, vehicleType, service, workshop, priceMatrix, workshopPriceMatrix]);
+  }, [entryType, vehicleType, service, workshop, priceMatrix, workshopPriceMatrix, wheelCategory]);
 
   // Mock data for previous visits
   const previousVisits = vehicleNumber ? Math.floor(Math.random() * 5) + 1 : 0;
@@ -638,6 +654,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
             service: service.join(','), // Store as comma-separated string
             vehicle_type: vehicleType,
             workshop: entryType === 'workshop' ? workshop : null,
+            wheel_type: mapWheelCategoryToTypeCode(wheelCategory),
             // Customer details
             Name: trimmedCustomerName || null,
             Phone_no: phoneNumber || null,
@@ -674,6 +691,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
             service: service.join(','), // Store as comma-separated string
             vehicle_type: vehicleType,
             workshop: entryType === 'workshop' ? workshop : null,
+            wheel_type: mapWheelCategoryToTypeCode(wheelCategory),
             // Customer details
             Name: trimmedCustomerName || null,
             Phone_no: phoneNumber || null,
@@ -762,14 +780,14 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="wheelCategory">Wheeler</Label>
+                <Label htmlFor="wheelCategory">Category</Label>
                 <Select value={wheelCategory} onValueChange={setWheelCategory}>
                   <SelectTrigger id="wheelCategory">
-                    <SelectValue placeholder="2 / 4 / Other" />
+                    <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="2">2</SelectItem>
-                    <SelectItem value="4">4</SelectItem>
+                    <SelectItem value="2">2 Wheeler</SelectItem>
+                    <SelectItem value="4">4 Wheeler</SelectItem>
                     <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
                 </Select>
@@ -851,7 +869,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                   <ReactSelect
                     isClearable
                     isSearchable
-                    placeholder={wheelCategory ? "Type to search vehicle brand..." : "Select wheeler first"}
+                    placeholder={wheelCategory ? "Type to search vehicle brand..." : "Select category first"}
                     options={(wheelCategory ? availableVehicleBrands : []).map(brand => ({ value: brand, label: brand }))}
                     value={selectedVehicleBrand ? { value: selectedVehicleBrand, label: selectedVehicleBrand } : null}
                     onChange={(selected) => setSelectedVehicleBrand(selected?.value || '')}
@@ -865,7 +883,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                   <ReactSelect
                     isClearable
                     isSearchable
-                    placeholder={selectedVehicleBrand ? "Type to search vehicle model..." : (wheelCategory ? "Select vehicle brand first" : "Select wheeler first")}
+                    placeholder={selectedVehicleBrand ? "Type to search vehicle model..." : (wheelCategory ? "Select vehicle brand first" : "Select category first")}
                     options={availableModels.map(model => ({ value: model.name, label: model.name }))}
                     value={selectedModel ? { value: selectedModel, label: selectedModel } : null}
                     onChange={(selected) => {
@@ -890,7 +908,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                   <Label htmlFor="vehicleType">Vehicle Type</Label>
                   <Select value={vehicleType} onValueChange={setVehicleType} disabled={!wheelCategory}>
                     <SelectTrigger>
-                      <SelectValue placeholder={wheelCategory ? "Select vehicle type" : "Select wheeler first"} />
+                      <SelectValue placeholder={wheelCategory ? "Select vehicle type" : "Select category first"} />
                     </SelectTrigger>
                     <SelectContent>
                       {sortVehicleTypesWithPriority(vehicleTypes).map(type => (
@@ -919,7 +937,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                       label: option
                     }))}
                     onChange={(selected) => setService(Array.isArray(selected) ? selected.map((s: any) => s.value) : [])}
-                    placeholder={vehicleType ? "Select services" : (wheelCategory ? "Select vehicle type first" : "Select wheeler first")}
+                    placeholder={vehicleType ? "Select services" : (wheelCategory ? "Select vehicle type first" : "Select category first")}
                     classNamePrefix="react-select"
                     isDisabled={!wheelCategory || !vehicleType}
                     onMenuOpen={() => {
@@ -983,7 +1001,8 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                     id="amount" 
                     value={amount ? `₹${amount}` : ''} 
                     className="font-semibold text-financial"
-                    readOnly
+                    readOnly={wheelCategory !== 'other'}
+                    placeholder={wheelCategory === 'other' ? 'Enter amount' : ''}
                     onChange={(e) => setAmount(e.target.value.replace('₹', ''))}
                   />
                 </div>

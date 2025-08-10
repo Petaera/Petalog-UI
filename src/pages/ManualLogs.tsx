@@ -66,6 +66,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
       selectedModel: log.vehicle_model || '',
       selectedModelId: log.Brand_id || '',
       workshop: log.workshop || '',
+        wheel_type: log.wheel_type || '',
       isEditing: true
     };
     
