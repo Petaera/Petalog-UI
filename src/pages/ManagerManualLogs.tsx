@@ -63,6 +63,7 @@ export default function ManagerManualLogs() {
       selectedModel: log.vehicle_model || '',
       selectedModelId: log.Brand_id || '',
       workshop: log.workshop || '',
+      wheel_type: log.wheel_type || null,
       isEditing: true
     };
     

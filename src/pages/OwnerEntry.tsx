@@ -814,51 +814,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
               )}
             </div>
 
-            {/* Customer Details */}
-            <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
-              <Label className="text-base font-semibold">Customer Details</Label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="customerName">Customer Name (Optional)</Label>
-                  <Input 
-                    id="customerName"
-                    placeholder="Enter customer name" 
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phoneNumber">Phone Number (Optional)</Label>
-                  <Input 
-                    id="phoneNumber"
-                    placeholder="Enter phone number" 
-                    type="tel"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="dateOfBirth">Date of Birth (Optional)</Label>
-                  <Input 
-                    id="dateOfBirth"
-                    type="date"
-                    value={dateOfBirth}
-                    onChange={(e) => setDateOfBirth(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <LocationAutocomplete
-                    value={customerLocation}
-                    onChange={setCustomerLocation}
-                    placeholder="Type to search location..."
-                    label="Location (Optional)"
-                    id="customerLocation"
-                  />
-                </div>
-              </div>
-            </div>
+            
 
             {/* Vehicle Brand and Model */}
             <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
@@ -1015,6 +971,52 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                     value={discount}
                     onChange={(e) => setDiscount(e.target.value)}
                   />
+                </div>
+              </div>
+
+              {/* Customer Details - moved just above payment method */}
+              <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
+                <Label className="text-base font-semibold">Customer Details</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="customerName">Customer Name (Optional)</Label>
+                    <Input 
+                      id="customerName"
+                      placeholder="Enter customer name" 
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="phoneNumber">Phone Number (Optional)</Label>
+                    <Input 
+                      id="phoneNumber"
+                      placeholder="Enter phone number" 
+                      type="tel"
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="dateOfBirth">Date of Birth (Optional)</Label>
+                    <Input 
+                      id="dateOfBirth"
+                      type="date"
+                      value={dateOfBirth}
+                      onChange={(e) => setDateOfBirth(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <LocationAutocomplete
+                      value={customerLocation}
+                      onChange={setCustomerLocation}
+                      placeholder="Type to search location..."
+                      label="Location (Optional)"
+                      id="customerLocation"
+                    />
+                  </div>
                 </div>
               </div>
 

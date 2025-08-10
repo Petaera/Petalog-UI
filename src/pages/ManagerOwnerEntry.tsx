@@ -142,6 +142,8 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
   const [workshop, setWorkshop] = useState('');
   const [workshopOptions, setWorkshopOptions] = useState<string[]>([]);
   const [workshopPriceMatrix, setWorkshopPriceMatrix] = useState<any[]>([]);
+  // 2/4/Other selector next to entry type
+  const [wheelCategory, setWheelCategory] = useState<string>('');
   
   // Customer details
   const [customerName, setCustomerName] = useState('');
@@ -173,7 +175,12 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
       try {
         const logData = JSON.parse(editData);
         console.log('Edit data found:', logData);
-        
+        // Apply wheel category first if present
+        if (logData.wheel_type) {
+          const derivedFromLog = mapTypeToWheelCategory(normalizeTypeString(logData.wheel_type));
+          if (derivedFromLog) setWheelCategory(derivedFromLog);
+        }
+
         // Pre-fill form fields with edit data
         setVehicleNumber(logData.vehicleNumber || '');
         setVehicleType(logData.vehicleType || '');
@@ -215,7 +222,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
       // Fetch all fields including id for Brand_id mapping
       let result = await supabase
         .from('Vehicles_in_india')
-        .select('id, "Vehicle Brands", "Models"');
+        .select('id, "Vehicle Brands", "Models", type');
       
       console.log('Vehicles_in_india result:', result);
       
@@ -235,11 +242,9 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
         console.log('Vehicle brands and models data:', data);
         console.log('Available fields:', Object.keys(data[0]));
         
-        // Use the correct field names from Vehicles_in_india table
+        // Defer brand list population until wheel category is chosen
         if (data[0].hasOwnProperty('Vehicle Brands')) {
-          const uniqueBrands = [...new Set(data.map(item => item['Vehicle Brands']))].filter(Boolean) as string[];
-          console.log('Unique vehicle brands found:', uniqueBrands);
-          setAvailableVehicleBrands(uniqueBrands);
+          setAvailableVehicleBrands([]);
         } else {
           console.warn('Vehicle Brands field not found in data');
         }
@@ -250,22 +255,86 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
     fetchVehicleData();
   }, []);
 
-  // Update available models when vehicle brand changes
+  // Helpers to map/compare wheel category to table type
+  const normalizeTypeString = (value: any): string => String(value ?? '').trim();
+  const mapTypeToWheelCategory = (typeString: string): string => {
+    const t = normalizeTypeString(typeString);
+    if (t === '3') return 'other';
+    if (t === '2') return '2';
+    if (t === '4' || t === '1') return '4';
+    return '';
+  };
+  const mapWheelCategoryToTypeCode = (wheelCat: string): string | null => {
+    if (wheelCat === 'other') return '3';
+    if (wheelCat === '2') return '2';
+    if (wheelCat === '4') return '4';
+    return null;
+  };
+  const doesTypeMatchWheelCategory = (typeString: string | undefined | null, wheelCat: string): boolean => {
+    const t = normalizeTypeString(typeString);
+    if (!wheelCat) return true;
+    if (wheelCat === 'other') return t === '3';
+    if (wheelCat === '2') return t === '2';
+    if (wheelCat === '4') return t === '4' || t === '1';
+    return false;
+  };
+
+  // Update available brands when wheel category changes
+  useEffect(() => {
+    if (vehicleData.length === 0) {
+      setAvailableVehicleBrands([]);
+      return;
+    }
+
+    if (!wheelCategory) {
+      setAvailableVehicleBrands([]);
+      return;
+    }
+
+    const filteredBrands = vehicleData
+      .filter(item => {
+        const typeStr = normalizeTypeString((item as any).type);
+        if (wheelCategory === 'other') return typeStr === '3';
+        if (wheelCategory === '2') return typeStr === '2';
+        if (wheelCategory === '4') return typeStr === '4' || typeStr === '1';
+        return false;
+      })
+      .map(item => item['Vehicle Brands'])
+      .filter(Boolean);
+
+    const uniqueBrands = [...new Set(filteredBrands)] as string[];
+    setAvailableVehicleBrands(uniqueBrands);
+
+    // Reset selections when wheel category changes (only if not editing)
+    if (!isEditing) {
+      setSelectedVehicleBrand('');
+      setSelectedModel('');
+      setSelectedModelId('');
+    }
+  }, [wheelCategory, vehicleData, isEditing]);
+
+  // Update available models when vehicle brand changes (respecting wheeler)
   useEffect(() => {
     if (selectedVehicleBrand && vehicleData.length > 0) {
       console.log('Filtering models for vehicle brand:', selectedVehicleBrand);
       
-      // Use the correct field names from Vehicles_in_india table
       if (vehicleData[0]?.hasOwnProperty('Vehicle Brands') && vehicleData[0]?.hasOwnProperty('Models')) {
         const modelsForBrand = vehicleData
           .filter(item => item['Vehicle Brands'] === selectedVehicleBrand)
+          .filter(item => {
+            if (!wheelCategory) return true;
+            const typeStr = normalizeTypeString((item as any).type);
+            if (wheelCategory === 'other') return typeStr === '3';
+            if (wheelCategory === '2') return typeStr === '2';
+            if (wheelCategory === '4') return typeStr === '4' || typeStr === '1';
+            return true;
+          })
           .map(item => ({
             name: item['Models'],
             id: item.id
           }))
-          .filter(item => item.name); // Filter out empty models
+          .filter(item => item.name);
         
-        // Remove duplicates based on model name but keep the id
         const uniqueModels = modelsForBrand.filter((model, index, arr) => 
           arr.findIndex(m => m.name === model.name) === index
         );
@@ -276,14 +345,36 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
         console.warn('Vehicle Brands or Models field not found in data');
         setAvailableModels([]);
       }
-      setSelectedModel(''); // Reset model when brand changes
-      setSelectedModelId(''); // Reset model ID when brand changes
+      if (!isEditing) {
+        setSelectedModel('');
+        setSelectedModelId('');
+      }
     } else {
       setAvailableModels([]);
-      setSelectedModel('');
-      setSelectedModelId('');
+      if (!isEditing) {
+        setSelectedModel('');
+        setSelectedModelId('');
+      }
     }
-  }, [selectedVehicleBrand, vehicleData]);
+  }, [selectedVehicleBrand, vehicleData, isEditing, wheelCategory]);
+
+  // Derive wheel category from selected brand/model if not set
+  useEffect(() => {
+    try {
+      if (vehicleData.length > 0 && selectedVehicleBrand && selectedModel) {
+        const matching = vehicleData.find(item =>
+          item['Vehicle Brands'] === selectedVehicleBrand &&
+          item['Models'] === selectedModel
+        );
+        if (matching && (matching as any).type != null) {
+          const derived = mapTypeToWheelCategory(normalizeTypeString((matching as any).type));
+          if (derived) setWheelCategory(derived);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to derive wheeler from vehicle data:', e);
+    }
+  }, [vehicleData.length, selectedVehicleBrand, selectedModel]);
 
   useEffect(() => {
     const fetchServicePrices = async () => {
@@ -322,15 +413,47 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
     setAmount('');
 
     if (entryType === 'customer') {
-      const uniqueVehicles = [...new Set(priceMatrix.map(row => row.VEHICLE && row.VEHICLE.trim()).filter(Boolean))];
-      const uniqueServices = [...new Set(priceMatrix.map(row => row.SERVICE && row.SERVICE.trim()).filter(Boolean))];
-      setVehicleTypes(uniqueVehicles);
-      setServiceOptions(uniqueServices);
+      if (wheelCategory) {
+        const filteredRows = priceMatrix.filter(row => doesTypeMatchWheelCategory((row as any).type, wheelCategory));
+        const uniqueVehicles = [...new Set(filteredRows.map(row => row.VEHICLE && row.VEHICLE.trim()).filter(Boolean))];
+        const uniqueServices = [...new Set(filteredRows.map(row => row.SERVICE && row.SERVICE.trim()).filter(Boolean))];
+        setVehicleTypes(uniqueVehicles);
+        setServiceOptions(uniqueServices);
+      } else {
+        setVehicleTypes([]);
+        setServiceOptions([]);
+      }
     } else { 
       setVehicleTypes([]);
       setServiceOptions([]);
     }
-  }, [entryType, priceMatrix]);
+  }, [entryType, priceMatrix, wheelCategory]);
+
+  // Recompute vehicle types/services for customer flow when wheel category changes
+  useEffect(() => {
+    if (entryType !== 'customer') return;
+    if (!wheelCategory) {
+      setVehicleTypes([]);
+      setServiceOptions([]);
+      if (!isEditing) {
+        setVehicleType('');
+        setService([]);
+      }
+      return;
+    }
+
+    const filteredRows = priceMatrix.filter(row => doesTypeMatchWheelCategory((row as any).type, wheelCategory));
+    const uniqueVehicles = [...new Set(filteredRows.map(row => row.VEHICLE && row.VEHICLE.trim()).filter(Boolean))];
+    const uniqueServices = [...new Set(filteredRows.map(row => row.SERVICE && row.SERVICE.trim()).filter(Boolean))];
+    setVehicleTypes(uniqueVehicles);
+    setServiceOptions(uniqueServices);
+
+    if (!isEditing) {
+      setVehicleType('');
+      setService([]);
+      if (wheelCategory !== 'other') setAmount('');
+    }
+  }, [wheelCategory, priceMatrix, entryType, isEditing]);
 
   // When workshop changes, update vehicle types
   useEffect(() => {
@@ -347,6 +470,10 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
   
   // Calculate amount based on entry type and selections
   useEffect(() => {
+    // If category is Other, allow manual amount entry and skip auto-calculation
+    if (wheelCategory === 'other') {
+      return;
+    }
     if (entryType === 'customer' && vehicleType && service.length > 0) {
       // Try to use priceMatrix if available, else fallback
       let total = 0;
@@ -376,7 +503,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
     } else {
       setAmount('');
     }
-  }, [entryType, vehicleType, service, workshop, priceMatrix, workshopPriceMatrix]);
+  }, [entryType, vehicleType, service, workshop, priceMatrix, workshopPriceMatrix, wheelCategory]);
 
   // Timer effect to re-enable submit button after 5 seconds
   useEffect(() => {
@@ -473,6 +600,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
             service: service.join(','), // Store as comma-separated string
             vehicle_type: vehicleType,
             workshop: entryType === 'workshop' ? workshop : null,
+            wheel_type: mapWheelCategoryToTypeCode(wheelCategory),
             // Customer details
             Name: trimmedCustomerName || null,
             Phone_no: phoneNumber || null,
@@ -505,6 +633,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
             service: service.join(','), // Store as comma-separated string
             vehicle_type: vehicleType,
             workshop: entryType === 'workshop' ? workshop : null,
+            wheel_type: mapWheelCategoryToTypeCode(wheelCategory),
             // Customer details
             Name: trimmedCustomerName || null,
             Phone_no: phoneNumber || null,
@@ -581,6 +710,19 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                     </Button>
                   </div>
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="wheelCategory">Category</Label>
+                  <Select value={wheelCategory} onValueChange={setWheelCategory}>
+                    <SelectTrigger id="wheelCategory">
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="2">2 Wheeler</SelectItem>
+                      <SelectItem value="4">4 Wheeler</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               {/* Vehicle Number */}
               <div className="space-y-2">
@@ -602,51 +744,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                 )}
               </div>
 
-              {/* Customer Details */}
-              <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
-                <Label className="text-base font-semibold">Customer Details</Label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="customerName">Customer Name (Optional)</Label>
-                    <Input 
-                      id="customerName"
-                      placeholder="Enter customer name" 
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phoneNumber">Phone Number (Optional)</Label>
-                    <Input 
-                      id="phoneNumber"
-                      placeholder="Enter phone number" 
-                      type="tel"
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="dateOfBirth">Date of Birth (Optional)</Label>
-                    <Input 
-                      id="dateOfBirth"
-                      type="date"
-                      value={dateOfBirth}
-                      onChange={(e) => setDateOfBirth(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <LocationAutocomplete
-                      value={customerLocation}
-                      onChange={setCustomerLocation}
-                      placeholder="Type to search location..."
-                      label="Location (Optional)"
-                      id="customerLocation"
-                    />
-                  </div>
-                </div>
-              </div>
+              
 
               {/* Vehicle Brand and Model */}
               <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
@@ -657,12 +755,13 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                     <ReactSelect
                       isClearable
                       isSearchable
-                      placeholder="Type to search vehicle brand..."
-                      options={availableVehicleBrands.map(brand => ({ value: brand, label: brand }))}
+                      placeholder={wheelCategory ? "Type to search vehicle brand..." : "Select category first"}
+                      options={(wheelCategory ? availableVehicleBrands : []).map(brand => ({ value: brand, label: brand }))}
                       value={selectedVehicleBrand ? { value: selectedVehicleBrand, label: selectedVehicleBrand } : null}
                       onChange={(selected) => setSelectedVehicleBrand(selected?.value || '')}
                       classNamePrefix="react-select"
                       noOptionsMessage={() => "No brands found"}
+                      isDisabled={!wheelCategory}
                     />
                   </div>
                   <div className="space-y-2">
@@ -670,7 +769,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                     <ReactSelect
                       isClearable
                       isSearchable
-                      placeholder={selectedVehicleBrand ? "Type to search vehicle model..." : "Select vehicle brand first"}
+                      placeholder={selectedVehicleBrand ? "Type to search vehicle model..." : (wheelCategory ? "Select vehicle brand first" : "Select category first")}
                       options={availableModels.map(model => ({ value: model.name, label: model.name }))}
                       value={selectedModel ? { value: selectedModel, label: selectedModel } : null}
                       onChange={(selected) => {
@@ -680,7 +779,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                         setSelectedModelId(modelObj?.id || '');
                       }}
                       classNamePrefix="react-select"
-                      isDisabled={!selectedVehicleBrand}
+                      isDisabled={!wheelCategory || !selectedVehicleBrand}
                       noOptionsMessage={() => "No models found"}
                     />
                   </div>
@@ -692,9 +791,9 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                   <>
                     <div className="space-y-2">
                       <Label htmlFor="vehicleType">Vehicle Type</Label>
-                      <Select value={vehicleType} onValueChange={setVehicleType}>
+                      <Select value={vehicleType} onValueChange={setVehicleType} disabled={!wheelCategory}>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select vehicle type" />
+                          <SelectValue placeholder={wheelCategory ? "Select vehicle type" : "Select category first"} />
                         </SelectTrigger>
                         <SelectContent>
                           {sortVehicleTypesWithPriority(vehicleTypes).map(type => (
@@ -713,6 +812,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                             ? sortServicesWithPriority(
                                 priceMatrix
                                   .filter(row => row.VEHICLE && row.VEHICLE.trim() === vehicleType.trim())
+                                  .filter(row => doesTypeMatchWheelCategory((row as any).type, wheelCategory))
                                   .map(row => row.SERVICE)
                                   .filter((v, i, arr) => v && arr.indexOf(v) === i)
                               ).map(option => ({ value: option, label: option }))
@@ -723,9 +823,9 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                           label: option
                         }))}
                         onChange={(selected) => setService(Array.isArray(selected) ? selected.map((s: any) => s.value) : [])}
-                        placeholder={vehicleType ? "Select services" : "Select vehicle type first"}
+                        placeholder={vehicleType ? "Select services" : (wheelCategory ? "Select vehicle type first" : "Select category first")}
                         classNamePrefix="react-select"
-                        isDisabled={!vehicleType}
+                        isDisabled={!wheelCategory || !vehicleType}
                       />
                     </div>
                   </>
@@ -770,7 +870,8 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                     id="amount" 
                     value={amount ? `₹${amount}` : ''} 
                     className="font-semibold text-financial"
-                    readOnly
+                    readOnly={wheelCategory !== 'other'}
+                    placeholder={wheelCategory === 'other' ? 'Enter amount' : ''}
                     onChange={(e) => setAmount(e.target.value.replace('₹', ''))}
                   />
                 </div>
@@ -783,6 +884,52 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                     value={discount}
                     onChange={(e) => setDiscount(e.target.value)}
                   />
+                </div>
+              </div>
+
+              {/* Customer Details - moved just above payment method */}
+              <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
+                <Label className="text-base font-semibold">Customer Details</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="customerName">Customer Name (Optional)</Label>
+                    <Input 
+                      id="customerName"
+                      placeholder="Enter customer name" 
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="phoneNumber">Phone Number (Optional)</Label>
+                    <Input 
+                      id="phoneNumber"
+                      placeholder="Enter phone number" 
+                      type="tel"
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="dateOfBirth">Date of Birth (Optional)</Label>
+                    <Input 
+                      id="dateOfBirth"
+                      type="date"
+                      value={dateOfBirth}
+                      onChange={(e) => setDateOfBirth(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <LocationAutocomplete
+                      value={customerLocation}
+                      onChange={setCustomerLocation}
+                      placeholder="Type to search location..."
+                      label="Location (Optional)"
+                      id="customerLocation"
+                    />
+                  </div>
                 </div>
               </div>
 
