@@ -358,7 +358,7 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
       toast.error('Failed to delete log');
     }
   };
-
+  console.log(selectedLocation)
   // Check if no location is selected
   if (!selectedLocation) {
     return (

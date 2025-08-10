@@ -141,6 +141,8 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
   const [workshop, setWorkshop] = useState('');
   const [workshopOptions, setWorkshopOptions] = useState<string[]>([]);
   const [workshopPriceMatrix, setWorkshopPriceMatrix] = useState<any[]>([]);
+  // 2/4/Other selector next to entry type
+  const [wheelCategory, setWheelCategory] = useState<string>('');
   
   // Customer details
   const [customerName, setCustomerName] = useState('');
@@ -194,7 +196,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       // Fetch all fields including id for Brand_id mapping
       let result = await supabase
         .from('Vehicles_in_india')
-        .select('id, "Vehicle Brands", "Models"');
+        .select('id, "Vehicle Brands", "Models", type');
       
       console.log('Vehicles_in_india result:', result);
       
@@ -216,9 +218,8 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         
         // Use the correct field names from Vehicles_in_india table
         if (data[0].hasOwnProperty('Vehicle Brands')) {
-          const uniqueBrands = [...new Set(data.map(item => item['Vehicle Brands']))].filter(Boolean) as string[];
-          console.log('Unique vehicle brands found:', uniqueBrands);
-          setAvailableVehicleBrands(uniqueBrands);
+          // Defer brand list until wheeler is selected; keep full dataset in state
+          setAvailableVehicleBrands([]);
         } else {
           console.warn('Vehicle Brands field not found in data');
         }
@@ -229,7 +230,60 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
     fetchVehicleData();
   }, []);
 
-  // Update available models when vehicle brand changes
+  // Helpers to map/compare wheel category to table type
+  const normalizeTypeString = (value: any): string => String(value ?? '').trim();
+  const mapTypeToWheelCategory = (typeString: string): string => {
+    const t = normalizeTypeString(typeString);
+    if (t === '3') return 'other';
+    if (t === '2') return '2';
+    if (t === '4' || t === '1') return '4';
+    return '';
+  };
+  const doesTypeMatchWheelCategory = (typeString: string | undefined | null, wheelCat: string): boolean => {
+    const t = normalizeTypeString(typeString);
+    if (!wheelCat) return true;
+    if (wheelCat === 'other') return t === '3';
+    if (wheelCat === '2') return t === '2';
+    if (wheelCat === '4') return t === '4' || t === '1';
+    return false;
+  };
+
+  // Update available brands when wheel category changes
+  useEffect(() => {
+    if (vehicleData.length === 0) {
+      setAvailableVehicleBrands([]);
+      return;
+    }
+
+    if (!wheelCategory) {
+      // Until a wheeler is chosen, keep brands empty (except edit mode will set via effect below)
+      setAvailableVehicleBrands([]);
+      return;
+    }
+
+    const filteredBrands = vehicleData
+      .filter(item => {
+        const typeStr = normalizeTypeString((item as any).type);
+        if (wheelCategory === 'other') return typeStr === '3';
+        if (wheelCategory === '2') return typeStr === '2';
+        if (wheelCategory === '4') return typeStr === '4' || typeStr === '1';
+        return false;
+      })
+      .map(item => item['Vehicle Brands'])
+      .filter(Boolean);
+
+    const uniqueBrands = [...new Set(filteredBrands)] as string[];
+    setAvailableVehicleBrands(uniqueBrands);
+
+    // Reset selections when wheel category changes (only if not editing)
+    if (!isEditing) {
+      setSelectedVehicleBrand('');
+      setSelectedModel('');
+      setSelectedModelId('');
+    }
+  }, [wheelCategory, vehicleData, isEditing]);
+
+  // Update available models when vehicle brand changes (respecting wheeler)
   useEffect(() => {
     if (selectedVehicleBrand && vehicleData.length > 0) {
       console.log('Filtering models for vehicle brand:', selectedVehicleBrand);
@@ -238,6 +292,14 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       if (vehicleData[0]?.hasOwnProperty('Vehicle Brands') && vehicleData[0]?.hasOwnProperty('Models')) {
         const modelsForBrand = vehicleData
           .filter(item => item['Vehicle Brands'] === selectedVehicleBrand)
+          .filter(item => {
+            if (!wheelCategory) return true;
+            const typeStr = normalizeTypeString((item as any).type);
+            if (wheelCategory === 'other') return typeStr === '3';
+            if (wheelCategory === '2') return typeStr === '2';
+            if (wheelCategory === '4') return typeStr === '4' || typeStr === '1';
+            return true;
+          })
           .map(item => ({
             name: item['Models'],
             id: item.id
@@ -269,6 +331,33 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       }
     }
   }, [selectedVehicleBrand, vehicleData, isEditing]);
+
+  // Recompute vehicle types/services for customer flow when wheel category changes
+  useEffect(() => {
+    if (entryType !== 'customer') return;
+    if (!wheelCategory) {
+      // Require wheeler selection first
+      setVehicleTypes([]);
+      setServiceOptions([]);
+      if (!isEditing) {
+        setVehicleType('');
+        setService([]);
+      }
+      return;
+    }
+
+    const filteredRows = priceMatrix.filter(row => doesTypeMatchWheelCategory((row as any).type, wheelCategory));
+    const uniqueVehicles = [...new Set(filteredRows.map(row => row.VEHICLE && row.VEHICLE.trim()).filter(Boolean))];
+    const uniqueServices = [...new Set(filteredRows.map(row => row.SERVICE && row.SERVICE.trim()).filter(Boolean))];
+    setVehicleTypes(uniqueVehicles);
+    setServiceOptions(uniqueServices);
+
+    if (!isEditing) {
+      setVehicleType('');
+      setService([]);
+      setAmount('');
+    }
+  }, [wheelCategory, priceMatrix, entryType, isEditing]);
 
   useEffect(() => {
     const fetchServicePrices = async () => {
@@ -322,10 +411,24 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         setSelectedModel(logData.selectedModel || '');
         setSelectedModelId(logData.selectedModelId || '');
         setWorkshop(logData.workshop || '');
+
+        // Derive wheeler from Vehicles_in_india type if possible
+        try {
+          const matching = vehicleData.find(item =>
+            item['Vehicle Brands'] === (logData.selectedVehicleBrand || '') &&
+            item['Models'] === (logData.selectedModel || '')
+          );
+          if (matching && (matching as any).type != null) {
+            const derived = mapTypeToWheelCategory(normalizeTypeString((matching as any).type));
+            if (derived) setWheelCategory(derived);
+          }
+        } catch (e) {
+          console.warn('Failed to derive wheeler from vehicle data:', e);
+        }
         
         // Set vehicle type first, then service after it's processed
         setTimeout(() => {
-          console.log('Setting vehicle type:', logData.vehicleType);
+            console.log('Setting vehicle type:', logData.vehicleType);
           setVehicleType(logData.vehicleType || '');
           
           // Set service and amount after vehicle type is processed
@@ -377,15 +480,22 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
     setAmount('');
 
     if (entryType === 'customer') {
-      const uniqueVehicles = [...new Set(priceMatrix.map(row => row.VEHICLE && row.VEHICLE.trim()).filter(Boolean))];
-      const uniqueServices = [...new Set(priceMatrix.map(row => row.SERVICE && row.SERVICE.trim()).filter(Boolean))];
-      setVehicleTypes(uniqueVehicles);
-      setServiceOptions(uniqueServices);
+      // Wait for wheeler selection to populate lists
+      if (wheelCategory) {
+        const filteredRows = priceMatrix.filter(row => doesTypeMatchWheelCategory((row as any).type, wheelCategory));
+        const uniqueVehicles = [...new Set(filteredRows.map(row => row.VEHICLE && row.VEHICLE.trim()).filter(Boolean))];
+        const uniqueServices = [...new Set(filteredRows.map(row => row.SERVICE && row.SERVICE.trim()).filter(Boolean))];
+        setVehicleTypes(uniqueVehicles);
+        setServiceOptions(uniqueServices);
+      } else {
+        setVehicleTypes([]);
+        setServiceOptions([]);
+      }
     } else { 
       setVehicleTypes([]);
       setServiceOptions([]);
     }
-  }, [entryType, priceMatrix, isEditing]);
+  }, [entryType, priceMatrix, isEditing, wheelCategory]);
 
   // When workshop changes, update vehicle types
   useEffect(() => {
@@ -628,28 +738,41 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
             <CardTitle>Vehicle Entry Details</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Entry Type */}
+            {/* Entry Type + Wheeler */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Entry Type</Label>
-                                  <div className="flex gap-2">
-                    <Button 
-                      variant={entryType === 'customer' ? 'default' : 'outline'} 
-                      size="sm" 
-                      className="flex-1 text-xs sm:text-sm"
-                      onClick={() => setEntryType('customer')}
-                    >
-                      Customer
-                    </Button>
-                    <Button 
-                      variant={entryType === 'workshop' ? 'default' : 'outline'} 
-                      size="sm" 
-                      className="flex-1 text-xs sm:text-sm"
-                      onClick={() => setEntryType('workshop')}
-                    >
-                      Workshop
-                    </Button>
-                  </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant={entryType === 'customer' ? 'default' : 'outline'}
+                    size="sm"
+                    className="flex-1 text-xs sm:text-sm"
+                    onClick={() => setEntryType('customer')}
+                  >
+                    Customer
+                  </Button>
+                  <Button
+                    variant={entryType === 'workshop' ? 'default' : 'outline'}
+                    size="sm"
+                    className="flex-1 text-xs sm:text-sm"
+                    onClick={() => setEntryType('workshop')}
+                  >
+                    Workshop
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="wheelCategory">Wheeler</Label>
+                <Select value={wheelCategory} onValueChange={setWheelCategory}>
+                  <SelectTrigger id="wheelCategory">
+                    <SelectValue placeholder="2 / 4 / Other" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="2">2</SelectItem>
+                    <SelectItem value="4">4</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -728,12 +851,13 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                   <ReactSelect
                     isClearable
                     isSearchable
-                    placeholder="Type to search vehicle brand..."
-                    options={availableVehicleBrands.map(brand => ({ value: brand, label: brand }))}
+                    placeholder={wheelCategory ? "Type to search vehicle brand..." : "Select wheeler first"}
+                    options={(wheelCategory ? availableVehicleBrands : []).map(brand => ({ value: brand, label: brand }))}
                     value={selectedVehicleBrand ? { value: selectedVehicleBrand, label: selectedVehicleBrand } : null}
                     onChange={(selected) => setSelectedVehicleBrand(selected?.value || '')}
                     classNamePrefix="react-select"
                     noOptionsMessage={() => "No brands found"}
+                    isDisabled={!wheelCategory}
                   />
                 </div>
                 <div className="space-y-2">
@@ -741,7 +865,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                   <ReactSelect
                     isClearable
                     isSearchable
-                    placeholder={selectedVehicleBrand ? "Type to search vehicle model..." : "Select vehicle brand first"}
+                    placeholder={selectedVehicleBrand ? "Type to search vehicle model..." : (wheelCategory ? "Select vehicle brand first" : "Select wheeler first")}
                     options={availableModels.map(model => ({ value: model.name, label: model.name }))}
                     value={selectedModel ? { value: selectedModel, label: selectedModel } : null}
                     onChange={(selected) => {
@@ -751,7 +875,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                       setSelectedModelId(modelObj?.id || '');
                     }}
                     classNamePrefix="react-select"
-                    isDisabled={!selectedVehicleBrand}
+                    isDisabled={!wheelCategory || !selectedVehicleBrand}
                     noOptionsMessage={() => "No models found"}
                   />
                 </div>
@@ -762,11 +886,11 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
             {entryType === 'customer' && (
               <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
                 <Label className="text-base font-semibold">Service Selection</Label>
-                <div className="space-y-2">
+            <div className="space-y-2">
                   <Label htmlFor="vehicleType">Vehicle Type</Label>
-                  <Select value={vehicleType} onValueChange={setVehicleType}>
+                  <Select value={vehicleType} onValueChange={setVehicleType} disabled={!wheelCategory}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select vehicle type" />
+                      <SelectValue placeholder={wheelCategory ? "Select vehicle type" : "Select wheeler first"} />
                     </SelectTrigger>
                     <SelectContent>
                       {sortVehicleTypesWithPriority(vehicleTypes).map(type => (
@@ -784,6 +908,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                         ? sortServicesWithPriority(
                             priceMatrix
                               .filter(row => row.VEHICLE && row.VEHICLE.trim() === vehicleType.trim())
+                              .filter(row => doesTypeMatchWheelCategory((row as any).type, wheelCategory))
                               .map(row => row.SERVICE)
                               .filter((v, i, arr) => v && arr.indexOf(v) === i)
                           ).map(option => ({ value: option, label: option }))
@@ -794,14 +919,15 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                       label: option
                     }))}
                     onChange={(selected) => setService(Array.isArray(selected) ? selected.map((s: any) => s.value) : [])}
-                    placeholder={vehicleType ? "Select services" : "Select vehicle type first"}
+                    placeholder={vehicleType ? "Select services" : (wheelCategory ? "Select vehicle type first" : "Select wheeler first")}
                     classNamePrefix="react-select"
-                    isDisabled={!vehicleType}
+                    isDisabled={!wheelCategory || !vehicleType}
                     onMenuOpen={() => {
                       console.log('Service menu opened. Vehicle type:', vehicleType);
                       const availableServices = vehicleType
                         ? priceMatrix
                             .filter(row => row.VEHICLE && row.VEHICLE.trim() === vehicleType.trim())
+                            .filter(row => doesTypeMatchWheelCategory((row as any).type, wheelCategory))
                             .map(row => row.SERVICE)
                             .filter((v, i, arr) => v && arr.indexOf(v) === i)
                         : [];

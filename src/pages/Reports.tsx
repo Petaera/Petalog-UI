@@ -436,7 +436,7 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
   // Check if owner has no location selected
   const isOwner = user?.role === 'owner';
   const hasNoLocation = isOwner && (!selectedLocation || selectedLocation.trim() === '');
-  
+
   if (hasNoLocation) {
     return (
       <div className="flex-1 p-4 md:p-6 space-y-6">
