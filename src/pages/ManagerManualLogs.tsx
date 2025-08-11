@@ -498,15 +498,6 @@ export default function ManagerManualLogs() {
                                 </Button>
                                 <Button
                                   size="sm"
-                                  variant="destructive"
-                                  className="text-xs"
-                                  onClick={() => handleApproval(log.id, 'reject')}
-                                >
-                                  <X className="h-3 w-3 mr-1" />
-                                  Reject
-                                </Button>
-                                <Button
-                                  size="sm"
                                   variant="outline"
                                   className="text-xs"
                                   onClick={() => handleEdit(log)}
@@ -542,7 +533,7 @@ export default function ManagerManualLogs() {
             <CardTitle className="flex flex-col sm:flex-row sm:items-center gap-2">
               <div className="flex items-center gap-2">
                 <CheckCircle className="h-5 w-5 text-green-500" />
-                <span>Approved Manual Logs</span>
+                <span>Ticket Closed</span>
                 <Badge variant="default">{approvedLogs.length}</Badge>
               </div>
               {selectedDate && (
