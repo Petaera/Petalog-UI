@@ -109,7 +109,7 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
       // Build query step by step to ensure proper filtering
       let query = supabase
         .from("logs-auto")
-        .select("id, entry_time, exit_time, vehicle_id, entry_url, exit_image, created_at, vehicles(number_plate), location_id");
+        .select("id, entry_time, exit_time, vehicle_id, entry_url, exit_image, created_at, vehicles(number_plate, type), location_id");
 
       console.log('🔍 AutomaticLogs Query built:', { table: "logs-auto", hasQuery: !!query });
 
@@ -477,7 +477,7 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
                   logs.map((log, idx) => (
                     <tr key={log.id || idx}>
                       <td className="border px-4 py-2">{log.vehicles?.number_plate || "-"}</td>
-                      <td className="border px-4 py-2">-</td>
+                      <td className="border px-4 py-2">{log.vehicles?.type || "-"}</td>
                       <td className="border px-4 py-2">
                         {log.entry_time ?
                           formatToDateTime(log.entry_time) : "-"
