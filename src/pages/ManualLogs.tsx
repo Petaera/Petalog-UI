@@ -463,7 +463,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                     <thead className="bg-muted/50">
                       <tr>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle No</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle Type</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle Model</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Customer Name</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Phone</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Amount</th>
@@ -483,7 +483,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                         pendingLogs.map((log, idx) => (
                           <tr key={log.id || idx} className="hover:bg-muted/30">
                             <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_type || "-"}</td>
+                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_model || "-"}</td>
                             <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{log.Name || "-"}</td>
                             <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.Phone_no || "-"}</td>
                             <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 hidden md:table-cell">
@@ -559,7 +559,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                     <thead className="bg-muted/50">
                       <tr>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle No</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle Type</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle Model</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Customer Name</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden xl:table-cell">Phone</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Amount</th>
@@ -582,7 +582,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                         approvedLogs.map((log, idx) => (
                           <tr key={log.id || idx} className="hover:bg-muted/30">
                             <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_type || "-"}</td>
+                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_model || "-"}</td>
                             <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{log.Name || "-"}</td>
                             <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden xl:table-cell">{log.Phone_no || "-"}</td>
                             <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 hidden md:table-cell">
@@ -653,8 +653,12 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                   <div className="mt-1 text-sm font-medium">{checkoutLog?.vehicle_number || '-'}</div>
                 </div>
                 <div>
-                  <Label>Vehicle Type</Label>
-                  <div className="mt-1 text-sm">{checkoutLog?.vehicle_type || '-'}</div>
+                  <Label>Vehicle Model</Label>
+                  <div className="mt-1 text-sm">{checkoutLog?.vehicle_model || '-'}</div>
+                </div>
+                <div>
+                  <Label>Customer Name</Label>
+                  <div className="mt-1 text-sm">{checkoutLog?.Name || '-'}</div>
                 </div>
               </div>
               <div>
@@ -710,7 +714,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                   <SelectContent>
                     <SelectItem value="cash">Cash</SelectItem>
                     <SelectItem value="upi">UPI</SelectItem>
-                    <SelectItem value="credit">Credit</SelectItem>
+                    <SelectItem value="credit">Pay Later</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

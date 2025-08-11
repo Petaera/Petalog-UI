@@ -640,6 +640,10 @@ export default function ManagerManualLogs() {
                   <Label>Vehicle Type</Label>
                   <div className="mt-1 text-sm">{checkoutLog?.vehicle_type || '-'}</div>
                 </div>
+                <div>
+                  <Label>Customer Name</Label>
+                  <div className="mt-1 text-sm">{checkoutLog?.Name || '-'}</div>
+                </div>
               </div>
               <div>
                 <Label>Service Chosen</Label>
@@ -694,7 +698,7 @@ export default function ManagerManualLogs() {
                   <SelectContent>
                     <SelectItem value="cash">Cash</SelectItem>
                     <SelectItem value="upi">UPI</SelectItem>
-                    <SelectItem value="credit">Credit</SelectItem>
+                    <SelectItem value="credit">Pay Later</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
