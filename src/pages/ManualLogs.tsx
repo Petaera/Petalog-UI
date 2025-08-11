@@ -9,6 +9,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import ReactSelect from 'react-select';
 
 interface ManualLogsProps {
   selectedLocation?: string;
@@ -25,6 +28,74 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
     const today = new Date();
     return today.toISOString().split('T')[0];
   });
+
+  // Checkout modal state
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [checkoutLog, setCheckoutLog] = useState<any | null>(null);
+  const [checkoutPaymentMode, setCheckoutPaymentMode] = useState<'cash' | 'upi' | 'credit'>('cash');
+  const [checkoutDiscount, setCheckoutDiscount] = useState<string>('');
+  const [checkoutServices, setCheckoutServices] = useState<string[]>([]);
+  const [checkoutAmount, setCheckoutAmount] = useState<string>('');
+
+  // Service price matrix for recomputing totals
+  const [priceMatrix, setPriceMatrix] = useState<any[]>([]);
+  const [serviceOptions, setServiceOptions] = useState<string[]>([]);
+
+  useEffect(() => {
+    const fetchServicePrices = async () => {
+      const { data } = await supabase.from('Service_prices').select('*');
+      if (data && data.length > 0) {
+        setPriceMatrix(data);
+      }
+    };
+    fetchServicePrices();
+  }, []);
+
+  const openCheckout = (log: any) => {
+    setCheckoutLog(log);
+    setCheckoutPaymentMode((log?.payment_mode as any) || 'cash');
+    setCheckoutDiscount(log?.discount != null ? String(log.discount) : '');
+    setCheckoutServices(log?.service ? String(log.service).split(',').map((s:string)=>s.trim()).filter(Boolean) : []);
+    setCheckoutAmount(log?.Amount != null ? String(log.Amount) : '');
+
+    // Build service options for the vehicle type
+    try {
+      const options = priceMatrix
+        .filter(row => (row.VEHICLE && row.VEHICLE.trim()) === String(log?.vehicle_type || '').trim())
+        .map(row => row.SERVICE)
+        .filter((v: string, i: number, arr: string[]) => v && arr.indexOf(v) === i);
+      setServiceOptions(options);
+    } catch {}
+    setCheckoutOpen(true);
+  };
+
+  const confirmCheckout = async () => {
+    if (!checkoutLog) return;
+    try {
+      const discountNum = checkoutDiscount === '' ? null : Number(checkoutDiscount) || 0;
+      const amountNum = checkoutAmount === '' ? null : Number(checkoutAmount) || 0;
+      const updateData: any = {
+        approval_status: 'approved',
+        approved_at: new Date().toISOString(),
+        exit_time: new Date().toISOString(),
+        payment_mode: checkoutPaymentMode,
+        discount: discountNum,
+        service: checkoutServices.join(','),
+        Amount: amountNum,
+      };
+      const { error } = await supabase
+        .from('logs-man')
+        .update(updateData)
+        .eq('id', checkoutLog.id);
+      if (error) throw error;
+      toast.success('Checkout completed');
+      setCheckoutOpen(false);
+      setCheckoutLog(null);
+      fetchLogs();
+    } catch (err: any) {
+      toast.error(`Checkout failed: ${err?.message || err}`);
+    }
+  };
 
   console.log("ManualLogs component rendered. selectedLocation:", selectedLocation);
 
@@ -428,15 +499,10 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                                   size="sm"
                                   variant="default"
                                   className="bg-green-600 hover:bg-green-700 text-xs"
-                                  onClick={() => {
-                                    console.log("Approve button clicked for log ID:", log.id);
-                                    console.log("Log ID type:", typeof log.id);
-                                    console.log("Log data:", log);
-                                    handleApproval(log.id, 'approve');
-                                  }}
+                                  onClick={() => openCheckout(log)}
                                 >
                                   <Check className="h-3 w-3 mr-1" />
-                                  Approve
+                                  Checkout
                                 </Button>
                                 <Button
                                   size="sm"
@@ -586,6 +652,89 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
             </div>
           </CardContent>
         </Card>
+
+        {/* Checkout Dialog */}
+        <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Checkout</DialogTitle>
+              <DialogDescription>Confirm details before completing checkout.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Vehicle No</Label>
+                  <div className="mt-1 text-sm font-medium">{checkoutLog?.vehicle_number || '-'}</div>
+                </div>
+                <div>
+                  <Label>Vehicle Type</Label>
+                  <div className="mt-1 text-sm">{checkoutLog?.vehicle_type || '-'}</div>
+                </div>
+              </div>
+              <div>
+                <Label>Service Chosen</Label>
+                <ReactSelect
+                  isMulti
+                  options={serviceOptions.map(opt => ({ value: opt, label: opt }))}
+                  value={checkoutServices.map(s => ({ value: s, label: s }))}
+                  onChange={(selected) => {
+                    const values = Array.isArray(selected) ? selected.map((s: any) => s.value) : [];
+                    setCheckoutServices(values);
+                    // recompute amount if price matrix available
+                    if (priceMatrix.length > 0 && checkoutLog?.vehicle_type) {
+                      let total = 0;
+                      for (const sv of values) {
+                        const row = priceMatrix.find(r => (r.VEHICLE && r.VEHICLE.trim()) === String(checkoutLog.vehicle_type).trim() && (r.SERVICE && r.SERVICE.trim()) === String(sv).trim());
+                        if (row && row.PRICE !== undefined) total += Number(row.PRICE);
+                      }
+                      setCheckoutAmount(String(total));
+                    }
+                  }}
+                  placeholder={serviceOptions.length ? 'Select services' : 'No services'}
+                  classNamePrefix="react-select"
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="amount">Amount</Label>
+                  <Input id="amount" value={checkoutAmount} onChange={(e) => setCheckoutAmount(e.target.value)} placeholder="0" />
+                </div>
+                <div>
+                  <Label htmlFor="discount">Discount</Label>
+                  <Input id="discount" type="number" value={checkoutDiscount} onChange={(e) => setCheckoutDiscount(e.target.value)} placeholder="0" />
+                </div>
+                <div>
+                  <Label>Final</Label>
+                  <div className="mt-1 text-sm font-semibold">
+                    {(() => {
+                      const amt = Number(checkoutAmount || 0);
+                      const disc = checkoutDiscount === '' ? 0 : Number(checkoutDiscount) || 0;
+                      const finalAmt = Math.max(amt - disc, 0);
+                      return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(finalAmt);
+                    })()}
+                  </div>
+                </div>
+              </div>
+              <div>
+                <Label>Payment Mode</Label>
+                <Select value={checkoutPaymentMode} onValueChange={(v: any) => setCheckoutPaymentMode(v)}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select payment mode" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="upi">UPI</SelectItem>
+                    <SelectItem value="credit">Credit</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCheckoutOpen(false)}>Cancel</Button>
+              <Button onClick={confirmCheckout}>Confirm Checkout</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
   );
 }
