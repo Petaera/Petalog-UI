@@ -610,6 +610,69 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
     return () => { cancelled = true; clearTimeout(t); };
   }, [vehicleNumber]);
 
+  // Auto-fill customer and vehicle brand/model details from most recent manual log
+  useEffect(() => {
+    if (isEditing) return; // don't override when editing an existing entry
+    const plate = vehicleNumber.trim();
+    if (!plate || plate.length < 3) return;
+    let cancelled = false;
+
+    const loadLatestDetails = async () => {
+      try {
+        // Pull latest matching manual log (any location) for this plate
+        const { data, error } = await supabase
+          .from('logs-man')
+          .select('Name, Phone_no, Location, "D.O.B", vehicle_brand, vehicle_model, Brand_id, wheel_type, created_at')
+          .ilike('vehicle_number', `%${plate}%`)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        if (error || !data || data.length === 0) return;
+        if (cancelled) return;
+
+        const last = data[0] as any;
+        // Fill only if fields are empty to avoid clobbering user input
+        if (!customerName && last.Name) setCustomerName(last.Name);
+        if (!phoneNumber && last.Phone_no) setPhoneNumber(last.Phone_no);
+        if (!customerLocation && last.Location) setCustomerLocation(last.Location);
+        if (!dateOfBirth && last['D.O.B']) setDateOfBirth(last['D.O.B']);
+
+        // Wheel category from log if available
+        if (!wheelCategory && last.wheel_type) {
+          const derived = mapTypeToWheelCategory(normalizeTypeString(last.wheel_type));
+          if (derived) setWheelCategory(derived);
+        }
+
+        // Vehicle brand/model
+        if (!selectedVehicleBrand && last.vehicle_brand) {
+          setSelectedVehicleBrand(last.vehicle_brand);
+        }
+        // Defer model/id set to allow brand effect to populate models
+        setTimeout(() => {
+          if (!selectedModel && last.vehicle_model) setSelectedModel(last.vehicle_model);
+          if (!selectedModelId && last.Brand_id) setSelectedModelId(last.Brand_id);
+        }, 200);
+
+        // If wheel category still empty, try to derive from Vehicles_in_india type by brand+model
+        if (!wheelCategory && (last.vehicle_brand || last.vehicle_model) && vehicleData.length > 0) {
+          try {
+            const match = vehicleData.find(item =>
+              item['Vehicle Brands'] === (last.vehicle_brand || '') && item['Models'] === (last.vehicle_model || '')
+            );
+            if (match && (match as any).type != null) {
+              const derived = mapTypeToWheelCategory(normalizeTypeString((match as any).type));
+              if (derived) setWheelCategory(derived);
+            }
+          } catch {}
+        }
+      } catch (e) {
+        // ignore autofill errors silently
+      }
+    };
+
+    const t = setTimeout(loadLatestDetails, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [vehicleNumber, isEditing, customerName, phoneNumber, customerLocation, dateOfBirth, selectedVehicleBrand, selectedModel, selectedModelId, wheelCategory, vehicleData]);
+
   const handleVehicleNumberChange = (value: string) => {
     setVehicleNumber(value.toUpperCase());
   };
