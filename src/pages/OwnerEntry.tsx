@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Car, CreditCard, Banknote } from "lucide-react";
+import { Car } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -136,7 +136,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
   const [entryType, setEntryType] = useState('customer');
   const [discount, setDiscount] = useState('');
   const [remarks, setRemarks] = useState('');
-  const [paymentMode, setPaymentMode] = useState('cash');
+  // Payment mode moved to Manual Logs checkout popup; no state needed here
   // const [scratchImage, setScratchImage] = useState<Blob | null>(null);
   const [workshop, setWorkshop] = useState('');
   const [workshopOptions, setWorkshopOptions] = useState<string[]>([]);
@@ -409,7 +409,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         setEntryType(logData.entryType || 'normal');
         setDiscount(logData.discount || '');
         setRemarks(logData.remarks || '');
-        setPaymentMode(logData.paymentMode || 'cash');
+        // Payment mode selection is handled during checkout in Manual Logs
         setCustomerName(logData.customerName || '');
         setPhoneNumber(logData.phoneNumber || '');
         setDateOfBirth(logData.dateOfBirth || '');
@@ -650,7 +650,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
             Amount: finalAmount,
             discount: discountNum,
             remarks: remarks,
-            payment_mode: paymentMode,
+            // payment_mode is decided at checkout in Manual Logs
             service: service.join(','), // Store as comma-separated string
             vehicle_type: vehicleType,
             workshop: entryType === 'workshop' ? workshop : null,
@@ -687,7 +687,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
             Amount: finalAmount,
             discount: discountNum,
             remarks: remarks,
-            payment_mode: paymentMode,
+            // payment_mode is decided at checkout in Manual Logs
             service: service.join(','), // Store as comma-separated string
             vehicle_type: vehicleType,
             workshop: entryType === 'workshop' ? workshop : null,
@@ -718,7 +718,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         setAmount('500');
         setDiscount('');
         setRemarks('');
-        setPaymentMode('cash');
+        // Payment mode reset not needed here
         // setScratchImage(null);
         setCustomerName('');
         setPhoneNumber('');
@@ -1020,38 +1020,41 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label>Payment Mode</Label>
-                <div className="flex gap-2">
-                  <Button 
-                    variant={paymentMode === 'cash' ? 'default' : 'outline'} 
-                    size="sm" 
-                    className="flex-1"
-                    onClick={() => setPaymentMode('cash')}
-                  >
-                    <Banknote className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                    <span className="text-xs sm:text-sm">Cash</span>
-                  </Button>
-                  <Button 
-                    variant={paymentMode === 'upi' ? 'default' : 'outline'} 
-                    size="sm" 
-                    className="flex-1"
-                    onClick={() => setPaymentMode('upi')}
-                  >
-                    <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                    <span className="text-xs sm:text-sm">UPI</span>
-                  </Button>
-                  <Button 
-                    variant={paymentMode === 'credit' ? 'default' : 'outline'} 
-                    size="sm" 
-                    className="flex-1"
-                    onClick={() => setPaymentMode('credit')}
-                  >
-                    <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                    <span className="text-xs sm:text-sm">Pay Later</span>
-                  </Button>
-                </div>
-              </div>
+              {/* Payment Mode moved to Manual Logs checkout popup */}
+              {/**
+               <div className="space-y-2">
+                 <Label>Payment Mode</Label>
+                 <div className="flex gap-2">
+                   <Button 
+                     variant={paymentMode === 'cash' ? 'default' : 'outline'} 
+                     size="sm" 
+                     className="flex-1"
+                     onClick={() => setPaymentMode('cash')}
+                   >
+                     <Banknote className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                     <span className="text-xs sm:text-sm">Cash</span>
+                   </Button>
+                   <Button 
+                     variant={paymentMode === 'upi' ? 'default' : 'outline'} 
+                     size="sm" 
+                     className="flex-1"
+                     onClick={() => setPaymentMode('upi')}
+                   >
+                     <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                     <span className="text-xs sm:text-sm">UPI</span>
+                   </Button>
+                   <Button 
+                     variant={paymentMode === 'credit' ? 'default' : 'outline'} 
+                     size="sm" 
+                     className="flex-1"
+                     onClick={() => setPaymentMode('credit')}
+                   >
+                     <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                     <span className="text-xs sm:text-sm">Pay Later</span>
+                   </Button>
+                 </div>
+               </div>
+              **/}
 
               <div className="space-y-2">
                 <Label htmlFor="remarks">Remarks</Label>

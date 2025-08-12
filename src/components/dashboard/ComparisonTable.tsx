@@ -8,6 +8,7 @@ interface ComparisonTableProps {
   data: LogEntry[];
   selectedDate: string;
   selectedLogType: string;
+  selectedLocation?: string;
 }
 
 const getDuration = (entry: string, exit: string) => {
@@ -34,7 +35,43 @@ const LogTypeBadge: React.FC<{ logType: string }> = ({ logType }) => {
   );
 };
 
-const ComparisonTable: React.FC<ComparisonTableProps> = ({ loading, data, selectedDate, selectedLogType }) => {
+import { useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { supabase } from "@/lib/supabaseClient";
+
+const ComparisonTable: React.FC<ComparisonTableProps> = ({ loading, data, selectedDate, selectedLogType, selectedLocation }) => {
+  const [imageOpen, setImageOpen] = useState(false);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageLoading, setImageLoading] = useState(false);
+
+  const handleAutomaticClick = async (vehicleNumber: string, entryTimeIso: string) => {
+    try {
+      setImageLoading(true);
+      // Query logs-auto for closest entry for this vehicle near entryTime
+      // We assume number_plate is linked via vehicles(number_plate)
+      const start = new Date(entryTimeIso);
+      const end = new Date(start.getTime() + 60 * 60 * 1000);
+      let query = supabase
+        .from('logs-auto')
+        .select('entry_url, entry_time, vehicles(number_plate), location_id')
+        .eq('location_id', selectedLocation)
+        .gte('entry_time', start.toISOString())
+        .lt('entry_time', end.toISOString())
+        .order('entry_time', { ascending: true })
+        .limit(1);
+      const { data, error } = await query;
+      if (error) throw error;
+      const found = (data || []).find((row: any) => row.vehicles?.number_plate === vehicleNumber);
+      const url = found?.entry_url || (data && data[0]?.entry_url) || null;
+      setImageUrl(url);
+      setImageOpen(true);
+    } catch (e) {
+      setImageUrl(null);
+      setImageOpen(true);
+    } finally {
+      setImageLoading(false);
+    }
+  };
   // Debug logging to see what data is being rendered
   console.log('ComparisonTable render - data:', data);
   console.log('ComparisonTable render - selectedLogType:', selectedLogType);
@@ -121,7 +158,19 @@ const ComparisonTable: React.FC<ComparisonTableProps> = ({ loading, data, select
                     data.map((log) => (
                       <tr key={log.id} className="hover:bg-muted/30">
                         <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || "-"}</td>
-                        <td className="px-3 py-4 whitespace-nowrap text-sm font-medium"><LogTypeBadge logType={log.log_type} /></td>
+                        <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                          {log.log_type === 'automatic' ? (
+                            <button
+                              className="inline-flex"
+                              onClick={() => handleAutomaticClick(log.vehicle_number, log.entry_time)}
+                              title="View entry image"
+                            >
+                              <LogTypeBadge logType={log.log_type} />
+                            </button>
+                          ) : (
+                            <LogTypeBadge logType={log.log_type} />
+                          )}
+                        </td>
                         <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(log.entry_time).toLocaleString()}</td>
                         <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.exit_time ? new Date(log.exit_time).toLocaleString() : "-"}</td>
                         <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{getDuration(log.entry_time, log.exit_time)}</td>
@@ -134,6 +183,23 @@ const ComparisonTable: React.FC<ComparisonTableProps> = ({ loading, data, select
           </div>
         </div>
       </CardContent>
+      {/* Entry Image Dialog */}
+      <Dialog open={imageOpen} onOpenChange={setImageOpen}>
+        <DialogContent className="sm:max-w-[700px]">
+          <DialogHeader>
+            <DialogTitle>Entry Image</DialogTitle>
+          </DialogHeader>
+          <div className="min-h-[300px] flex items-center justify-center">
+            {imageLoading ? (
+              <div className="text-sm text-muted-foreground">Loading image…</div>
+            ) : imageUrl ? (
+              <img src={imageUrl} alt="Entry" className="max-h-[70vh] object-contain" />
+            ) : (
+              <div className="text-sm text-muted-foreground">No image available</div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };

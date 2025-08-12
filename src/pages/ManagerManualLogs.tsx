@@ -18,6 +18,7 @@ export default function ManagerManualLogs() {
   const navigate = useNavigate();
   const [pendingLogs, setPendingLogs] = useState([]);
   const [approvedLogs, setApprovedLogs] = useState([]);
+  const [payLaterLogs, setPayLaterLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState(() => {
     // Set default date to today
@@ -210,6 +211,7 @@ export default function ManagerManualLogs() {
       // Fetch approved logs - try different query approaches
       let approvedData = [];
       let approvedError = null;
+      let finalApproved = [];
       
       // First try: exact match for approved
       let approvedQuery = supabase
@@ -261,18 +263,19 @@ export default function ManagerManualLogs() {
         
         console.log("Approved fallback query result:", { approvedFallbackData, approvedFallbackError });
         
-        if (approvedFallbackData && approvedFallbackData.length > 0) {
-          console.log("Found approved data with created_at filter");
-          setApprovedLogs(approvedFallbackData);
-        } else {
-          setApprovedLogs(approvedData || []);
-        }
+        finalApproved = approvedFallbackData && approvedFallbackData.length > 0 ? approvedFallbackData : (approvedData || []);
       } else {
-        setApprovedLogs(approvedData || []);
+        finalApproved = approvedData || [];
       }
+
+      // Split approved into Pay Later vs Closed
+      const payLater = (finalApproved || []).filter((log: any) => String(log.payment_mode).toLowerCase() === 'credit');
+      const closed = (finalApproved || []).filter((log: any) => String(log.payment_mode).toLowerCase() !== 'credit');
+      setPayLaterLogs(payLater);
+      setApprovedLogs(closed);
       
       // If no results, try a broader query to see what approval_status values exist
-      if (approvedData.length === 0 && !selectedDate) {
+      if (finalApproved.length === 0 && !selectedDate) {
         console.log("No approved logs found, checking all approval_status values...");
         const { data: allStatuses, error: statusError } = await supabase
           .from("logs-man")
@@ -284,7 +287,7 @@ export default function ManagerManualLogs() {
       }
 
       console.log("Approved query final result:", { approvedData, approvedError });
-      console.log("Approved logs count:", approvedData?.length || 0);
+      console.log("Approved logs count:", finalApproved?.length || 0);
 
       if (pendingError) {
         console.error('Error fetching pending logs:', pendingError);
@@ -515,6 +518,80 @@ export default function ManagerManualLogs() {
                                   <Trash2 className="h-3 w-3" />
                                 </Button>
                               </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Pay Later Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <div className="flex items-center gap-2">
+                <Clock className="h-5 w-5 text-purple-500" />
+                <span>Pay Later</span>
+                <Badge variant="secondary">{payLaterLogs.length}</Badge>
+              </div>
+              {selectedDate && (
+                <Badge variant="outline" className="sm:ml-2">
+                  {new Date(selectedDate).toLocaleDateString()}
+                </Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto -mx-4 sm:mx-0">
+              <div className="min-w-full inline-block align-middle">
+                <div className="overflow-hidden">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle No</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle Type</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Customer Name</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden xl:table-cell">Phone</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Amount</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Service</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Entry Time</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Exit Time</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {loading ? (
+                        <tr><td colSpan={10} className="text-center py-4">Loading...</td></tr>
+                      ) : payLaterLogs.length === 0 ? (
+                        <tr><td colSpan={10} className="text-center py-4 text-muted-foreground">
+                          {selectedDate ? `No pay later tickets for ${new Date(selectedDate).toLocaleDateString()}` : 'No pay later tickets'}
+                        </td></tr>
+                      ) : (
+                        payLaterLogs.map((log: any, idx: number) => (
+                          <tr key={log.id || idx} className="hover:bg-muted/30">
+                            <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
+                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_type || "-"}</td>
+                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{log.Name || "-"}</td>
+                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden xl:table-cell">{log.Phone_no || "-"}</td>
+                            <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 hidden md:table-cell">
+                              {log.Amount ? formatCurrency(log.Amount) : "-"}
+                            </td>
+                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
+                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
+                              {log.entry_time ? new Date(log.entry_time).toLocaleString() : 
+                               log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
+                            </td>
+                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">
+                              {log.exit_time ? new Date(log.exit_time).toLocaleString() : 
+                               log.approved_at ? new Date(log.approved_at).toLocaleString() : "-"}
+                            </td>
+                            <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                              <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100 text-xs">Pay Later</Badge>
                             </td>
                           </tr>
                         ))
