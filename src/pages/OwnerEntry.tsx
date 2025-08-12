@@ -164,6 +164,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
 
   // Button disable state for 5 seconds after submit
   const [isSubmitDisabled, setIsSubmitDisabled] = useState(false);
+  const [visitCount, setVisitCount] = useState<number>(0);
 
   const { user } = useAuth();
 
@@ -562,8 +563,52 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
     }
   }, [entryType, vehicleType, service, workshop, priceMatrix, workshopPriceMatrix, wheelCategory]);
 
-  // Mock data for previous visits
-  const previousVisits = vehicleNumber ? Math.floor(Math.random() * 5) + 1 : 0;
+  // Fetch number of manual visits from logs-man for the typed vehicle number
+  useEffect(() => {
+    let cancelled = false;
+    const fetchVisits = async () => {
+      const plate = vehicleNumber.trim();
+      if (!plate || plate.length < 3) {
+        if (!cancelled) setVisitCount(0);
+        return;
+      }
+      try {
+        // Resolve vehicle_id; if found, count by vehicle_id, else fallback to vehicle_number
+        const { data: veh, error: vehErr } = await supabase
+          .from('vehicles')
+          .select('id')
+          .eq('number_plate', plate)
+          .maybeSingle();
+        if (vehErr && vehErr.code !== 'PGRST116') {
+          console.warn('Visit count vehicles lookup error:', vehErr);
+        }
+
+        let manualCount = 0;
+        const base = supabase.from('logs-man').select('id', { count: 'exact', head: true });
+        const withLocation = selectedLocation && selectedLocation.trim() !== ''
+          ? (q: any) => q.eq('location_id', selectedLocation)
+          : (q: any) => q;
+
+        if (veh?.id) {
+          const { count, error } = await withLocation(base)
+            .or(`vehicle_id.eq.${veh.id},vehicle_number.ilike.%${plate}%`);
+          if (!error) manualCount = count || 0; else console.warn('Manual visit count error (by id or ilike number):', error);
+        } else {
+          const { count, error } = await withLocation(base)
+            .ilike('vehicle_number', `%${plate}%`);
+          if (!error) manualCount = count || 0; else console.warn('Manual visit count error (by ilike number):', error);
+        }
+
+        if (!cancelled) setVisitCount(manualCount);
+      } catch (e) {
+        console.warn('Visit count error:', e);
+        if (!cancelled) setVisitCount(0);
+      }
+    };
+
+    const t = setTimeout(fetchVisits, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [vehicleNumber]);
 
   const handleVehicleNumberChange = (value: string) => {
     setVehicleNumber(value.toUpperCase());
@@ -708,6 +753,8 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         ]);
         if (insertError) throw insertError;
         toast.success('Owner entry submitted successfully!');
+
+        // No persistent counter increment; count is derived from logs-man only
       }
       
       // Reset form only if not in edit mode
@@ -806,9 +853,9 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
               />
               {vehicleNumber && (
                 <div className="flex items-center gap-2 text-sm">
-                  <div className={`w-2 h-2 rounded-full ${previousVisits > 0 ? 'bg-success' : 'bg-warning'}`}></div>
+                  <div className={`w-2 h-2 rounded-full ${visitCount > 0 ? 'bg-success' : 'bg-warning'}`}></div>
                   <span className="text-muted-foreground">
-                    {previousVisits > 0 ? `Previous Visits: ${previousVisits} times` : 'New Customer'}
+                    {visitCount > 0 ? `Previous Visits: ${visitCount} ${visitCount === 1 ? 'time' : 'times'}` : 'New Customer'}
                   </span>
                 </div>
               )}
