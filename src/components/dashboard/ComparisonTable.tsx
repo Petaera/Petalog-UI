@@ -187,19 +187,21 @@ const ComparisonTable: React.FC<ComparisonTableProps> = ({ loading, data, select
                   ) : (
                     data.map((log) => (
                       <tr key={log.id} className="hover:bg-muted/30">
-                        <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || "-"}</td>
-                        <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                        <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           {log.log_type === 'automatic' ? (
                             <button
-                              className="inline-flex"
+                              className="text-gray-900 cursor-pointer bg-transparent p-0 m-0 hover:opacity-80 focus:outline-none focus:ring-0"
                               onClick={() => handleAutomaticClick(log.vehicle_number, log.entry_time)}
                               title="View entry image"
                             >
-                              <LogTypeBadge logType={log.log_type} />
+                              {log.vehicle_number || "-"}
                             </button>
                           ) : (
-                            <LogTypeBadge logType={log.log_type} />
+                            log.vehicle_number || "-"
                           )}
+                        </td>
+                        <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                          <LogTypeBadge logType={log.log_type} />
                         </td>
                         <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(log.entry_time).toLocaleString()}</td>
                         <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.exit_time ? new Date(log.exit_time).toLocaleString() : "-"}</td>
