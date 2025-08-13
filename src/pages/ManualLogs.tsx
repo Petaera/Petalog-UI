@@ -38,6 +38,11 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
   const [checkoutServices, setCheckoutServices] = useState<string[]>([]);
   const [checkoutAmount, setCheckoutAmount] = useState<string>('');
 
+  // Settle Pay Later modal state
+  const [settleOpen, setSettleOpen] = useState(false);
+  const [settleLog, setSettleLog] = useState<any | null>(null);
+  const [settlePaymentMode, setSettlePaymentMode] = useState<'cash' | 'upi'>('cash');
+
   // Service price matrix for recomputing totals
   const [priceMatrix, setPriceMatrix] = useState<any[]>([]);
   const [serviceOptions, setServiceOptions] = useState<string[]>([]);
@@ -84,6 +89,9 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
         service: checkoutServices.join(','),
         Amount: amountNum,
       };
+      if (String(checkoutPaymentMode).toLowerCase() !== 'credit') {
+        updateData.payment_date = new Date().toISOString();
+      }
       const { error } = await supabase
         .from('logs-man')
         .update(updateData)
@@ -95,6 +103,34 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
       fetchLogs();
     } catch (err: any) {
       toast.error(`Checkout failed: ${err?.message || err}`);
+    }
+  };
+
+  const openSettle = (log: any) => {
+    setSettleLog(log);
+    // default to cash when settling
+    setSettlePaymentMode('cash');
+    setSettleOpen(true);
+  };
+
+  const confirmSettle = async () => {
+    if (!settleLog) return;
+    try {
+      const updateData: any = {
+        payment_mode: settlePaymentMode,
+        payment_date: new Date().toISOString(),
+      };
+      const { error } = await supabase
+        .from('logs-man')
+        .update(updateData)
+        .eq('id', settleLog.id);
+      if (error) throw error;
+      toast.success('Payment settled');
+      setSettleOpen(false);
+      setSettleLog(null);
+      fetchLogs();
+    } catch (err: any) {
+      toast.error(`Settle failed: ${err?.message || err}`);
     }
   };
 
@@ -211,12 +247,10 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
         setPendingLogs(pendingData || []);
       }
 
-      // Fetch approved logs - try different query approaches
+      // Fetch approved logs for Ticket Closed (date filter applies)
       let approvedData = [];
       let approvedError = null;
       let finalApproved = [];
-      
-      // First try: exact match for approved
       let approvedQuery = supabase
         .from("logs-man")
         .select("*, vehicles(number_plate)")
@@ -224,59 +258,63 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
         .eq("approval_status", "approved")
         .order("created_at", { ascending: false });
 
-      // Add date filter if selected
       if (selectedDate) {
         const startOfDay = `${selectedDate}T00:00:00.000Z`;
         const endOfDay = `${selectedDate}T23:59:59.999Z`;
-        console.log("Approved query - Date filter - startOfDay:", startOfDay, "endOfDay:", endOfDay);
-        
-        // Try filtering by entry_time first, then fallback to created_at
+        console.log("Approved (closed) - Date filter - startOfDay:", startOfDay, "endOfDay:", endOfDay);
         approvedQuery = approvedQuery
           .gte("entry_time", startOfDay)
           .lte("entry_time", endOfDay);
       }
 
       const { data: approved1, error: error1 } = await approvedQuery;
-      
-      console.log("Approved query 1 result:", { approved1, error1 });
-      
+      console.log("Approved (closed) query result:", { approved1, error1 });
       if (error1) {
-        console.error("Approved query 1 failed:", error1);
+        console.error("Approved (closed) query failed:", error1);
       } else {
         approvedData = approved1 || [];
         approvedError = error1;
       }
-      
-      // If no results with entry_time filter, try created_at
+
       if (selectedDate && approvedData.length === 0) {
-        console.log("No approved results with entry_time filter, trying created_at...");
+        console.log("No approved (closed) results with entry_time filter, trying created_at...");
         let approvedFallbackQuery = supabase
           .from("logs-man")
           .select("*, vehicles(number_plate)")
           .eq("location_id", selectedLocation)
           .eq("approval_status", "approved")
           .order("created_at", { ascending: false });
-        
+
         const startOfDay = `${selectedDate}T00:00:00.000Z`;
         const endOfDay = `${selectedDate}T23:59:59.999Z`;
-        
+
         const { data: approvedFallbackData, error: approvedFallbackError } = await approvedFallbackQuery
           .gte("created_at", startOfDay)
           .lte("created_at", endOfDay);
-        
-        console.log("Approved fallback query result:", { approvedFallbackData, approvedFallbackError });
-        
+        console.log("Approved (closed) fallback result:", { approvedFallbackData, approvedFallbackError });
         finalApproved = approvedFallbackData && approvedFallbackData.length > 0 ? approvedFallbackData : (approvedData || []);
       } else {
         finalApproved = approvedData || [];
       }
 
-      // Split approved into Pay Later vs Closed
-      const payLater = (finalApproved || []).filter((log: any) => String(log.payment_mode).toLowerCase() === 'credit');
+      // Closed = approved but not Pay Later
       const closed = (finalApproved || []).filter((log: any) => String(log.payment_mode).toLowerCase() !== 'credit');
-      setPayLaterLogs(payLater);
       setApprovedLogs(closed);
-      
+
+      // Fetch Pay Later separately WITHOUT date filter
+      const { data: payLaterData, error: payLaterError } = await supabase
+        .from("logs-man")
+        .select("*, vehicles(number_plate)")
+        .eq("location_id", selectedLocation)
+        .eq("approval_status", "approved")
+        .eq("payment_mode", "credit")
+        .order("created_at", { ascending: false });
+      if (payLaterError) {
+        console.error('Error fetching pay later logs:', payLaterError);
+        toast.error('Error fetching pay later logs: ' + payLaterError.message);
+      }
+      setPayLaterLogs(payLaterData || []);
+
       // If no results, try a broader query to see what approval_status values exist
       if (finalApproved.length === 0 && !selectedDate) {
         console.log("No approved logs found, checking all approval_status values...");
@@ -289,8 +327,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
         console.log("All approval statuses in database:", allStatuses);
       }
 
-      console.log("Approved query final result:", { approvedData, approvedError });
-      console.log("Approved logs count:", finalApproved?.length || 0);
+      console.log("Approved (closed) final count:", finalApproved?.length || 0);
 
       if (pendingError) {
         console.error('Error fetching pending logs:', pendingError);
@@ -451,11 +488,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                 <span>Pending Tickets</span>
                 <Badge variant="secondary">{pendingLogs.length}</Badge>
               </div>
-              {selectedDate && (
-                <Badge variant="outline" className="sm:ml-2">
-                  {new Date(selectedDate).toLocaleDateString()}
-                </Badge>
-              )}
+              {/* Date filter intentionally not shown for Pay Later */}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -569,7 +602,9 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Service</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Entry Time</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Exit Time</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Date</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -598,8 +633,14 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                               {log.exit_time ? new Date(log.exit_time).toLocaleString() : 
                                log.approved_at ? new Date(log.approved_at).toLocaleString() : "-"}
                             </td>
+                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {log.payment_date ? new Date(log.payment_date).toLocaleString() : '-'}
+                            </td>
                             <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
                               <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100 text-xs">Pay Later</Badge>
+                            </td>
+                            <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                              <Button size="sm" variant="default" className="text-xs" onClick={() => openSettle(log)}>Settle</Button>
                             </td>
                           </tr>
                         ))
@@ -642,7 +683,8 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Amount</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Service</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Entry Time</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Exit Time</th>
+                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Exit Time</th>
+                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Date</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Duration</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -673,6 +715,9 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                             <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">
                               {log.exit_time ? new Date(log.exit_time).toLocaleString() : 
                                log.approved_at ? new Date(log.approved_at).toLocaleString() : "-"}
+                            </td>
+                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {log.payment_date ? new Date(log.payment_date).toLocaleString() : '-'}
                             </td>
                             <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
                               {(() => {
@@ -799,6 +844,44 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
             <DialogFooter>
               <Button variant="outline" onClick={() => setCheckoutOpen(false)}>Cancel</Button>
               <Button onClick={confirmCheckout}>Confirm Checkout</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Settle Pay Later Dialog */}
+        <Dialog open={settleOpen} onOpenChange={setSettleOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Settle Payment</DialogTitle>
+              <DialogDescription>Choose payment mode to close this Pay Later ticket.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Vehicle No</Label>
+                  <div className="mt-1 text-sm font-medium">{settleLog?.vehicle_number || '-'}</div>
+                </div>
+                <div>
+                  <Label>Amount</Label>
+                  <div className="mt-1 text-sm font-medium">{settleLog?.Amount != null ? formatCurrency(settleLog.Amount) : '-'}</div>
+                </div>
+              </div>
+              <div>
+                <Label>Payment Mode</Label>
+                <Select value={settlePaymentMode} onValueChange={(v: any) => setSettlePaymentMode(v)}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select payment mode" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="upi">UPI</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSettleOpen(false)}>Cancel</Button>
+              <Button onClick={confirmSettle}>Confirm</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
