@@ -1,5 +1,5 @@
 import { Layout } from "@/components/layout/Layout";
-import { ArrowLeft, Users, Plus, Edit, Trash2, X, UserPlus } from "lucide-react";
+import { ArrowLeft, Users, Plus, Trash2, X, UserPlus, CreditCard, Upload, QrCode, Save, Loader2, Edit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
@@ -32,6 +33,23 @@ export default function ManagerAccess() {
   const [loading, setLoading] = useState(false);
   const [locations, setLocations] = useState<{ id: string; name: string }[]>([]);
   
+  // Payment details state
+  const [paymentDetails, setPaymentDetails] = useState({
+    payment_method: '',
+    account_name: '',
+    account_number: '',
+    ifsc_code: '',
+    bank_name: '',
+    upi_id: '',
+    additional_notes: ''
+  });
+  const [qrCodeFile, setQrCodeFile] = useState<File | null>(null);
+  const [qrCodePreview, setQrCodePreview] = useState<string>('');
+  const [savingPayment, setSavingPayment] = useState(false);
+
+    const [allPaymentDetails, setAllPaymentDetails] = useState<any[]>([]);
+  const [editingPaymentDetail, setEditingPaymentDetail] = useState<any>(null);
+   
   // Form state
   const [formData, setFormData] = useState({
     firstName: '',
@@ -83,11 +101,253 @@ export default function ManagerAccess() {
     fetchLocations();
   }, [user]);
 
+    // Fetch all payment details for owners when component loads
+  useEffect(() => {
+    if (user?.role === 'owner') {
+      refreshAllPaymentDetails();
+    }
+  }, [user]);
+
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
     }));
+  };
+
+  const handlePaymentInputChange = (field: string, value: string) => {
+    setPaymentDetails(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleQrCodeUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        toast.error('File size must be less than 5MB');
+        return;
+      }
+      
+      if (!file.type.startsWith('image/')) {
+        toast.error('Please select an image file');
+        return;
+      }
+
+      setQrCodeFile(file);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setQrCodePreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const uploadQrCode = async (): Promise<string | null> => {
+    if (!qrCodeFile) return null;
+
+    try {
+      const fileExt = qrCodeFile.name.split('.').pop();
+      const fileName = `${user?.id}-qr-${Date.now()}.${fileExt}`;
+      const filePath = `qr-codes/${fileName}`; // Use a subfolder for organization
+
+      const { error: uploadError } = await supabase.storage
+        .from('uploads')
+        .upload(filePath, qrCodeFile);
+
+      if (uploadError) {
+        console.error('Upload error details:', uploadError);
+        throw uploadError;
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('uploads')
+        .getPublicUrl(filePath);
+
+      return publicUrl;
+    } catch (error) {
+      console.error('Error uploading QR code:', error);
+      toast.error('Failed to upload QR code');
+      return null;
+    }
+  };
+
+  const refreshAllPaymentDetails = async () => {
+    if (user?.role === 'owner' && user?.id) {
+      try {
+        console.log('🔄 Refreshing owner payment details...');
+        
+        // Fetch the owner's payment details (there should only be one record per owner)
+        const { data, error } = await supabase
+          .from('owner_payment_details')
+          .select('*')
+          .eq('owner_id', user.id);
+
+        if (error) {
+          console.error('❌ Error fetching owner payment details:', error);
+          toast.error('Failed to fetch payment details');
+        } else {
+          console.log('✅ Fetched owner payment details:', data);
+          setAllPaymentDetails(data || []);
+        }
+      } catch (error) {
+        console.error('💥 Error refreshing owner payment details:', error);
+        toast.error('Failed to refresh payment details');
+      }
+    }
+  };
+
+
+
+
+
+  const handleEditPaymentDetail = (detail: any) => {
+    setEditingPaymentDetail(detail);
+    setPaymentDetails({
+      payment_method: detail.payment_method || '',
+      account_name: detail.account_name || '',
+      account_number: detail.account_number || '',
+      ifsc_code: detail.ifsc_code || '',
+      bank_name: detail.bank_name || '',
+      upi_id: detail.upi_id || '',
+      additional_notes: detail.additional_notes || ''
+    });
+    setQrCodePreview(detail.qr_code_url || '');
+    setQrCodeFile(null);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingPaymentDetail(null);
+    setPaymentDetails({
+      payment_method: '',
+      account_name: '',
+      account_number: '',
+      ifsc_code: '',
+      bank_name: '',
+      upi_id: '',
+      additional_notes: ''
+    });
+    setQrCodePreview('');
+    setQrCodeFile(null);
+  };
+
+  const handleDeletePaymentDetail = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this payment detail?')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('owner_payment_details')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      
+      toast.success('Payment detail deleted successfully!');
+      
+             // Refresh the payment details list
+       refreshAllPaymentDetails();
+    } catch (error: any) {
+      console.error('Error deleting payment detail:', error);
+      toast.error(error.message || 'Failed to delete payment detail');
+    }
+  };
+
+  const handleSavePaymentDetails = async () => {
+    if (!user?.id || (user?.role !== 'owner' && user?.role !== 'manager')) {
+      toast.error('Only owners and managers can save payment details');
+      return;
+    }
+
+    if (!paymentDetails.payment_method) {
+      toast.error('Please select a payment method');
+      return;
+    }
+
+    setSavingPayment(true);
+
+    try {
+      let qrCodeUrl = null;
+      if (qrCodeFile) {
+        qrCodeUrl = await uploadQrCode();
+        if (!qrCodeUrl) {
+          setSavingPayment(false);
+          return;
+        }
+      }
+
+      // For owners: always create new payment details (multiple allowed)
+      // For managers: they can only view the owner's payment details, not create their own
+      const paymentData = {
+        owner_id: user.role === 'owner' ? user.id : user.own_id, // Always use the owner's ID
+        user_role: 'owner', // Always set as owner since managers can't create payment details
+        payment_method: paymentDetails.payment_method,
+        account_name: paymentDetails.account_name || null,
+        account_number: paymentDetails.account_number || null,
+        ifsc_code: paymentDetails.ifsc_code || null,
+        bank_name: paymentDetails.bank_name || null,
+        upi_id: paymentDetails.upi_id || null,
+        qr_code_url: qrCodeUrl || null,
+        additional_notes: paymentDetails.additional_notes || null,
+        is_active: true
+      };
+
+             let data, error;
+       
+       if (editingPaymentDetail) {
+         // Update existing record
+         const { data: updateData, error: updateError } = await supabase
+           .from('owner_payment_details')
+           .update(paymentData)
+           .eq('id', editingPaymentDetail.id)
+           .select();
+         data = updateData;
+         error = updateError;
+       } else {
+         // Insert new record
+         const { data: insertData, error: insertError } = await supabase
+           .from('owner_payment_details')
+           .insert(paymentData)
+           .select();
+         data = insertData;
+         error = insertError;
+       }
+
+             if (error) throw error;
+       
+       if (editingPaymentDetail) {
+         console.log('✅ Updated payment details:', data);
+         toast.success('Payment details updated successfully!');
+       } else {
+         console.log('✅ Created new payment details:', data);
+         toast.success('Payment details added successfully!');
+       }
+       
+       // Clear the form and editing state
+       setEditingPaymentDetail(null);
+       setPaymentDetails({
+         payment_method: '',
+         account_name: '',
+         account_number: '',
+         ifsc_code: '',
+         bank_name: '',
+         upi_id: '',
+         additional_notes: ''
+       });
+       setQrCodePreview('');
+       setQrCodeFile(null);
+       
+       // Refresh the payment details list
+       refreshAllPaymentDetails();
+      
+    } catch (error: any) {
+      console.error('Error saving payment details:', error);
+      toast.error(error.message || 'Failed to save payment details');
+    } finally {
+      setSavingPayment(false);
+    }
   };
 
   const handleCreateManager = async (e: React.FormEvent) => {
@@ -308,6 +568,326 @@ export default function ManagerAccess() {
         </div>
       </div>
 
+             {/* Payment Details Section - Visible to owners and managers */}
+       {(user?.role === 'owner' || user?.role === 'manager') && (
+         <div id="payment-details-form">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+                             <div className="flex items-center gap-2">
+                 <CreditCard className="h-5 w-5" />
+                 {editingPaymentDetail 
+                   ? `Edit Payment Details - ${editingPaymentDetail.payment_method?.replace('_', ' ')}`
+                   : (user?.role === 'owner' ? 'Add New Payment Details' : 'View Owner Payment Details')
+                 }
+               </div>
+              <div className="flex gap-2">
+                
+                
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="payment_method">Payment Method *</Label>
+                  <Select 
+                    value={paymentDetails.payment_method} 
+                    onValueChange={(value) => handlePaymentInputChange('payment_method', value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select payment method" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                      <SelectItem value="upi">UPI</SelectItem>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="check">Check</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="account_name">Account Name</Label>
+                  <Input
+                    id="account_name"
+                    value={paymentDetails.account_name}
+                    onChange={(e) => handlePaymentInputChange('account_name', e.target.value)}
+                    placeholder="Account holder name"
+                  />
+                </div>
+              </div>
+
+              {/* Bank Transfer Fields */}
+              {paymentDetails.payment_method === 'bank_transfer' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="account_number">Account Number</Label>
+                    <Input
+                      id="account_number"
+                      value={paymentDetails.account_number}
+                      onChange={(e) => handlePaymentInputChange('account_number', e.target.value)}
+                      placeholder="Account number"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="ifsc_code">IFSC Code</Label>
+                    <Input
+                      id="ifsc_code"
+                      value={paymentDetails.ifsc_code}
+                      onChange={(e) => handlePaymentInputChange('ifsc_code', e.target.value)}
+                      placeholder="IFSC code"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bank_name">Bank Name</Label>
+                    <Input
+                      id="bank_name"
+                      value={paymentDetails.bank_name}
+                      onChange={(e) => handlePaymentInputChange('bank_name', e.target.value)}
+                      placeholder="Bank name"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* UPI Fields */}
+              {paymentDetails.payment_method === 'upi' && (
+                <div className="space-y-2">
+                  <Label htmlFor="upi_id">UPI ID</Label>
+                  <Input
+                    id="upi_id"
+                    value={paymentDetails.upi_id}
+                    onChange={(e) => handlePaymentInputChange('upi_id', e.target.value)}
+                    placeholder="example@upi"
+                  />
+                </div>
+              )}
+
+              {/* QR Code Upload */}
+              <div className="space-y-4">
+                <Label>QR Code (Optional)</Label>
+                <div className="flex items-center gap-4">
+                  <div className="flex-1">
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleQrCodeUpload}
+                      className="cursor-pointer"
+                    />
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Upload QR code image (PNG, JPG, max 5MB)
+                    </p>
+                  </div>
+                  {qrCodePreview && (
+                    <div className="relative">
+                      <img 
+                        src={qrCodePreview} 
+                        alt="QR Code Preview" 
+                        className="w-20 h-20 object-cover rounded border"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute -top-2 -right-2 h-6 w-6 p-0"
+                        onClick={() => {
+                          setQrCodeFile(null);
+                          setQrCodePreview('');
+                        }}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Additional Notes */}
+              <div className="space-y-2">
+                <Label htmlFor="additional_notes">Additional Notes</Label>
+                <Textarea
+                  id="additional_notes"
+                  value={paymentDetails.additional_notes}
+                  onChange={(e) => handlePaymentInputChange('additional_notes', e.target.value)}
+                  placeholder="Any additional payment information..."
+                  rows={3}
+                />
+              </div>
+
+              
+
+                             {/* Save/Cancel Buttons */}
+               <div className="flex justify-end gap-2">
+                 {editingPaymentDetail && (
+                   <Button 
+                     type="button"
+                     variant="outline"
+                     onClick={handleCancelEdit}
+                     disabled={savingPayment}
+                   >
+                     Cancel Edit
+                   </Button>
+                 )}
+                 <Button 
+                   onClick={handleSavePaymentDetails}
+                   disabled={savingPayment || !paymentDetails.payment_method}
+                   className="min-w-[120px]"
+                 >
+                   {savingPayment ? (
+                     <>
+                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                       Saving...
+                     </>
+                   ) : (
+                     <>
+                       <Save className="h-4 w-4 mr-2" />
+                       {editingPaymentDetail ? 'Update Details' : 'Add New Details'}
+                     </>
+                   )}
+                 </Button>
+               </div>
+            </div>
+                     </CardContent>
+         </Card>
+         </div>
+       )}
+
+      {/* All Payment Details Section - Only visible to owners */}
+      {user?.role === 'owner' && (
+        <Card>
+          <CardHeader>
+                         <CardTitle className="flex items-center gap-2">
+               <CreditCard className="h-5 w-5" />
+               Owner Payment Details (Shared Across All Locations)
+             </CardTitle>
+           </CardHeader>
+           <CardContent>
+             <div className="space-y-4">
+                               <p className="text-sm text-muted-foreground">
+                  You can add multiple payment methods (UPI, Bank Transfer, Cash, etc.) that will be shared across all your locations. Managers at your locations can view these details.
+                </p>
+              
+              {/* Payment Details Table */}
+              <div className="space-y-4">
+                                 <div className="flex justify-between items-center">
+                   <h4 className="font-medium">All Your Payment Methods ({allPaymentDetails.length})</h4>
+                  
+                </div>
+                
+                {allPaymentDetails.length > 0 ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>User</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Payment Method</TableHead>
+                        <TableHead>Account Details</TableHead>
+                        <TableHead>QR Code</TableHead>
+                                                 <TableHead>Status</TableHead>
+                         <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {allPaymentDetails.map((detail) => (
+                        <TableRow key={detail.id}>
+                          <TableCell className="font-medium">
+                            {detail.account_name || 'N/A'}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={detail.user_role === 'owner' ? 'default' : 'secondary'}>
+                              {detail.user_role}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="capitalize">
+                            {detail.payment_method?.replace('_', ' ')}
+                          </TableCell>
+                          <TableCell>
+                            {detail.payment_method === 'bank_transfer' && (
+                              <div className="text-sm">
+                                <p>Acc: {detail.account_number || 'N/A'}</p>
+                                <p>Bank: {detail.bank_name || 'N/A'}</p>
+                                <p>IFSC: {detail.ifsc_code || 'N/A'}</p>
+                              </div>
+                            )}
+                            {detail.payment_method === 'upi' && (
+                              <div className="text-sm">
+                                <p>UPI ID: {detail.upi_id || 'N/A'}</p>
+                              </div>
+                            )}
+                            {detail.payment_method === 'cash' && (
+                              <div className="text-sm text-muted-foreground">
+                                Cash payment
+                              </div>
+                            )}
+                            {detail.payment_method === 'check' && (
+                              <div className="text-sm text-muted-foreground">
+                                Check payment
+                              </div>
+                            )}
+                            {detail.payment_method === 'other' && (
+                              <div className="text-sm text-muted-foreground">
+                                Other method
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {detail.qr_code_url ? (
+                              <img 
+                                src={detail.qr_code_url} 
+                                alt="QR Code" 
+                                className="w-12 h-12 object-cover rounded border"
+                              />
+                            ) : (
+                              <span className="text-muted-foreground text-sm">No QR</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={detail.is_active ? 'default' : 'secondary'}>
+                              {detail.is_active ? 'Active' : 'Inactive'}
+                            </Badge>
+                          </TableCell>
+                                                     <TableCell>
+                             <div className="flex items-center gap-2">
+                               <Button
+                                 variant="ghost"
+                                 size="sm"
+                                 onClick={() => handleEditPaymentDetail(detail)}
+                                 className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700"
+                                 title="Edit payment details"
+                               >
+                                 <Edit className="h-4 w-4" />
+                               </Button>
+                               <Button
+                                 variant="ghost"
+                                 size="sm"
+                                 onClick={() => handleDeletePaymentDetail(detail.id)}
+                                 className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                 title="Delete payment details"
+                               >
+                                 <Trash2 className="h-4 w-4" />
+                               </Button>
+                             </div>
+                           </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                                     <div className="text-center py-8 text-muted-foreground">
+                     <CreditCard className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                     <p>No payment methods added yet</p>
+                     <p className="text-xs">Add your first payment method above to get started</p>
+                   </div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Active Managers</CardTitle>
@@ -321,7 +901,7 @@ export default function ManagerAccess() {
                 <TableHead>Assigned Location</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Last Login</TableHead>
-                <TableHead>Actions</TableHead>
+                                         <TableHead>Delete</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -336,16 +916,11 @@ export default function ManagerAccess() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{manager.lastLogin}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Button variant="ghost" size="sm">
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
+                                     <TableCell>
+                     <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                       <Trash2 className="h-4 w-4" />
+                     </Button>
+                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
