@@ -166,6 +166,20 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
   const [isSubmitDisabled, setIsSubmitDisabled] = useState(false);
   const [visitCount, setVisitCount] = useState<number>(0);
 
+  // Custom entry date and time
+  const [customEntryDate, setCustomEntryDate] = useState(() => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  });
+  const [customEntryTime, setCustomEntryTime] = useState(() => {
+    const now = new Date();
+    return now.toTimeString().slice(0, 5);
+  });
+  const [useCustomDateTime, setUseCustomDateTime] = useState(false);
+
+  // Loading state for auto-fill
+  const [isLoadingVehicleData, setIsLoadingVehicleData] = useState(false);
+
   const { user } = useAuth();
 
   // Store edit data for later use
@@ -419,6 +433,21 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         setSelectedModel(logData.selectedModel || '');
         setSelectedModelId(logData.selectedModelId || '');
         setWorkshop(logData.workshop || '');
+
+        // Handle custom entry date and time
+        if (logData.entry_time) {
+          const entryDateTime = new Date(logData.entry_time);
+          setCustomEntryDate(entryDateTime.toISOString().split('T')[0]);
+          setCustomEntryTime(entryDateTime.toTimeString().slice(0, 5));
+          setUseCustomDateTime(true);
+        } else {
+          // If no custom entry time, use current date/time
+          const now = new Date();
+          setCustomEntryDate(now.toISOString().split('T')[0]);
+          setCustomEntryTime(now.toTimeString().slice(0, 5));
+          setUseCustomDateTime(false);
+        }
+
         // If incoming edit data contains wheel_type, apply it first
         if (logData.wheel_type) {
           const derivedFromLog = mapTypeToWheelCategory(normalizeTypeString(logData.wheel_type));
@@ -614,11 +643,29 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
   useEffect(() => {
     if (isEditing) return; // don't override when editing an existing entry
     const plate = vehicleNumber.trim();
-    if (!plate || plate.length < 3) return;
+    if (!plate || plate.length < 3) {
+      // Clear form when vehicle number is too short
+      setCustomerName('');
+      setPhoneNumber('');
+      setDateOfBirth('');
+      setCustomerLocation('');
+      setSelectedVehicleBrand('');
+      setSelectedModel('');
+      setSelectedModelId('');
+      setWheelCategory('');
+      setVehicleType('');
+      setService([]);
+      setAmount('500');
+      setDiscount('');
+      setRemarks('');
+      setWorkshop('');
+      return;
+    }
     let cancelled = false;
 
     const loadLatestDetails = async () => {
       try {
+        setIsLoadingVehicleData(true);
         // Pull latest matching manual log (any location) for this plate
         const { data, error } = await supabase
           .from('logs-man')
@@ -626,52 +673,76 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
           .ilike('vehicle_number', `%${plate}%`)
           .order('created_at', { ascending: false })
           .limit(1);
-        if (error || !data || data.length === 0) return;
+        if (error || !data || data.length === 0) {
+          // No previous data found, clear the form
+          if (!cancelled) {
+            setCustomerName('');
+            setPhoneNumber('');
+            setDateOfBirth('');
+            setCustomerLocation('');
+            setSelectedVehicleBrand('');
+            setSelectedModel('');
+            setSelectedModelId('');
+            setWheelCategory('');
+            setVehicleType('');
+            setService([]);
+            setAmount('500');
+            setDiscount('');
+            setRemarks('');
+            setWorkshop('');
+          }
+          return;
+        }
         if (cancelled) return;
 
         const last = data[0] as any;
-        // Fill only if fields are empty to avoid clobbering user input
-        if (!customerName && last.Name) setCustomerName(last.Name);
-        if (!phoneNumber && last.Phone_no) setPhoneNumber(last.Phone_no);
-        if (!customerLocation && last.Location) setCustomerLocation(last.Location);
-        if (!dateOfBirth && last['D.O.B']) setDateOfBirth(last['D.O.B']);
+        
+        // Always populate with the latest data for this vehicle number
+        setCustomerName(last.Name || '');
+        setPhoneNumber(last.Phone_no || '');
+        setCustomerLocation(last.Location || '');
+        setDateOfBirth(last['D.O.B'] || '');
 
         // Wheel category from log if available
-        if (!wheelCategory && last.wheel_type) {
+        if (last.wheel_type) {
           const derived = mapTypeToWheelCategory(normalizeTypeString(last.wheel_type));
           if (derived) setWheelCategory(derived);
         }
 
         // Vehicle brand/model
-        if (!selectedVehicleBrand && last.vehicle_brand) {
-          setSelectedVehicleBrand(last.vehicle_brand);
-        }
+        setSelectedVehicleBrand(last.vehicle_brand || '');
         // Defer model/id set to allow brand effect to populate models
         setTimeout(() => {
-          if (!selectedModel && last.vehicle_model) setSelectedModel(last.vehicle_model);
-          if (!selectedModelId && last.Brand_id) setSelectedModelId(last.Brand_id);
+          if (!cancelled) {
+            setSelectedModel(last.vehicle_model || '');
+            setSelectedModelId(last.Brand_id || '');
+          }
         }, 200);
 
         // If wheel category still empty, try to derive from Vehicles_in_india type by brand+model
-        if (!wheelCategory && (last.vehicle_brand || last.vehicle_model) && vehicleData.length > 0) {
+        if (!last.wheel_type && (last.vehicle_brand || last.vehicle_model) && vehicleData.length > 0) {
           try {
             const match = vehicleData.find(item =>
               item['Vehicle Brands'] === (last.vehicle_brand || '') && item['Models'] === (last.vehicle_model || '')
             );
             if (match && (match as any).type != null) {
               const derived = mapTypeToWheelCategory(normalizeTypeString((match as any).type));
-              if (derived) setWheelCategory(derived);
+              if (derived && !cancelled) setWheelCategory(derived);
             }
           } catch {}
         }
       } catch (e) {
         // ignore autofill errors silently
+      } finally {
+        if (!cancelled) {
+          setIsLoadingVehicleData(false);
+        }
       }
     };
 
     const t = setTimeout(loadLatestDetails, 300);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [vehicleNumber, isEditing, customerName, phoneNumber, customerLocation, dateOfBirth, selectedVehicleBrand, selectedModel, selectedModelId, wheelCategory, vehicleData]);
+  }, [vehicleNumber, isEditing, vehicleData]);
 
   const handleVehicleNumberChange = (value: string) => {
     setVehicleNumber(value.toUpperCase());
@@ -721,6 +792,19 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       setIsSubmitDisabled(false); // Re-enable button on validation error
       return;
     }
+
+    // Validate custom date and time if enabled
+    if (useCustomDateTime) {
+      const selectedDateTime = new Date(`${customEntryDate}T${customEntryTime}`);
+      const now = new Date();
+      
+      if (selectedDateTime > now) {
+        toast.error('Entry date and time cannot be in the future');
+        setIsSubmitDisabled(false);
+        return;
+      }
+    }
+
     // if (!scratchImage) {
     //   toast.error('Please save the scratch marking before submitting.');
     //   return;
@@ -744,6 +828,23 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       const priceNum = parseFloat(amount) || 0;
       const discountNum = discount === '' ? 0 : parseFloat(discount) || 0;
       const finalAmount = priceNum - discountNum;
+
+      // Prepare entry time data
+      const entryTimeData = useCustomDateTime 
+        ? { entry_time: new Date(`${customEntryDate}T${customEntryTime}:00`).toISOString() }
+        : {};
+
+      if (useCustomDateTime) {
+        console.log('Custom DateTime Debug:', {
+          userSelectedDate: customEntryDate,
+          userSelectedTime: customEntryTime,
+          combinedString: `${customEntryDate}T${customEntryTime}:00`,
+          finalISOString: new Date(`${customEntryDate}T${customEntryTime}:00`).toISOString(),
+          localDate: new Date(`${customEntryDate}T${customEntryTime}:00`).toLocaleString(),
+          utcDate: new Date(`${customEntryDate}T${customEntryTime}:00`).toUTCString()
+        });
+      }
+
       // 3. Insert or update logs-man based on edit mode
       if (isEditing && editLogId) {
         // Update existing log
@@ -773,6 +874,8 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
             vehicle_model: selectedModel || null,
             Brand_id: selectedModelId || null,
             updated_at: new Date().toISOString(),
+            // Custom entry time if specified
+            ...entryTimeData,
           })
           .eq('id', editLogId);
         
@@ -810,6 +913,8 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
             vehicle_model: selectedModel || null,
             Brand_id: selectedModelId || null,
             created_at: new Date().toISOString(),
+            // Custom entry time if specified
+            ...entryTimeData,
             // Approval status
             approval_status: 'pending',
           },
@@ -837,6 +942,10 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         setSelectedVehicleBrand('');
         setSelectedModel('');
         setSelectedModelId('');
+        // Reset custom datetime
+        setUseCustomDateTime(false);
+        setCustomEntryDate(new Date().toISOString().split('T')[0]);
+        setCustomEntryTime(new Date().toTimeString().slice(0, 5));
       }
     } catch (err: any) {
       toast.error('Submission failed: ' + (err?.message || err));
@@ -904,16 +1013,67 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
               </div>
             </div>
 
+            {/* Custom Entry Date and Time */}
+            <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="useCustomDateTime"
+                  checked={useCustomDateTime}
+                  onCheckedChange={(checked) => setUseCustomDateTime(checked as boolean)}
+                />
+                <Label htmlFor="useCustomDateTime" className="text-base font-semibold">
+                  Use Custom Entry Date & Time
+                </Label>
+              </div>
+              
+              {useCustomDateTime && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="customEntryDate">Entry Date</Label>
+                    <Input
+                      id="customEntryDate"
+                      type="date"
+                      value={customEntryDate}
+                      onChange={(e) => setCustomEntryDate(e.target.value)}
+                      max={new Date().toISOString().split('T')[0]}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="customEntryTime">Entry Time</Label>
+                    <Input
+                      id="customEntryTime"
+                      type="time"
+                      value={customEntryTime}
+                      onChange={(e) => setCustomEntryTime(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+              
+              {useCustomDateTime && (
+                <div className="text-sm text-muted-foreground">
+                  Entry will be recorded for: {customEntryDate} at {customEntryTime}
+                </div>
+              )}
+            </div>
+
             {/* Vehicle Number */}
             <div className="space-y-2">
               <Label htmlFor="vehicleNumber">Vehicle Number</Label>
-              <Input 
-                id="vehicleNumber"
-                placeholder="Enter vehicle number (KL07AB0001)" 
-                className="text-center font-mono text-lg uppercase"
-                value={vehicleNumber}
-                onChange={(e) => handleVehicleNumberChange(e.target.value)}
-              />
+              <div className="relative">
+                <Input 
+                  id="vehicleNumber"
+                  placeholder="Enter vehicle number (KL07AB0001)" 
+                  className="text-center font-mono text-lg uppercase"
+                  value={vehicleNumber}
+                  onChange={(e) => handleVehicleNumberChange(e.target.value)}
+                />
+                {isLoadingVehicleData && (
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                  </div>
+                )}
+              </div>
               {vehicleNumber && (
                 <div className="flex items-center gap-2 text-sm">
                   <div className={`w-2 h-2 rounded-full ${visitCount > 0 ? 'bg-success' : 'bg-warning'}`}></div>

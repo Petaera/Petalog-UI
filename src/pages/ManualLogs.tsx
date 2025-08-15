@@ -47,15 +47,20 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
   const [priceMatrix, setPriceMatrix] = useState<any[]>([]);
   const [serviceOptions, setServiceOptions] = useState<string[]>([]);
 
+  // State for tracking deleted logs
+  const [isDeleting, setIsDeleting] = useState<Set<string>>(new Set());
+
   useEffect(() => {
-    const fetchServicePrices = async () => {
-      const { data } = await supabase.from('Service_prices').select('*');
-      if (data && data.length > 0) {
-        setPriceMatrix(data);
-      }
-    };
-    fetchServicePrices();
-  }, []);
+    if (selectedLocation) {
+      fetchLogs();
+    }
+  }, [selectedLocation, selectedDate]);
+
+  useEffect(() => {
+    if (selectedLocation) {
+      fetchLogs();
+    }
+  }, [selectedLocation]);
 
   const openCheckout = (log: any) => {
     setCheckoutLog(log);
@@ -134,20 +139,6 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
     }
   };
 
-  console.log("ManualLogs component rendered. selectedLocation:", selectedLocation);
-
-  useEffect(() => {
-    console.log("ManualLogs useEffect running.", {
-      selectedLocation,
-      selectedDate,
-    });
-    // Wait until a valid location is available
-    if (!selectedLocation || selectedLocation.trim() === "") {
-      return;
-    }
-    fetchLogs();
-  }, [selectedLocation, selectedDate]);
-
   const clearDateFilter = () => {
     // Reset to today's date instead of clearing
     const today = new Date();
@@ -190,9 +181,6 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
   const fetchLogs = async () => {
     setLoading(true);
     try {
-      console.log("Fetching logs for location:", selectedLocation);
-      console.log("Selected date:", selectedDate);
-      
       // Fetch pending logs (not approved yet)
       let pendingQuery = supabase
         .from("logs-man")
@@ -203,9 +191,10 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
 
       // Add date filter if selected
       if (selectedDate) {
-        const startOfDay = `${selectedDate}T00:00:00.000Z`;
-        const endOfDay = `${selectedDate}T23:59:59.999Z`;
-        console.log("Date filter - startOfDay:", startOfDay, "endOfDay:", endOfDay);
+        // Create proper date objects with timezone handling
+        const selectedDateObj = new Date(selectedDate);
+        const startOfDay = selectedDateObj.toISOString().split('T')[0] + 'T00:00:00.000Z';
+        const endOfDay = selectedDateObj.toISOString().split('T')[0] + 'T23:59:59.999Z';
         
         // Try filtering by entry_time first, then fallback to created_at
         pendingQuery = pendingQuery
@@ -214,13 +203,10 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
       }
 
       const { data: pendingData, error: pendingError } = await pendingQuery;
-
-      console.log("Pending query result:", { pendingData, pendingError });
-      console.log("Pending logs count:", pendingData?.length || 0);
       
+      let finalPending: any[] = [];
       // If no results with entry_time filter, try created_at
       if (selectedDate && pendingData?.length === 0) {
-        console.log("No results with entry_time filter, trying created_at...");
         let fallbackQuery = supabase
           .from("logs-man")
           .select("*, vehicles(number_plate)")
@@ -228,29 +214,24 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
           .in("approval_status", ["pending", null])
           .order("created_at", { ascending: false });
         
-        const startOfDay = `${selectedDate}T00:00:00.000Z`;
-        const endOfDay = `${selectedDate}T23:59:59.999Z`;
+        const selectedDateObj = new Date(selectedDate);
+        const startOfDay = selectedDateObj.toISOString().split('T')[0] + 'T00:00:00.000Z';
+        const endOfDay = selectedDateObj.toISOString().split('T')[0] + 'T23:59:59.999Z';
         
         const { data: fallbackData, error: fallbackError } = await fallbackQuery
           .gte("created_at", startOfDay)
           .lte("created_at", endOfDay);
         
-        console.log("Fallback query result:", { fallbackData, fallbackError });
-        
         if (fallbackData && fallbackData.length > 0) {
-          console.log("Found data with created_at filter");
-          setPendingLogs(fallbackData);
+          finalPending = fallbackData;
         } else {
-          setPendingLogs(pendingData || []);
+          finalPending = pendingData || [];
         }
       } else {
-        setPendingLogs(pendingData || []);
+        finalPending = pendingData || [];
       }
 
-      // Fetch approved logs for Ticket Closed (date filter applies)
-      let approvedData = [];
-      let approvedError = null;
-      let finalApproved = [];
+      // Fetch approved (closed) logs
       let approvedQuery = supabase
         .from("logs-man")
         .select("*, vehicles(number_plate)")
@@ -258,26 +239,21 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
         .eq("approval_status", "approved")
         .order("created_at", { ascending: false });
 
+      // Add date filter if selected
       if (selectedDate) {
-        const startOfDay = `${selectedDate}T00:00:00.000Z`;
-        const endOfDay = `${selectedDate}T23:59:59.999Z`;
-        console.log("Approved (closed) - Date filter - startOfDay:", startOfDay, "endOfDay:", endOfDay);
+        const selectedDateObj = new Date(selectedDate);
+        const approvedStartOfDay = selectedDateObj.toISOString().split('T')[0] + 'T00:00:00.000Z';
+        const approvedEndOfDay = selectedDateObj.toISOString().split('T')[0] + 'T23:59:59.999Z';
+        
         approvedQuery = approvedQuery
-          .gte("entry_time", startOfDay)
-          .lte("entry_time", endOfDay);
+          .gte("entry_time", approvedStartOfDay)
+          .lte("entry_time", approvedEndOfDay);
       }
 
-      const { data: approved1, error: error1 } = await approvedQuery;
-      console.log("Approved (closed) query result:", { approved1, error1 });
-      if (error1) {
-        console.error("Approved (closed) query failed:", error1);
-      } else {
-        approvedData = approved1 || [];
-        approvedError = error1;
-      }
+      const { data: approvedData, error: approvedError } = await approvedQuery;
 
-      if (selectedDate && approvedData.length === 0) {
-        console.log("No approved (closed) results with entry_time filter, trying created_at...");
+      let finalApproved: any[] = [];
+      if (selectedDate && approvedData?.length === 0) {
         let approvedFallbackQuery = supabase
           .from("logs-man")
           .select("*, vehicles(number_plate)")
@@ -285,13 +261,13 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
           .eq("approval_status", "approved")
           .order("created_at", { ascending: false });
 
-        const startOfDay = `${selectedDate}T00:00:00.000Z`;
-        const endOfDay = `${selectedDate}T23:59:59.999Z`;
+        const selectedDateObj = new Date(selectedDate);
+        const approvedFallbackStartOfDay = selectedDateObj.toISOString().split('T')[0] + 'T00:00:00.000Z';
+        const approvedFallbackEndOfDay = selectedDateObj.toISOString().split('T')[0] + 'T23:59:59.999Z';
 
         const { data: approvedFallbackData, error: approvedFallbackError } = await approvedFallbackQuery
-          .gte("created_at", startOfDay)
-          .lte("created_at", endOfDay);
-        console.log("Approved (closed) fallback result:", { approvedFallbackData, approvedFallbackError });
+          .gte("created_at", approvedFallbackStartOfDay)
+          .lte("created_at", approvedFallbackEndOfDay);
         finalApproved = approvedFallbackData && approvedFallbackData.length > 0 ? approvedFallbackData : (approvedData || []);
       } else {
         finalApproved = approvedData || [];
@@ -300,34 +276,64 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
       // Closed = approved but not Pay Later
       const closed = (finalApproved || []).filter((log: any) => String(log.payment_mode).toLowerCase() !== 'credit');
       setApprovedLogs(closed);
+      setPendingLogs(finalPending);
 
-      // Fetch Pay Later separately WITHOUT date filter
-      const { data: payLaterData, error: payLaterError } = await supabase
+      // Fetch Pay Later separately WITH date filter
+      let payLaterQuery = supabase
         .from("logs-man")
         .select("*, vehicles(number_plate)")
         .eq("location_id", selectedLocation)
         .eq("approval_status", "approved")
         .eq("payment_mode", "credit")
         .order("created_at", { ascending: false });
+
+      // Add date filter if selected
+      if (selectedDate) {
+        // Create proper date objects with timezone handling
+        const selectedDateObj = new Date(selectedDate);
+        const payLaterStartOfDay = selectedDateObj.toISOString().split('T')[0] + 'T00:00:00.000Z';
+        const payLaterEndOfDay = selectedDateObj.toISOString().split('T')[0] + 'T23:59:59.999Z';
+        
+        payLaterQuery = payLaterQuery
+          .gte("entry_time", payLaterStartOfDay)
+          .lte("entry_time", payLaterEndOfDay);
+      }
+
+      const { data: payLaterData, error: payLaterError } = await payLaterQuery;
+
+      let finalPayLater: any[] = [];
+      // If no results with entry_time filter, try created_at
+      if (selectedDate && payLaterData?.length === 0) {
+        let payLaterFallbackQuery = supabase
+          .from("logs-man")
+          .select("*, vehicles(number_plate)")
+          .eq("location_id", selectedLocation)
+          .eq("approval_status", "approved")
+          .eq("payment_mode", "credit")
+          .order("created_at", { ascending: false });
+        
+        const selectedDateObj = new Date(selectedDate);
+        const payLaterFallbackStartOfDay = selectedDateObj.toISOString().split('T')[0] + 'T00:00:00.000Z';
+        const payLaterFallbackEndOfDay = selectedDateObj.toISOString().split('T')[0] + 'T23:59:59.999Z';
+        
+        const { data: payLaterFallbackData, error: payLaterFallbackError } = await payLaterFallbackQuery
+          .gte("created_at", payLaterFallbackStartOfDay)
+          .lte("created_at", payLaterFallbackEndOfDay);
+        
+        if (payLaterFallbackData && payLaterFallbackData.length > 0) {
+          finalPayLater = payLaterFallbackData;
+        } else {
+          finalPayLater = payLaterData || [];
+        }
+      } else {
+        finalPayLater = payLaterData || [];
+      }
+
       if (payLaterError) {
         console.error('Error fetching pay later logs:', payLaterError);
         toast.error('Error fetching pay later logs: ' + payLaterError.message);
       }
-      setPayLaterLogs(payLaterData || []);
-
-      // If no results, try a broader query to see what approval_status values exist
-      if (finalApproved.length === 0 && !selectedDate) {
-        console.log("No approved logs found, checking all approval_status values...");
-        const { data: allStatuses, error: statusError } = await supabase
-          .from("logs-man")
-          .select("id, approval_status")
-          .eq("location_id", selectedLocation)
-          .limit(10);
-        
-        console.log("All approval statuses in database:", allStatuses);
-      }
-
-      console.log("Approved (closed) final count:", finalApproved?.length || 0);
+      setPayLaterLogs(finalPayLater);
 
       if (pendingError) {
         console.error('Error fetching pending logs:', pendingError);
@@ -392,29 +398,43 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
     }
   };
 
-  const handleDelete = async (logId: string, tableName: 'logs-man' | 'logs-man-approved') => {
-    if (!confirm('Are you sure you want to delete this log? This action cannot be undone.')) {
+  const handleDelete = async (logId: string) => {
+    if (!logId) {
+      toast.error('Invalid log ID');
       return;
     }
 
     try {
+      setIsDeleting(prev => { const newSet = new Set(prev); newSet.add(logId); return newSet; });
+
       const { error } = await supabase
-        .from(tableName)
+        .from('logs-man')
         .delete()
         .eq('id', logId);
 
       if (error) {
         console.error('Error deleting log:', error);
-        toast.error('Failed to delete log');
+        toast.error('Error deleting log: ' + error.message);
+        setIsDeleting(prev => { const newSet = new Set(prev); newSet.delete(logId); return newSet; });
         return;
       }
 
+      // Update local state immediately for instant UI feedback
+      setPendingLogs(prev => prev.filter(log => log.id !== logId));
+      setApprovedLogs(prev => prev.filter(log => log.id !== logId));
+      setPayLaterLogs(prev => prev.filter(log => log.id !== logId));
+
       toast.success('Log deleted successfully');
-      // Refresh the logs
-      fetchLogs();
+      
+      // Refresh from database after a short delay for consistency
+      setTimeout(() => {
+        fetchLogs();
+      }, 100);
+
     } catch (error) {
       console.error('Error deleting log:', error);
-      toast.error('Failed to delete log');
+      toast.error('Error deleting log: ' + error.message);
+      setIsDeleting(prev => { const newSet = new Set(prev); newSet.delete(logId); return newSet; });
     }
   };
 
@@ -475,6 +495,15 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                   Today
                 </Button>
             </div>
+            {/* Debug info */}
+            {selectedDate && (
+              <div className="text-xs text-muted-foreground">
+                Filtering: {new Date(selectedDate).toLocaleDateString()} | 
+                Pending: {pendingLogs.length} | 
+                Approved: {approvedLogs.length} | 
+                Pay Later: {payLaterLogs.length}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -516,52 +545,74 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                           {selectedDate ? `No pending tickets found for ${new Date(selectedDate).toLocaleDateString()}` : 'No pending tickets'}
                         </td></tr>
                       ) : (
-                        pendingLogs.map((log, idx) => (
-                          <tr key={log.id || idx} className="hover:bg-muted/30">
-                            <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_model || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{log.Name || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.Phone_no || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 hidden md:table-cell">
-                              {log.Amount ? formatCurrency(log.Amount) : "-"}
-                            </td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
-                              {log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
-                            </td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
-                              <div className="flex flex-col sm:flex-row gap-1">
-                                <Button
-                                  size="sm"
-                                  variant="default"
-                                  className="bg-green-600 hover:bg-green-700 text-xs"
-                                  onClick={() => openCheckout(log)}
-                                >
-                                  <Check className="h-3 w-3 mr-1" />
-                                  Checkout
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="text-xs"
-                                  onClick={() => handleEdit(log)}
-                                >
-                                  <Edit className="h-3 w-3 mr-1" />
-                                  Edit
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  className="text-xs"
-                                  onClick={() => handleDelete(log.id, 'logs-man')}
-                                  title="Delete log"
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
+                        pendingLogs.map((log, idx) => {
+                          return (
+                            <tr key={log.id || idx} className="hover:bg-muted/30">
+                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_model || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{log.Name || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.Phone_no || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 hidden md:table-cell">
+                                {log.Amount ? formatCurrency(log.Amount) : "-"}
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
+                                {log.entry_time ? new Date(log.entry_time).toLocaleString() : 
+                                 log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                                <div className="flex flex-col sm:flex-row gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="default"
+                                    className="bg-green-600 hover:bg-green-700 text-xs"
+                                    onClick={() => openCheckout(log)}
+                                  >
+                                    <Check className="h-3 w-3 mr-1" />
+                                    Checkout
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-xs"
+                                    onClick={() => handleEdit(log)}
+                                  >
+                                    <Edit className="h-3 w-3 mr-1" />
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    className="text-xs"
+                                    onClick={() => {
+                                      console.log('🚨 DELETE BUTTON CLICKED!');
+                                      console.log('Log object:', log);
+                                      console.log('Log ID:', log.id);
+                                      console.log('Log ID type:', typeof log.id);
+                                      console.log('Log ID length:', log.id?.length);
+                                      
+                                      if (!log.id) {
+                                        console.error('❌ Log ID is missing or undefined!');
+                                        toast.error('Cannot delete: Log ID is missing');
+                                        return;
+                                      }
+                                      
+                                      handleDelete(log.id);
+                                    }}
+                                    title="Delete log"
+                                    disabled={isDeleting.has(log.id)}
+                                  >
+                                    {isDeleting.has(log.id) ? (
+                                      <X className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="h-3 w-3" />
+                                    )}
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>
@@ -615,35 +666,37 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                           {selectedDate ? `No pay later tickets for ${new Date(selectedDate).toLocaleDateString()}` : 'No pay later tickets'}
                         </td></tr>
                       ) : (
-                        payLaterLogs.map((log: any, idx: number) => (
-                          <tr key={log.id || idx} className="hover:bg-muted/30">
-                            <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_model || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{log.Name || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden xl:table-cell">{log.Phone_no || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 hidden md:table-cell">
-                              {log.Amount ? formatCurrency(log.Amount) : "-"}
-                            </td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
-                              {log.entry_time ? new Date(log.entry_time).toLocaleString() : 
+                        payLaterLogs.map((log: any, idx: number) => {
+                          return (
+                            <tr key={log.id || idx} className="hover:bg-muted/30">
+                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_model || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{log.Name || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden xl:table-cell">{log.Phone_no || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 hidden md:table-cell">
+                                {log.Amount ? formatCurrency(log.Amount) : "-"}
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
+                                {log.entry_time ? new Date(log.entry_time).toLocaleString() : 
                                log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
-                            </td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">
-                              {log.exit_time ? new Date(log.exit_time).toLocaleString() : 
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">
+                                {log.exit_time ? new Date(log.exit_time).toLocaleString() : 
                                log.approved_at ? new Date(log.approved_at).toLocaleString() : "-"}
-                            </td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {log.payment_date ? new Date(log.payment_date).toLocaleString() : '-'}
-                            </td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
-                              <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100 text-xs">Pay Later</Badge>
-                            </td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
-                              <Button size="sm" variant="default" className="text-xs" onClick={() => openSettle(log)}>Settle</Button>
-                            </td>
-                          </tr>
-                        ))
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {log.payment_date ? new Date(log.payment_date).toLocaleString() : '-'}
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                                <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100 text-xs">Pay Later</Badge>
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                                <Button size="sm" variant="default" className="text-xs" onClick={() => openSettle(log)}>Settle</Button>
+                              </td>
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>
@@ -695,63 +748,76 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                         <tr><td colSpan={11} className="text-center py-4">Loading...</td></tr>
                       ) : approvedLogs.length === 0 ? (
                         <tr><td colSpan={11} className="text-center py-4 text-muted-foreground">
-                          {selectedDate ? `No approved logs found for ${new Date(selectedDate).toLocaleDateString()}` : 'No approved logs found'}
+                          {selectedDate ? `No approved tickets found for ${new Date(selectedDate).toLocaleDateString()}` : 'No approved tickets'}
                         </td></tr>
                       ) : (
-                        approvedLogs.map((log, idx) => (
-                          <tr key={log.id || idx} className="hover:bg-muted/30">
-                            <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_model || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{log.Name || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden xl:table-cell">{log.Phone_no || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 hidden md:table-cell">
-                              {log.Amount ? formatCurrency(log.Amount) : "-"}
-                            </td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
-                              {log.entry_time ? new Date(log.entry_time).toLocaleString() : 
-                               log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
-                            </td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">
-                              {log.exit_time ? new Date(log.exit_time).toLocaleString() : 
-                               log.approved_at ? new Date(log.approved_at).toLocaleString() : "-"}
-                            </td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {log.payment_date ? new Date(log.payment_date).toLocaleString() : '-'}
-                            </td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
-                              {(() => {
-                                const entryTime = log.entry_time || log.created_at;
-                                const exitTime = log.exit_time || log.approved_at;
-                                console.log('Duration debug:', { 
-                                  entry: entryTime, 
-                                  exit: exitTime, 
-                                  entryTime: log.entry_time,
-                                  createdAt: log.created_at,
-                                  exitTime: log.exit_time, 
-                                  approvedAt: log.approved_at 
-                                });
-                                return getDuration(entryTime, exitTime);
-                              })()}
-                            </td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
-                              <Badge className="bg-green-100 text-green-800 hover:bg-green-100 text-xs">
-                                Approved
-                              </Badge>
-                            </td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => handleDelete(log.id, 'logs-man-approved')}
-                                className="text-xs"
-                                title="Delete log"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </td>
-                          </tr>
-                        ))
+                        approvedLogs.map((log, idx) => {
+                          return (
+                            <tr key={log.id || idx} className="hover:bg-muted/30">
+                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_model || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{log.Name || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden xl:table-cell">{log.Phone_no || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 hidden md:table-cell">
+                                {log.Amount ? formatCurrency(log.Amount) : "-"}
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
+                                {log.entry_time ? new Date(log.entry_time).toLocaleString() : 
+                                 log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">
+                                {log.exit_time ? new Date(log.exit_time).toLocaleString() : 
+                                 log.approved_at ? new Date(log.approved_at).toLocaleString() : "-"}
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {log.payment_date ? new Date(log.payment_date).toLocaleString() : '-'}
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
+                                {(() => {
+                                  const entryTime = log.entry_time || log.created_at;
+                                  const exitTime = log.exit_time || log.approved_at;
+                                  return getDuration(entryTime, exitTime);
+                                })()}
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                                <Badge className="bg-green-100 text-green-800 hover:bg-green-100 text-xs">
+                                  Approved
+                                </Badge>
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => {
+                                    console.log('🚨 APPROVED LOG DELETE BUTTON CLICKED!');
+                                    console.log('Log object:', log);
+                                    console.log('Log ID:', log.id);
+                                    console.log('Log ID type:', typeof log.id);
+                                    console.log('Log ID length:', log.id?.length);
+                                    
+                                    if (!log.id) {
+                                      console.error('❌ Log ID is missing or undefined!');
+                                      toast.error('Cannot delete: Log ID is missing');
+                                      return;
+                                    }
+                                    
+                                    handleDelete(log.id);
+                                  }}
+                                  className="text-xs"
+                                  title="Delete log"
+                                  disabled={isDeleting.has(log.id)}
+                                >
+                                  {isDeleting.has(log.id) ? (
+                                    <X className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-3 w-3" />
+                                  )}
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>

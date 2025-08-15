@@ -43,6 +43,10 @@ export default function ManagerManualLogs() {
   const [priceMatrix, setPriceMatrix] = useState<any[]>([]);
   const [serviceOptions, setServiceOptions] = useState<string[]>([]);
 
+  // State for tracking deleted logs
+  const [deletedLogIds, setDeletedLogIds] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     const fetchServicePrices = async () => {
       const { data } = await supabase.from('Service_prices').select('*');
@@ -199,8 +203,8 @@ export default function ManagerManualLogs() {
 
       // Add date filter if selected
       if (selectedDate) {
-        const startOfDay = `${selectedDate}T00:00:00.000Z`;
-        const endOfDay = `${selectedDate}T23:59:59.999Z`;
+        const startOfDay = `${selectedDate}T00:00:00`;
+        const endOfDay = `${selectedDate}T23:59:59`;
         console.log("Date filter - startOfDay:", startOfDay, "endOfDay:", endOfDay);
         
         // Try filtering by entry_time first, then fallback to created_at
@@ -297,19 +301,66 @@ export default function ManagerManualLogs() {
       const closed = (finalApproved || []).filter((log: any) => String(log.payment_mode).toLowerCase() !== 'credit');
       setApprovedLogs(closed);
 
-      // Fetch Pay Later separately WITHOUT date filter
-      const { data: payLaterData, error: payLaterError } = await supabase
+      // Fetch Pay Later separately WITH date filter
+      let payLaterQuery = supabase
         .from("logs-man")
         .select("*, vehicles(number_plate)")
         .eq("location_id", user?.assigned_location)
         .eq("approval_status", "approved")
         .eq("payment_mode", "credit")
         .order("created_at", { ascending: false });
+
+      // Add date filter if selected
+      if (selectedDate) {
+        const payLaterStartOfDay = `${selectedDate}T00:00:00`;
+        const payLaterEndOfDay = `${selectedDate}T23:59:59`;
+        console.log("Pay Later date filter - startOfDay:", payLaterStartOfDay, "endOfDay:", payLaterEndOfDay);
+        
+        payLaterQuery = payLaterQuery
+          .gte("entry_time", payLaterStartOfDay)
+          .lte("entry_time", payLaterEndOfDay);
+      }
+
+      const { data: payLaterData, error: payLaterError } = await payLaterQuery;
+      console.log("Pay Later query result:", { payLaterData, payLaterError });
+      console.log("Pay Later logs count:", payLaterData?.length || 0);
+
+      let finalPayLater: any[] = [];
+      // If no results with entry_time filter, try created_at
+      if (selectedDate && payLaterData?.length === 0) {
+        console.log("No pay later results with entry_time filter, trying created_at...");
+        let payLaterFallbackQuery = supabase
+          .from("logs-man")
+          .select("*, vehicles(number_plate)")
+          .eq("location_id", user?.assigned_location)
+          .eq("approval_status", "approved")
+          .eq("payment_mode", "credit")
+          .order("created_at", { ascending: false });
+        
+        const payLaterFallbackStartOfDay = `${selectedDate}T00:00:00`;
+        const payLaterFallbackEndOfDay = `${selectedDate}T23:59:59`;
+        
+        const { data: payLaterFallbackData, error: payLaterFallbackError } = await payLaterFallbackQuery
+          .gte("created_at", payLaterFallbackStartOfDay)
+          .lte("created_at", payLaterFallbackEndOfDay);
+        
+        console.log("Pay Later fallback query result:", { payLaterFallbackData, payLaterFallbackError });
+        
+        if (payLaterFallbackData && payLaterFallbackData.length > 0) {
+          console.log("Using pay later fallback data (created_at)");
+          finalPayLater = payLaterFallbackData;
+        } else {
+          finalPayLater = payLaterData || [];
+        }
+      } else {
+        finalPayLater = payLaterData || [];
+      }
+
       if (payLaterError) {
         console.error('Error fetching pay later logs:', payLaterError);
         toast.error('Error fetching pay later logs: ' + payLaterError.message);
       }
-      setPayLaterLogs(payLaterData || []);
+      setPayLaterLogs(finalPayLater);
 
       // If no results, try a broader query to see what approval_status values exist
       if (finalApproved.length === 0 && !selectedDate) {
@@ -389,28 +440,202 @@ export default function ManagerManualLogs() {
   };
 
   const handleDelete = async (logId: string, tableName: 'logs-man' | 'logs-man-approved') => {
+    console.log('=== DELETE FUNCTION CALLED ===');
+    console.log('Delete function called with:', { logId, tableName });
+    console.log('Function stack trace:', new Error().stack);
+    console.log('Current user:', user);
+    console.log('Supabase client:', supabase);
+    
+    if (!user) {
+      console.error('No user authenticated');
+      toast.error('You must be logged in to delete logs');
+      return;
+    }
+    
+    // Check user role and permissions
+    console.log('User role and permissions:', {
+      role: user.role,
+      assigned_location: user.assigned_location,
+      own_id: user.own_id
+    });
+    
+    if (user.role !== 'owner' && user.role !== 'manager') {
+      console.error('User does not have permission to delete logs');
+      toast.error('You do not have permission to delete logs. Required role: owner or manager');
+      return;
+    }
+    
+    if (!logId || logId.trim() === '') {
+      console.error('Invalid log ID provided');
+      toast.error('Invalid log ID');
+      return;
+    }
+    
     if (!confirm('Are you sure you want to delete this log? This action cannot be undone.')) {
       return;
     }
 
+    // Set deleting state for visual feedback
+    setIsDeleting(prev => new Set(prev).add(logId));
+
     try {
+      console.log('Attempting to delete log with ID:', logId);
+      
+      // Test Supabase connection and table access
+      console.log('Testing Supabase connection...');
+      const { data: testData, error: testError } = await supabase
+        .from('logs-man')
+        .select('count')
+        .limit(1);
+      
+      if (testError) {
+        console.error('Supabase connection test failed:', testError);
+        toast.error('Database connection failed: ' + testError.message);
+        return;
+      }
+      
+      console.log('Supabase connection test successful');
+      
+      // Test if we can read from the table (this will help identify RLS issues)
+      console.log('Testing table read access...');
+      const { data: readTest, error: readError } = await supabase
+        .from('logs-man')
+        .select('id, vehicle_number')
+        .limit(1);
+      
+      if (readError) {
+        console.error('Table read test failed:', readError);
+        if (readError.code === '42501' || readError.message?.includes('RLS')) {
+          toast.error('Row Level Security (RLS) is blocking read access. Check your permissions.');
+        } else {
+          toast.error('Cannot read from logs-man table: ' + readError.message);
+        }
+        return;
+      }
+      
+      console.log('Table read access successful:', readTest);
+      
+      // Test if we can perform a simple update operation (this will help identify if it's a general permissions issue)
+      console.log('Testing table update access...');
+      const { data: updateTest, error: updateError } = await supabase
+        .from('logs-man')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', logId)
+        .select('id');
+      
+      if (updateError) {
+        console.error('Table update test failed:', updateError);
+        if (updateError.code === '42501' || updateError.message?.includes('RLS')) {
+          toast.error('Row Level Security (RLS) is blocking update access. Check your permissions.');
+        } else {
+          toast.error('Cannot update logs-man table: ' + updateError.message);
+        }
+        return;
+      }
+      
+      console.log('Table update access successful:', updateTest);
+      
+      // First check if the log exists
+      const { data: existingLog, error: checkError } = await supabase
+        .from('logs-man')
+        .select('id, vehicle_id, location_id, created_by')
+        .eq('id', logId)
+        .single();
+      
+      if (checkError) {
+        console.error('Error checking if log exists:', checkError);
+        if (checkError.code === 'PGRST116') {
+          toast.error('Log not found or already deleted');
+        } else {
+          toast.error('Error checking log: ' + checkError.message);
+        }
+        return;
+      }
+      
+      if (!existingLog) {
+        toast.error('Log not found');
+        return;
+      }
+      
+      console.log('Log found, proceeding with deletion');
+      console.log('Log details:', existingLog);
+      
+      // Check if this log has any foreign key relationships that might prevent deletion
+      if (existingLog.vehicle_id || existingLog.location_id || existingLog.created_by) {
+        console.log('Log has foreign key relationships:', {
+          vehicle_id: existingLog.vehicle_id,
+          location_id: existingLog.location_id,
+          created_by: existingLog.created_by
+        });
+      }
+      
+      // Check if user has access to this log's location
+      if (existingLog.location_id) {
+        if (user.role === 'manager' && user.assigned_location !== existingLog.location_id) {
+          console.error('Manager cannot delete logs from other locations');
+          toast.error('You can only delete logs from your assigned location');
+          return;
+        }
+        
+        if (user.role === 'owner' && user.own_id) {
+          // For owners, we should check if they own this location
+          // This would require an additional query to check location ownership
+          console.log('Owner deleting log from location:', existingLog.location_id);
+        }
+      }
+      
+      // Always use 'logs-man' table since that's the actual table name
       const { error } = await supabase
-        .from(tableName)
+        .from('logs-man')
         .delete()
         .eq('id', logId);
 
       if (error) {
         console.error('Error deleting log:', error);
-        toast.error('Failed to delete log');
+        console.error('Error details:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        });
+        
+        if (error.code === '42501') {
+          toast.error('Permission denied: You do not have permission to delete logs');
+        } else if (error.code === '23503') {
+          toast.error('Cannot delete: This log is referenced by other records');
+        } else if (error.code === 'PGRST301') {
+          toast.error('Row Level Security (RLS) blocked this operation. Check your permissions.');
+        } else if (error.code === 'PGRST116') {
+          toast.error('Log not found or already deleted');
+        } else if (error.message?.includes('RLS') || error.message?.includes('row security')) {
+          toast.error('Row Level Security blocked this operation. You may not have permission to delete this log.');
+        } else {
+          toast.error(`Failed to delete log: ${error.message}`);
+        }
         return;
       }
 
+      console.log('Log deleted successfully');
       toast.success('Log deleted successfully');
-      // Refresh the logs
-      fetchLogs();
+      
+      // Immediately remove the log from local state for instant UI update
+      setPendingLogs(prev => prev.filter(log => log.id !== logId));
+      setApprovedLogs(prev => prev.filter(log => log.id !== logId));
+      
+      // Also refresh from database to ensure consistency
+      setTimeout(() => {
+        fetchLogs();
+      }, 100);
     } catch (error) {
       console.error('Error deleting log:', error);
       toast.error('Failed to delete log');
+    } finally {
+      // Clear deleting state after completion or error
+      setIsDeleting(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(logId);
+        return newSet;
+      });
     }
   };
 
@@ -518,7 +743,8 @@ export default function ManagerManualLogs() {
                             </td>
                             <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
                             <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
-                              {log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
+                              {log.entry_time ? new Date(log.entry_time).toLocaleString() : 
+                               log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
                             </td>
                             <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
                               <div className="flex flex-col sm:flex-row gap-1">
@@ -544,10 +770,29 @@ export default function ManagerManualLogs() {
                                   size="sm"
                                   variant="destructive"
                                   className="text-xs"
-                                  onClick={() => handleDelete(log.id, 'logs-man')}
+                                  onClick={() => {
+                                    console.log('🚨 MANAGER DELETE BUTTON CLICKED!');
+                                    console.log('Log object:', log);
+                                    console.log('Log ID:', log.id);
+                                    console.log('Log ID type:', typeof log.id);
+                                    console.log('Log ID length:', log.id?.length);
+                                    
+                                    if (!log.id) {
+                                      console.error('❌ Log ID is missing or undefined!');
+                                      toast.error('Cannot delete: Log ID is missing');
+                                      return;
+                                    }
+                                    
+                                    handleDelete(log.id, 'logs-man');
+                                  }}
                                   title="Delete log"
+                                  disabled={isDeleting.has(log.id)}
                                 >
-                                  <Trash2 className="h-3 w-3" />
+                                  {isDeleting.has(log.id) ? (
+                                    <X className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-3 w-3" />
+                                  )}
                                 </Button>
                               </div>
                             </td>
@@ -726,11 +971,30 @@ export default function ManagerManualLogs() {
                               <Button
                                 size="sm"
                                 variant="destructive"
-                                onClick={() => handleDelete(log.id, 'logs-man-approved')}
+                                onClick={() => {
+                                  console.log('🚨 MANAGER APPROVED LOG DELETE BUTTON CLICKED!');
+                                  console.log('Log object:', log);
+                                  console.log('Log ID:', log.id);
+                                  console.log('Log ID type:', typeof log.id);
+                                  console.log('Log ID length:', log.id?.length);
+                                  
+                                  if (!log.id) {
+                                    console.error('❌ Log ID is missing or undefined!');
+                                    toast.error('Cannot delete: Log ID is missing');
+                                    return;
+                                  }
+                                  
+                                  handleDelete(log.id, 'logs-man-approved');
+                                }}
                                 className="text-xs"
                                 title="Delete log"
+                                disabled={isDeleting.has(log.id)}
                               >
-                                <Trash2 className="h-3 w-3" />
+                                {isDeleting.has(log.id) ? (
+                                  <X className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-3 w-3" />
+                                )}
                               </Button>
                             </td>
                           </tr>
