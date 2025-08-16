@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import ReactSelect from 'react-select';
+
 
 export default function ManagerManualLogs() {
   const { user } = useAuth();
@@ -39,23 +39,9 @@ export default function ManagerManualLogs() {
   const [settleLog, setSettleLog] = useState<any | null>(null);
   const [settlePaymentMode, setSettlePaymentMode] = useState<'cash' | 'upi'>('cash');
 
-  // Service price matrix for recomputing totals
-  const [priceMatrix, setPriceMatrix] = useState<any[]>([]);
-  const [serviceOptions, setServiceOptions] = useState<string[]>([]);
-
   // State for tracking deleted logs
   const [deletedLogIds, setDeletedLogIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    const fetchServicePrices = async () => {
-      const { data } = await supabase.from('Service_prices').select('*');
-      if (data && data.length > 0) {
-        setPriceMatrix(data);
-      }
-    };
-    fetchServicePrices();
-  }, []);
 
   const openCheckout = (log: any) => {
     setCheckoutLog(log);
@@ -64,14 +50,7 @@ export default function ManagerManualLogs() {
     setCheckoutServices(log?.service ? String(log.service).split(',').map((s:string)=>s.trim()).filter(Boolean) : []);
     setCheckoutAmount(log?.Amount != null ? String(log.Amount) : '');
 
-    // Build service options for the vehicle type
-    try {
-      const options = priceMatrix
-        .filter(row => (row.VEHICLE && row.VEHICLE.trim()) === String(log?.vehicle_type || '').trim())
-        .map(row => row.SERVICE)
-        .filter((v: string, i: number, arr: string[]) => v && arr.indexOf(v) === i);
-      setServiceOptions(options);
-    } catch {}
+
     setCheckoutOpen(true);
   };
 
@@ -1032,26 +1011,19 @@ export default function ManagerManualLogs() {
               </div>
               <div>
                 <Label>Service Chosen</Label>
-                <ReactSelect
-                  isMulti
-                  options={serviceOptions.map(opt => ({ value: opt, label: opt }))}
-                  value={checkoutServices.map(s => ({ value: s, label: s }))}
-                  onChange={(selected) => {
-                    const values = Array.isArray(selected) ? selected.map((s: any) => s.value) : [];
-                    setCheckoutServices(values);
-                    // recompute amount if price matrix available
-                    if (priceMatrix.length > 0 && checkoutLog?.vehicle_type) {
-                      let total = 0;
-                      for (const sv of values) {
-                        const row = priceMatrix.find(r => (r.VEHICLE && r.VEHICLE.trim()) === String(checkoutLog.vehicle_type).trim() && (r.SERVICE && r.SERVICE.trim()) === String(sv).trim());
-                        if (row && row.PRICE !== undefined) total += Number(row.PRICE);
-                      }
-                      setCheckoutAmount(String(total));
-                    }
-                  }}
-                  placeholder={serviceOptions.length ? 'Select services' : 'No services'}
-                  classNamePrefix="react-select"
-                />
+                <div className="mt-1 text-sm">
+                  {checkoutServices.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {checkoutServices.map((service, index) => (
+                        <Badge key={index} variant="secondary" className="text-xs">
+                          {service}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">No services selected</span>
+                  )}
+                </div>
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div>

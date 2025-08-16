@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import ReactSelect from 'react-select';
+
 import { useUpiAccounts } from '@/hooks/useUpiAccounts';
 
 interface ManualLogsProps {
@@ -45,9 +45,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
   const [settleLog, setSettleLog] = useState<any | null>(null);
   const [settlePaymentMode, setSettlePaymentMode] = useState<'cash' | 'upi'>('cash');
 
-  // Service price matrix for recomputing totals
-  const [priceMatrix, setPriceMatrix] = useState<any[]>([]);
-  const [serviceOptions, setServiceOptions] = useState<string[]>([]);
+
 
   // State for tracking deleted logs
   const [isDeleting, setIsDeleting] = useState<Set<string>>(new Set());
@@ -80,14 +78,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
     setSelectedUpiAccount(''); // Reset UPI account selection
     setCheckoutRemarks(''); // Reset remarks
 
-    // Build service options for the vehicle type
-    try {
-      const options = priceMatrix
-        .filter(row => (row.VEHICLE && row.VEHICLE.trim()) === String(log?.vehicle_type || '').trim())
-        .map(row => row.SERVICE)
-        .filter((v: string, i: number, arr: string[]) => v && arr.indexOf(v) === i);
-      setServiceOptions(options);
-    } catch {}
+
     setCheckoutOpen(true);
   };
 
@@ -907,26 +898,19 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
               </div>
               <div>
                 <Label>Service Chosen</Label>
-                <ReactSelect
-                  isMulti
-                  options={serviceOptions.map(opt => ({ value: opt, label: opt }))}
-                  value={checkoutServices.map(s => ({ value: s, label: s }))}
-                  onChange={(selected) => {
-                    const values = Array.isArray(selected) ? selected.map((s: any) => s.value) : [];
-                    setCheckoutServices(values);
-                    // recompute amount if price matrix available
-                    if (priceMatrix.length > 0 && checkoutLog?.vehicle_type) {
-                      let total = 0;
-                      for (const sv of values) {
-                        const row = priceMatrix.find(r => (r.VEHICLE && r.VEHICLE.trim()) === String(checkoutLog.vehicle_type).trim() && (r.SERVICE && r.SERVICE.trim()) === String(sv).trim());
-                        if (row && row.PRICE !== undefined) total += Number(row.PRICE);
-                      }
-                      setCheckoutAmount(String(total));
-                    }
-                  }}
-                  placeholder={serviceOptions.length ? 'Select services' : 'No services'}
-                  classNamePrefix="react-select"
-                />
+                <div className="mt-1 text-sm">
+                  {checkoutServices.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {checkoutServices.map((service, index) => (
+                        <Badge key={index} variant="secondary" className="text-xs">
+                          {service}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">No services selected</span>
+                  )}
+                </div>
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div>
