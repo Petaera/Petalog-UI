@@ -373,13 +373,25 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
     setVehicleTypes(uniqueVehicles);
     setServiceOptions(uniqueServices);
 
+    // Only reset vehicle type and service if the current selections are no longer valid
+    // for the new wheel category
     if (!isEditing) {
-      setVehicleType('');
-      setService([]);
+      // Check if current vehicle type is still valid for the new wheel category
+      if (vehicleType && !uniqueVehicles.includes(vehicleType)) {
+        setVehicleType('');
+        setService([]);
+      }
+      // Check if current services are still valid for the new wheel category
+      if (service.length > 0) {
+        const validServices = uniqueServices.filter(s => service.includes(s));
+        if (validServices.length !== service.length) {
+          setService(validServices);
+        }
+      }
       // For other, amount will be manual; keep as is
       if (wheelCategory !== 'other') setAmount('');
     }
-  }, [wheelCategory, priceMatrix, entryType, isEditing]);
+  }, [wheelCategory, priceMatrix, entryType, isEditing, vehicleType, service]);
 
   useEffect(() => {
     const fetchServicePrices = async () => {
@@ -643,8 +655,8 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
   useEffect(() => {
     if (isEditing) return; // don't override when editing an existing entry
     const plate = vehicleNumber.trim();
-    if (!plate || plate.length < 3) {
-      // Clear form when vehicle number is too short
+    if (!plate) {
+      // Only clear form when vehicle number is completely empty
       setCustomerName('');
       setPhoneNumber('');
       setDateOfBirth('');
@@ -652,13 +664,19 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       setSelectedVehicleBrand('');
       setSelectedModel('');
       setSelectedModelId('');
-      setWheelCategory('');
-      setVehicleType('');
-      setService([]);
+      // Don't clear wheel category, vehicle type, and service when just typing
+      // setWheelCategory('');
+      // setVehicleType('');
+      // setService([]);
       setAmount('500');
       setDiscount('');
       setRemarks('');
       setWorkshop('');
+      return;
+    }
+    
+    // If vehicle number is too short, don't proceed with auto-fill but also don't clear selections
+    if (plate.length < 3) {
       return;
     }
     let cancelled = false;
@@ -674,7 +692,8 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
           .order('created_at', { ascending: false })
           .limit(1);
         if (error || !data || data.length === 0) {
-          // No previous data found, clear the form
+          // No previous data found, only clear customer-related fields
+          // Don't clear wheel category, vehicle type, and service selections
           if (!cancelled) {
             setCustomerName('');
             setPhoneNumber('');
@@ -683,9 +702,10 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
             setSelectedVehicleBrand('');
             setSelectedModel('');
             setSelectedModelId('');
-            setWheelCategory('');
-            setVehicleType('');
-            setService([]);
+            // Preserve user's current selections
+            // setWheelCategory('');
+            // setVehicleType('');
+            // setService([]);
             setAmount('500');
             setDiscount('');
             setRemarks('');
