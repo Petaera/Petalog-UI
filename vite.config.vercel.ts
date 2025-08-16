@@ -25,7 +25,7 @@ export default defineConfig({
     terserOptions: {
       compress: {
         drop_console: true,
-        drop_debugger: true,
+    
       },
     },
   },

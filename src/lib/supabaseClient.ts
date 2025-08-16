@@ -10,27 +10,7 @@ function validateEnvironmentVariables() {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-  if (!supabaseUrl) {
-    console.error('❌ VITE_SUPABASE_URL is missing!');
-    console.error('   This will cause the app to fail on Vercel deployment.');
-    console.error('   Please set VITE_SUPABASE_URL in your Vercel environment variables.');
-    console.error('   Current value:', supabaseUrl);
-  }
-
-  if (!supabaseAnonKey) {
-    console.error('❌ VITE_SUPABASE_ANON_KEY is missing!');
-    console.error('   This will cause the app to fail on Vercel deployment.');
-    console.error('   Please set VITE_SUPABASE_ANON_KEY in your Vercel environment variables.');
-    console.error('   Current value:', supabaseAnonKey);
-  }
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.error('🚨 CRITICAL: Missing required environment variables!');
-    console.error('   The app will use fallback values but may not work properly.');
-    console.error('   Please check your Vercel deployment settings.');
-  } else {
-    console.log('✅ Environment variables are properly configured');
-  }
+  // Environment variables validation removed for production
 }
 
 // Validate environment variables on import
@@ -69,10 +49,9 @@ export async function enhancedQuery<T = any>(
   // Cancel any existing request with the same ID
   if (activeRequests.has(requestId)) {
     const controller = activeRequests.get(requestId);
-    if (controller) {
-      controller.abort();
-      console.log(`🔄 Cancelled previous request: ${requestId}`);
-    }
+          if (controller) {
+        controller.abort();
+      }
   }
 
   // Create new abort controller
@@ -82,7 +61,6 @@ export async function enhancedQuery<T = any>(
   // Set timeout
   const timeoutId = setTimeout(() => {
     controller.abort();
-    console.log(`⏰ Request timeout: ${requestId}`);
   }, timeout);
 
   try {
@@ -105,12 +83,10 @@ export async function enhancedQuery<T = any>(
         lastError = error;
         
         if (error.name === 'AbortError' || controller.signal.aborted) {
-          console.log(`❌ Request aborted: ${requestId}`);
           break;
         }
         
         if (attempt < retries) {
-          console.log(`🔄 Retry attempt ${attempt}/${retries} for ${requestId}:`, error.message);
           await new Promise(resolve => setTimeout(resolve, retryDelay));
         }
       }
@@ -133,9 +109,8 @@ export async function enhancedQuery<T = any>(
  * Cancel all active requests
  */
 export function cancelAllRequests() {
-  activeRequests.forEach((controller, requestId) => {
+  activeRequests.forEach((controller) => {
     controller.abort();
-    console.log(`🔄 Cancelled request: ${requestId}`);
   });
   activeRequests.clear();
 }
@@ -147,15 +122,4 @@ export function getActiveRequestCount() {
   return activeRequests.size;
 }
 
-/**
- * Get environment status for debugging
- */
-export function getEnvironmentStatus() {
-  return {
-    hasSupabaseUrl: !!import.meta.env.VITE_SUPABASE_URL,
-    hasSupabaseAnonKey: !!import.meta.env.VITE_SUPABASE_ANON_KEY,
-    supabaseUrl: import.meta.env.VITE_SUPABASE_URL || 'FALLBACK_VALUE',
-    activeRequests: activeRequests.size,
-    timestamp: new Date().toISOString()
-  };
-} 
+// Debug functions removed for production 

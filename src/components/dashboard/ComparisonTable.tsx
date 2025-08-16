@@ -102,10 +102,8 @@ const ComparisonTable: React.FC<ComparisonTableProps> = ({ loading, data, select
       setImageLoading(false);
     }
   };
-  // Debug logging to see what data is being rendered
-  console.log('ComparisonTable render - data:', data);
-  console.log('ComparisonTable render - selectedLogType:', selectedLogType);
-  console.log('ComparisonTable render - data length:', data?.length);
+
+
   
   if (data && data.length > 0) {
     const logTypeCounts = data.reduce((acc: any, log: LogEntry) => {

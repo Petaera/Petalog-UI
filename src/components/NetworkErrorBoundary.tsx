@@ -40,20 +40,7 @@ class NetworkErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('NetworkErrorBoundary caught an error:', error, errorInfo);
-    
-    // Log to external service if needed
-    if (process.env.NODE_ENV === 'production') {
-      // You can log to your error tracking service here
-      console.error('Error details:', {
-        message: error.message,
-        stack: error.stack,
-        errorInfo,
-        timestamp: new Date().toISOString(),
-        userAgent: navigator.userAgent,
-        url: window.location.href,
-      });
-    }
+    // Error logging removed for production
   }
 
   handleRetry = () => {

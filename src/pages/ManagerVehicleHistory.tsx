@@ -67,7 +67,7 @@ export default function ManagerVehicleHistory() {
     setSearched(true);
 
     try {
-      console.log('🔍 Searching for vehicle:', searchQuery, 'in assigned location:', user.assigned_location);
+      
 
       // Build query with location filter for manual logs
       let manualQuery = supabase

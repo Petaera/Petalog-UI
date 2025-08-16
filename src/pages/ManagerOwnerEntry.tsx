@@ -16,6 +16,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Checkbox } from '@/components/ui/checkbox';
 import ReactSelect from 'react-select';
 import { getOrCreateVehicleId } from "@/lib/utils";
+import { useUpiAccounts } from '@/hooks/useUpiAccounts';
 
 // Add SERVICE_PRICES fallback at the top-level
 const SERVICE_PRICES: { [key: string]: number } = {
@@ -180,6 +181,10 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
 
   // Loading state for auto-fill
   const [isLoadingVehicleData, setIsLoadingVehicleData] = useState(false);
+
+  // UPI accounts state
+  const [selectedUpiAccount, setSelectedUpiAccount] = useState<string>('');
+  const { accounts: upiAccounts, loading: upiAccountsLoading } = useUpiAccounts();
 
   const { user } = useAuth();
 
@@ -734,6 +739,13 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
       return;
     }
 
+    // Validate UPI account selection if UPI is selected
+    if (paymentMode === 'upi' && !selectedUpiAccount) {
+      toast.error('Please select a UPI account');
+      setIsSubmitDisabled(false);
+      return;
+    }
+
     // Validate custom date and time if enabled
     if (useCustomDateTime) {
       const selectedDateTime = new Date(`${customEntryDate}T${customEntryTime}`);
@@ -787,6 +799,9 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
       }
 
       if (isEditing && editLogId) {
+        // Find the selected UPI account details
+        const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
+        
         // Update existing log entry
         const { error: updateError } = await supabase
           .from('logs-man')
@@ -815,6 +830,12 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
             updated_at: new Date().toISOString(),
             // Custom entry time if specified
             ...entryTimeData,
+            // UPI account information if UPI is selected
+            ...(paymentMode === 'upi' && selectedAccount ? {
+              upi_account_id: selectedUpiAccount,
+              upi_account_name: selectedAccount.account_name,
+              upi_id: selectedAccount.upi_id,
+            } : {}),
           })
           .eq('id', editLogId);
 
@@ -852,6 +873,12 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
             ...entryTimeData,
             // Approval status
             approval_status: 'pending',
+            // UPI account information if UPI is selected
+            ...(paymentMode === 'upi' && selectedAccount ? {
+              upi_account_id: selectedUpiAccount,
+              upi_account_name: selectedAccount.account_name,
+              upi_id: selectedAccount.upi_id,
+            } : {}),
           },
         ]);
         if (insertError) throw insertError;
@@ -868,6 +895,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
       setDiscount('');
       setRemarks('');
       setPaymentMode('cash');
+      setSelectedUpiAccount(''); // Reset UPI account selection
               // setScratchImage(null);
       setCustomerName('');
       setPhoneNumber('');
@@ -1228,6 +1256,57 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                   </Button>
                 </div>
               </div>
+
+              {/* UPI Account Selection */}
+              {paymentMode === 'upi' && (
+                <div className="space-y-2">
+                  <Label>Select UPI Account</Label>
+                  <Select value={selectedUpiAccount} onValueChange={setSelectedUpiAccount}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={upiAccountsLoading ? "Loading accounts..." : "Select UPI account"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {upiAccounts.map((account) => (
+                        <SelectItem key={account.id} value={account.id}>
+                          {account.account_name} - {account.upi_id}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {upiAccounts.length === 0 && !upiAccountsLoading && (
+                    <p className="text-sm text-muted-foreground">
+                      No UPI accounts found. Please add UPI accounts in the settings.
+                    </p>
+                  )}
+                  
+                  {/* QR Code Display */}
+                  {selectedUpiAccount && (
+                    <div className="mt-4 space-y-2">
+                      <Label>QR Code</Label>
+                      {(() => {
+                        const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
+                        if (selectedAccount?.qr_code_url) {
+                          return (
+                            <div className="flex justify-center">
+                              <img 
+                                src={selectedAccount.qr_code_url} 
+                                alt={`QR Code for ${selectedAccount.account_name}`}
+                                className="w-32 h-32 object-contain border rounded-lg"
+                              />
+                            </div>
+                          );
+                        } else {
+                          return (
+                            <div className="text-sm text-muted-foreground text-center py-8 border rounded-lg bg-muted/20">
+                              No QR code available for this account
+                            </div>
+                          );
+                        }
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="remarks">Remarks</Label>

@@ -62,7 +62,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               phone: undefined,
             });
           } else {
-            console.log('User not found in users table, using auth user data');
             // If user not found in users table, create basic user object from auth
             setUser({
               id: session.user.id,
@@ -73,7 +72,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             });
           }
         } catch (error) {
-          console.log('Error accessing users table, using auth user data:', error);
           setUser({
             id: session.user.id,
             email: session.user.email || '',
@@ -102,10 +100,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .eq('id', authData.user.id)
           .maybeSingle();
         
-        console.log('Fetched userData from users table:', userData, 'userError:', userError);
-        
         if (userError || !userData) {
-          console.log('User not found in users table, using auth user data');
           // If user not found in users table, create basic user object from auth
           setUser({
             id: authData.user.id,
@@ -127,9 +122,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             phone: undefined,
           });
         }
-      } catch (error) {
-        console.log('Error accessing users table, using auth user data:', error);
-        setUser({
+              } catch (error) {
+          setUser({
           id: authData.user.id,
           email: authData.user.email || '',
           role: 'owner',
@@ -138,7 +132,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       }
       
-      console.log('User object set in context:', user);
+
     } catch (error) {
       setUser(null);
       throw error;
@@ -150,7 +144,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signup = async (email: string, password: string, role: string, location?: string, userData?: { first_name?: string; last_name?: string; phone?: string }, autoLogin: boolean = true) => {
     setLoading(true);
     try {
-      console.log('Starting signup process...', { email, role, location, userData, autoLogin });
+
       
       // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -170,15 +164,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       
       if (authError) {
-        console.error('Auth error:', authError);
         throw authError;
       }
       
       if (!authData.user) {
         throw new Error('No user returned from signup');
       }
-      
-      console.log('Auth user created:', authData.user.id);
       
       // Prepare user data for insertion into users table
       const userInsertData: any = {
@@ -192,21 +183,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         userInsertData.assigned_location = location;
       }
 
-      console.log('Inserting user data into users table:', userInsertData);
-
       // Insert into users table
       try {
         const { error: userError } = await supabase.from('users').insert([userInsertData]);
         if (userError) {
-          console.error('User insert error:', userError);
-          // Don't throw error here, just log it
-          console.log('Continuing without user table insert');
-        } else {
-          console.log('User data inserted successfully into users table');
+          // Don't throw error here, just continue
         }
       } catch (insertError) {
-        console.error('Exception during user insert:', insertError);
-        console.log('Continuing without user table insert');
+        // Continue without user table insert
       }
       
       // Only set user context and log in if autoLogin is true
@@ -224,10 +208,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         // Sign out the created user so they're not logged in
         await supabase.auth.signOut();
-        console.log('User created but not logged in (autoLogin: false)');
       }
     } catch (error) {
-      console.error('Signup error:', error);
       if (autoLogin) {
         setUser(null);
       }

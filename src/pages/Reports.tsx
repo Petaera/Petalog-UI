@@ -384,16 +384,7 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
 
   const filteredData = getFilteredData();
 
-  // Debug summary
-  console.log('📊 Reports data summary:', {
-    totalVehicles: filteredData.totalVehicles,
-    totalRevenue: filteredData.totalRevenue,
-    avgService: filteredData.avgService,
-    serviceBreakdownCount: filteredData.serviceBreakdown.length,
-    vehicleDistributionCount: filteredData.vehicleDistribution.length,
-    processedVehiclesCount: filteredData.filteredVehicles.length,
-    servicePricesAvailable: servicePrices.length
-  });
+
 
   const clearFilters = () => {
     setDateRange("today");

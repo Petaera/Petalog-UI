@@ -88,22 +88,7 @@ export default function PriceSettings() {
     console.log('🔄 Processing service prices to matrix...');
     console.log('📊 Raw data count:', rawData.length);
     
-    // Log all unique services before normalization
-    const allServices = rawData.map(item => item.SERVICE);
-    console.log('🔍 All services before normalization:', [...new Set(allServices)]);
-    
-    // Special debugging: Show all Under Body Coating related entries
-    const underBodyEntries = rawData.filter(item => 
-      item.SERVICE.toLowerCase().includes('under') || 
-      item.SERVICE.toLowerCase().includes('coating')
-    );
-    console.log('🎯 ALL UNDER BODY COATING RELATED ENTRIES:', underBodyEntries.map(item => ({
-      original: item.SERVICE,
-      normalized: normalizeService(item.SERVICE),
-      vehicle: item.VEHICLE,
-      price: item.PRICE,
-      created_at: item.created_at
-    })));
+
     
     // Deduplicate: for each (normalized service, normalized vehicle) pair, keep only the latest by created_at or the first found
     const pairMap = new Map<string, ServicePrice>();
@@ -115,12 +100,7 @@ export default function PriceSettings() {
       const normVehicle = normalizeVehicle(item.VEHICLE);
       const key = `${normService}|||${normVehicle}`;
       
-      // Special debugging for Under Body Coating
-      if (item.SERVICE.toLowerCase().includes('under') || item.SERVICE.toLowerCase().includes('coating')) {
-        console.log(`🎯 UNDER BODY COATING DEBUG: "${item.SERVICE}" -> "${normService}" | Vehicle: "${item.VEHICLE}" -> "${normVehicle}" | Key: ${key}`);
-      }
-      
-      console.log(`🔍 Processing: "${item.SERVICE}" -> "${normService}" | "${item.VEHICLE}" -> "${normVehicle}" | Key: ${key}`);
+
       
       // Store the original names for display
       originalNames[normVehicle] = item.VEHICLE;
@@ -128,25 +108,16 @@ export default function PriceSettings() {
       
       if (!pairMap.has(key)) {
         pairMap.set(key, item);
-        console.log(`✅ Added new entry: ${key}`);
       } else {
         // If duplicate, keep the latest by created_at if available
         const existing = pairMap.get(key)!;
-        console.log(`⚠️ Duplicate found for key: ${key}`);
-        console.log(`   Existing: "${existing.SERVICE}" | "${existing.VEHICLE}" | Price: ${existing.PRICE}`);
-        console.log(`   New: "${item.SERVICE}" | "${item.VEHICLE}" | Price: ${item.PRICE}`);
         
         if (item.created_at && existing.created_at) {
           if (new Date(item.created_at) > new Date(existing.created_at)) {
             pairMap.set(key, item);
             originalNames[normVehicle] = item.VEHICLE; // Update with newer original name
             originalServiceNames[normService] = item.SERVICE; // Update with newer original service name
-            console.log(`🔄 Updated with newer entry: ${key}`);
-          } else {
-            console.log(`⏭️ Kept existing entry: ${key}`);
           }
-        } else {
-          console.log(`⏭️ Kept existing entry (no timestamps): ${key}`);
         }
       }
     });
@@ -157,14 +128,9 @@ export default function PriceSettings() {
       return { ...item, SERVICE: normService, VEHICLE: normVehicle };
     });
     
-    console.log('📊 After deduplication:', deduped.length, 'entries');
-    
     // Get all unique normalized services and vehicles
     const services = Array.from(new Set(deduped.map(item => item.SERVICE)));
     const vehicles = Array.from(new Set(deduped.map(item => item.VEHICLE)));
-    
-    console.log('📋 Final unique services:', services);
-    console.log('📋 Final unique vehicles:', vehicles);
     
     // Build matrix: service -> vehicle -> price
     const matrix: Record<string, Record<string, number>> = {};
@@ -182,10 +148,7 @@ export default function PriceSettings() {
     setOriginalVehicleNames(originalNames);
     setOriginalServiceNames(originalServiceNames);
     
-    // Final debugging: Show Under Body Coating in final matrix
-    if (matrix['UNDER BODY COATING']) {
-      console.log('🎯 FINAL MATRIX - UNDER BODY COATING:', matrix['UNDER BODY COATING']);
-    }
+
     
     console.log('✅ Matrix processing completed');
   };

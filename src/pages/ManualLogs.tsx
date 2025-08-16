@@ -11,7 +11,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import ReactSelect from 'react-select';
+import { useUpiAccounts } from '@/hooks/useUpiAccounts';
 
 interface ManualLogsProps {
   selectedLocation?: string;
@@ -50,6 +52,13 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
   // State for tracking deleted logs
   const [isDeleting, setIsDeleting] = useState<Set<string>>(new Set());
 
+  // UPI accounts state
+  const [selectedUpiAccount, setSelectedUpiAccount] = useState<string>('');
+  const { accounts: upiAccounts, loading: upiAccountsLoading } = useUpiAccounts();
+
+  // Checkout remarks state
+  const [checkoutRemarks, setCheckoutRemarks] = useState<string>('');
+
   useEffect(() => {
     if (selectedLocation) {
       fetchLogs();
@@ -68,6 +77,8 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
     setCheckoutDiscount(log?.discount != null ? String(log.discount) : '');
     setCheckoutServices(log?.service ? String(log.service).split(',').map((s:string)=>s.trim()).filter(Boolean) : []);
     setCheckoutAmount(log?.Amount != null ? String(log.Amount) : '');
+    setSelectedUpiAccount(''); // Reset UPI account selection
+    setCheckoutRemarks(''); // Reset remarks
 
     // Build service options for the vehicle type
     try {
@@ -82,9 +93,20 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
 
   const confirmCheckout = async () => {
     if (!checkoutLog) return;
+    
+    // Validate UPI account selection if UPI is selected
+    if (checkoutPaymentMode === 'upi' && !selectedUpiAccount) {
+      toast.error('Please select a UPI account');
+      return;
+    }
+    
     try {
       const discountNum = checkoutDiscount === '' ? null : Number(checkoutDiscount) || 0;
       const amountNum = checkoutAmount === '' ? null : Number(checkoutAmount) || 0;
+      
+      // Find the selected UPI account details
+      const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
+      
       const updateData: any = {
         approval_status: 'approved',
         approved_at: new Date().toISOString(),
@@ -93,18 +115,31 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
         discount: discountNum,
         service: checkoutServices.join(','),
         Amount: amountNum,
+        remarks: checkoutRemarks || null,
       };
+      
+      // Add UPI account information if UPI is selected
+      if (checkoutPaymentMode === 'upi' && selectedAccount) {
+        updateData.upi_account_id = selectedUpiAccount;
+        updateData.upi_account_name = selectedAccount.account_name;
+        updateData.upi_id = selectedAccount.upi_id;
+      }
+      
       if (String(checkoutPaymentMode).toLowerCase() !== 'credit') {
         updateData.payment_date = new Date().toISOString();
       }
+      
       const { error } = await supabase
         .from('logs-man')
         .update(updateData)
         .eq('id', checkoutLog.id);
       if (error) throw error;
+      
       toast.success('Checkout completed');
       setCheckoutOpen(false);
       setCheckoutLog(null);
+      setSelectedUpiAccount(''); // Reset UPI account selection
+      setCheckoutRemarks(''); // Reset remarks
       fetchLogs();
     } catch (err: any) {
       toast.error(`Checkout failed: ${err?.message || err}`);
@@ -115,24 +150,45 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
     setSettleLog(log);
     // default to cash when settling
     setSettlePaymentMode('cash');
+    setSelectedUpiAccount(''); // Reset UPI account selection
     setSettleOpen(true);
   };
 
   const confirmSettle = async () => {
     if (!settleLog) return;
+    
+    // Validate UPI account selection if UPI is selected
+    if (settlePaymentMode === 'upi' && !selectedUpiAccount) {
+      toast.error('Please select a UPI account');
+      return;
+    }
+    
     try {
+      // Find the selected UPI account details
+      const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
+      
       const updateData: any = {
         payment_mode: settlePaymentMode,
         payment_date: new Date().toISOString(),
       };
+      
+      // Add UPI account information if UPI is selected
+      if (settlePaymentMode === 'upi' && selectedAccount) {
+        updateData.upi_account_id = selectedUpiAccount;
+        updateData.upi_account_name = selectedAccount.account_name;
+        updateData.upi_id = selectedAccount.upi_id;
+      }
+      
       const { error } = await supabase
         .from('logs-man')
         .update(updateData)
         .eq('id', settleLog.id);
       if (error) throw error;
+      
       toast.success('Payment settled');
       setSettleOpen(false);
       setSettleLog(null);
+      setSelectedUpiAccount(''); // Reset UPI account selection
       fetchLogs();
     } catch (err: any) {
       toast.error(`Settle failed: ${err?.message || err}`);
@@ -906,6 +962,69 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* UPI Account Selection */}
+              {checkoutPaymentMode === 'upi' && (
+                <div>
+                  <Label>Select UPI Account</Label>
+                  <Select value={selectedUpiAccount} onValueChange={setSelectedUpiAccount}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder={upiAccountsLoading ? "Loading accounts..." : "Select UPI account"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {upiAccounts.map((account) => (
+                        <SelectItem key={account.id} value={account.id}>
+                          {account.account_name} - {account.upi_id}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {upiAccounts.length === 0 && !upiAccountsLoading && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      No UPI accounts found. Please add UPI accounts in the settings.
+                    </p>
+                  )}
+                  
+                  {/* QR Code Display */}
+                  {selectedUpiAccount && (
+                    <div className="mt-4 space-y-2">
+                      <Label>QR Code</Label>
+                      {(() => {
+                        const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
+                        if (selectedAccount?.qr_code_url) {
+                          return (
+                            <div className="flex justify-center">
+                              <img 
+                                src={selectedAccount.qr_code_url} 
+                                alt={`QR Code for ${selectedAccount.account_name}`}
+                                className="w-32 h-32 object-contain border rounded-lg"
+                              />
+                            </div>
+                          );
+                        } else {
+                          return (
+                            <div className="text-sm text-muted-foreground text-center py-8 border rounded-lg bg-muted/20">
+                              No QR code available for this account
+                            </div>
+                          );
+                        }
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Remarks Field */}
+              <div>
+                <Label htmlFor="checkout-remarks">Remarks (Optional)</Label>
+                <Textarea 
+                  id="checkout-remarks"
+                  placeholder="Any additional notes for this checkout..."
+                  value={checkoutRemarks}
+                  onChange={(e) => setCheckoutRemarks(e.target.value)}
+                  rows={3}
+                />
+              </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setCheckoutOpen(false)}>Cancel</Button>
@@ -944,6 +1063,57 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* UPI Account Selection for Settle */}
+              {settlePaymentMode === 'upi' && (
+                <div>
+                  <Label>Select UPI Account</Label>
+                  <Select value={selectedUpiAccount} onValueChange={setSelectedUpiAccount}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder={upiAccountsLoading ? "Loading accounts..." : "Select UPI account"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {upiAccounts.map((account) => (
+                        <SelectItem key={account.id} value={account.id}>
+                          {account.account_name} - {account.upi_id}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {upiAccounts.length === 0 && !upiAccountsLoading && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      No UPI accounts found. Please add UPI accounts in the settings.
+                    </p>
+                  )}
+                  
+                  {/* QR Code Display for Settle */}
+                  {selectedUpiAccount && (
+                    <div className="mt-4 space-y-2">
+                      <Label>QR Code</Label>
+                      {(() => {
+                        const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
+                        if (selectedAccount?.qr_code_url) {
+                          return (
+                            <div className="flex justify-center">
+                              <img 
+                                src={selectedAccount.qr_code_url} 
+                                alt={`QR Code for ${selectedAccount.account_name}`}
+                                className="w-32 h-32 object-contain border rounded-lg"
+                              />
+                            </div>
+                          );
+                        } else {
+                          return (
+                            <div className="text-sm text-muted-foreground text-center py-8 border rounded-lg bg-muted/20">
+                              No QR code available for this account
+                            </div>
+                          );
+                        }
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setSettleOpen(false)}>Cancel</Button>
