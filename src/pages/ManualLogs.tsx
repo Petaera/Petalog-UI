@@ -876,12 +876,12 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
 
         {/* Checkout Dialog */}
         <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] overflow-hidden flex flex-col">
             <DialogHeader>
               <DialogTitle>Checkout</DialogTitle>
               <DialogDescription>Confirm details before completing checkout.</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
+            <div className="space-y-4 overflow-y-auto flex-1 pr-2">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Vehicle No</Label>
@@ -977,11 +977,11 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                         const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
                         if (selectedAccount?.qr_code_url) {
                           return (
-                            <div className="flex justify-center">
+                            <div className="flex justify-center p-2">
                               <img 
                                 src={selectedAccount.qr_code_url} 
                                 alt={`QR Code for ${selectedAccount.account_name}`}
-                                className="w-32 h-32 object-contain border rounded-lg"
+                                className="w-32 h-32 object-contain border rounded-lg shadow-sm"
                               />
                             </div>
                           );
@@ -1019,12 +1019,12 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
 
         {/* Settle Pay Later Dialog */}
         <Dialog open={settleOpen} onOpenChange={setSettleOpen}>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] overflow-hidden flex flex-col">
             <DialogHeader>
               <DialogTitle>Settle Payment</DialogTitle>
               <DialogDescription>Choose payment mode to close this Pay Later ticket.</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
+            <div className="space-y-4 overflow-y-auto flex-1 pr-2">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Vehicle No</Label>
@@ -1078,11 +1078,11 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                         const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
                         if (selectedAccount?.qr_code_url) {
                           return (
-                            <div className="flex justify-center">
+                            <div className="flex justify-center p-2">
                               <img 
                                 src={selectedAccount.qr_code_url} 
                                 alt={`QR Code for ${selectedAccount.account_name}`}
-                                className="w-32 h-32 object-contain border rounded-lg"
+                                className="w-32 h-32 object-contain border rounded-lg shadow-sm"
                               />
                             </div>
                           );
