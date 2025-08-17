@@ -29,6 +29,7 @@ export function AppSidebar() {
   const location = useLocation();
   const currentPath = location.pathname;
   const { user } = useAuth();
+  const { setOpenMobile } = useSidebar();
 
   const isManager = user?.role === 'manager';
 
@@ -36,6 +37,11 @@ export function AppSidebar() {
 
   const getNavClassName = (path: string) => {
     return isActive(path) ? "nav-item-active" : "nav-item-inactive";
+  };
+
+  const handleNavigationClick = () => {
+    // Close the mobile sidebar when a navigation item is clicked
+    setOpenMobile(false);
   };
 
   const navigationItems = isManager
@@ -74,6 +80,7 @@ export function AppSidebar() {
                       to={item.url} 
                       end 
                       className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 ${getNavClassName(item.url)}`}
+                      onClick={handleNavigationClick}
                     >
                       <item.icon className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
                       <span className="font-medium text-sm sm:text-base truncate">{item.title}</span>
