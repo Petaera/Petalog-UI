@@ -854,6 +854,22 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         ? { entry_time: new Date(`${customEntryDate}T${customEntryTime}:00`).toISOString() }
         : {};
 
+      // Prepare created_at data - use custom date if specified, otherwise current time
+      const createdAtData = useCustomDateTime 
+        ? { created_at: new Date(`${customEntryDate}T${customEntryTime}:00`).toISOString() }
+        : { created_at: new Date().toISOString() };
+
+      // Prepare exit time and approval data for custom date tickets
+      const exitTimeData = useCustomDateTime 
+        ? { 
+            exit_time: new Date(`${customEntryDate}T${customEntryTime}:00`).toISOString(),
+            approved_at: new Date(`${customEntryDate}T${customEntryTime}:00`).toISOString()
+          }
+        : {};
+
+      // Determine approval status - if custom date is used, go directly to approved
+      const approvalStatus = useCustomDateTime ? 'approved' : 'pending';
+
       if (useCustomDateTime) {
         console.log('Custom DateTime Debug:', {
           userSelectedDate: customEntryDate,
@@ -861,7 +877,8 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
           combinedString: `${customEntryDate}T${customEntryTime}:00`,
           finalISOString: new Date(`${customEntryDate}T${customEntryTime}:00`).toISOString(),
           localDate: new Date(`${customEntryDate}T${customEntryTime}:00`).toLocaleString(),
-          utcDate: new Date(`${customEntryDate}T${customEntryTime}:00`).toUTCString()
+          utcDate: new Date(`${customEntryDate}T${customEntryTime}:00`).toUTCString(),
+          approvalStatus: approvalStatus
         });
       }
 
@@ -896,6 +913,10 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
             updated_at: new Date().toISOString(),
             // Custom entry time if specified
             ...entryTimeData,
+            // Custom created_at if specified
+            ...createdAtData,
+            // Custom exit time and approval data if specified
+            ...exitTimeData,
           })
           .eq('id', editLogId);
         
@@ -932,15 +953,22 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
             vehicle_brand: selectedVehicleBrand || null,
             vehicle_model: selectedModel || null,
             Brand_id: selectedModelId || null,
-            created_at: new Date().toISOString(),
+            // Custom created_at if specified, otherwise current time
+            ...createdAtData,
             // Custom entry time if specified
             ...entryTimeData,
-            // Approval status
-            approval_status: 'pending',
+            // Approval status - if custom date is used, go directly to approved
+            approval_status: approvalStatus,
+            // Custom exit time and approval data if specified
+            ...exitTimeData,
           },
         ]);
         if (insertError) throw insertError;
-        toast.success('Owner entry submitted successfully!');
+        
+        const statusMessage = useCustomDateTime 
+          ? 'Owner entry submitted successfully! Ticket is now closed.'
+          : 'Owner entry submitted successfully!';
+        toast.success(statusMessage);
 
         // No persistent counter increment; count is derived from logs-man only
       }

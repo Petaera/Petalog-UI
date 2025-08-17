@@ -787,6 +787,22 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
         ? { entry_time: new Date(`${customEntryDate}T${customEntryTime}:00`).toISOString() }
         : {};
 
+      // Prepare created_at data - use custom date if specified, otherwise current time
+      const createdAtData = useCustomDateTime 
+        ? { created_at: new Date(`${customEntryDate}T${customEntryTime}:00`).toISOString() }
+        : { created_at: new Date().toISOString() };
+
+      // Prepare exit time and approval data for custom date tickets
+      const exitTimeData = useCustomDateTime 
+        ? { 
+            exit_time: new Date(`${customEntryDate}T${customEntryTime}:00`).toISOString(),
+            approved_at: new Date(`${customEntryDate}T${customEntryTime}:00`).toISOString()
+          }
+        : {};
+
+      // Determine approval status - if custom date is used, go directly to approved
+      const approvalStatus = useCustomDateTime ? 'approved' : 'pending';
+
       if (useCustomDateTime) {
         console.log('Custom DateTime Debug (Manager):', {
           userSelectedDate: customEntryDate,
@@ -794,10 +810,12 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
           combinedString: `${customEntryDate}T${customEntryTime}:00`,
           finalISOString: new Date(`${customEntryDate}T${customEntryTime}:00`).toISOString(),
           localDate: new Date(`${customEntryDate}T${customEntryTime}:00`).toLocaleString(),
-          utcDate: new Date(`${customEntryDate}T${customEntryTime}:00`).toUTCString()
+          utcDate: new Date(`${customEntryDate}T${customEntryTime}:00`).toUTCString(),
+          approvalStatus: approvalStatus
         });
       }
 
+      // 3. Insert or update logs-man based on edit mode
       if (isEditing && editLogId) {
         // Find the selected UPI account details
         const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
@@ -830,6 +848,10 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
             updated_at: new Date().toISOString(),
             // Custom entry time if specified
             ...entryTimeData,
+            // Custom created_at if specified
+            ...createdAtData,
+            // Custom exit time and approval data if specified
+            ...exitTimeData,
             // UPI account information if UPI is selected
             ...(paymentMode === 'upi' && selectedAccount ? {
               upi_account_id: selectedUpiAccount,
@@ -868,11 +890,14 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
             vehicle_brand: selectedVehicleBrand || null,
             vehicle_model: selectedModel || null,
             Brand_id: selectedModelId || null,
-            created_at: new Date().toISOString(),
+            // Custom created_at if specified, otherwise current time
+            ...createdAtData,
             // Custom entry time if specified
             ...entryTimeData,
-            // Approval status
-            approval_status: 'pending',
+            // Custom exit time and approval data if specified
+            ...exitTimeData,
+            // Approval status - if custom date is used, go directly to approved
+            approval_status: approvalStatus,
             // UPI account information if UPI is selected
             ...(paymentMode === 'upi' && selectedAccount ? {
               upi_account_id: selectedUpiAccount,
@@ -882,7 +907,11 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
           },
         ]);
         if (insertError) throw insertError;
-        toast.success('Manager entry submitted successfully!');
+        
+        const statusMessage = useCustomDateTime 
+          ? 'Manager entry submitted successfully! Ticket is now closed.'
+          : 'Manager entry submitted successfully!';
+        toast.success(statusMessage);
 
         // No persistent counter increment; count is derived from logs-man only
       }
