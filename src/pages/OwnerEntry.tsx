@@ -155,7 +155,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
   const [selectedModel, setSelectedModel] = useState('');
   const [selectedModelId, setSelectedModelId] = useState('');
   const [availableVehicleBrands, setAvailableVehicleBrands] = useState<string[]>([]);
-  const [availableModels, setAvailableModels] = useState<{name: string, id: string}[]>([]);
+  const [availableModels, setAvailableModels] = useState<{name: string, id: string, brand: string}[]>([]);
   const [vehicleData, setVehicleData] = useState<any[]>([]);
 
   // Edit mode state
@@ -304,7 +304,63 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
     }
   }, [wheelCategory, vehicleData, isEditing]);
 
-  // Update available models when vehicle brand changes (respecting wheeler)
+  // Update available models when wheel category changes (show all models for the wheel category)
+  useEffect(() => {
+    if (vehicleData.length === 0) {
+      setAvailableModels([]);
+      return;
+    }
+
+    if (!wheelCategory) {
+      setAvailableModels([]);
+      return;
+    }
+
+    // Show all models for the selected wheel category, regardless of brand
+    const allModelsForWheelCategory = vehicleData
+      .filter(item => {
+        const typeStr = normalizeTypeString((item as any).type);
+        if (wheelCategory === 'other') return typeStr === '3';
+        if (wheelCategory === '2') return typeStr === '2';
+        if (wheelCategory === '4') return typeStr === '4' || typeStr === '1';
+        return false;
+      })
+      .map(item => ({
+        name: item['Models'],
+        id: item.id,
+        brand: item['Vehicle Brands']
+      }))
+      .filter(item => item.name); // Filter out empty models
+
+    // Remove duplicates based on model name but keep the id and brand
+    const uniqueModels = allModelsForWheelCategory.filter((model, index, arr) => 
+      arr.findIndex(m => m.name === model.name) === index
+    );
+    
+    console.log('All models for wheel category:', uniqueModels);
+    setAvailableModels(uniqueModels);
+
+    // Reset selections when wheel category changes (only if not editing)
+    if (!isEditing) {
+      setSelectedVehicleBrand('');
+      setSelectedModel('');
+      setSelectedModelId('');
+    }
+  }, [wheelCategory, vehicleData, isEditing]);
+
+  // Auto-select brand when model is selected
+  useEffect(() => {
+    if (selectedModel && availableModels.length > 0) {
+      const selectedModelData = availableModels.find(model => model.name === selectedModel);
+      if (selectedModelData && selectedModelData.brand && !selectedVehicleBrand) {
+        console.log('Auto-selecting brand for model:', selectedModelData.brand);
+        // Set a flag to indicate this is an auto-selection
+        setSelectedVehicleBrand(selectedModelData.brand);
+      }
+    }
+  }, [selectedModel, availableModels, selectedVehicleBrand]);
+
+  // Update available models when vehicle brand changes (filtering by brand)
   useEffect(() => {
     if (selectedVehicleBrand && vehicleData.length > 0) {
       console.log('Filtering models for vehicle brand:', selectedVehicleBrand);
@@ -323,35 +379,58 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
           })
           .map(item => ({
             name: item['Models'],
-            id: item.id
+            id: item.id,
+            brand: item['Vehicle Brands']
           }))
           .filter(item => item.name); // Filter out empty models
         
-        // Remove duplicates based on model name but keep the id
+        // Remove duplicates based on model name but keep the id and brand
         const uniqueModels = modelsForBrand.filter((model, index, arr) => 
           arr.findIndex(m => m.name === model.name) === index
         );
         
         console.log('Models found for brand:', uniqueModels);
         setAvailableModels(uniqueModels);
+        
+        // Only reset model when not in edit mode AND when the current model is not valid for the new brand
+        if (!isEditing) {
+          const currentModelValid = uniqueModels.some(model => model.name === selectedModel);
+          if (!currentModelValid) {
+            setSelectedModel(''); // Reset model when brand changes and current model is not valid
+            setSelectedModelId(''); // Reset model ID when brand changes
+          }
+        }
       } else {
         console.warn('Vehicle Brands or Models field not found in data');
         setAvailableModels([]);
       }
+    } else if (!selectedVehicleBrand && vehicleData.length > 0 && wheelCategory) {
+      // When no brand is selected, show all models for the wheel category
+      console.log('No brand selected, showing all models for wheel category');
+      const allModelsForWheelCategory = vehicleData
+        .filter(item => {
+          const typeStr = normalizeTypeString((item as any).type);
+          if (wheelCategory === 'other') return typeStr === '3';
+          if (wheelCategory === '2') return typeStr === '2';
+          if (wheelCategory === '4') return typeStr === '4' || typeStr === '1';
+          return false;
+        })
+        .map(item => ({
+          name: item['Models'],
+          id: item.id,
+          brand: item['Vehicle Brands']
+        }))
+        .filter(item => item.name); // Filter out empty models
+
+      // Remove duplicates based on model name but keep the id and brand
+      const uniqueModels = allModelsForWheelCategory.filter((model, index, arr) => 
+        arr.findIndex(m => m.name === model.name) === index
+      );
       
-      // Only reset model when not in edit mode
-      if (!isEditing) {
-        setSelectedModel(''); // Reset model when brand changes
-        setSelectedModelId(''); // Reset model ID when brand changes
-      }
-    } else {
-      setAvailableModels([]);
-      if (!isEditing) {
-        setSelectedModel('');
-        setSelectedModelId('');
-      }
+      console.log('All models for wheel category (no brand filter):', uniqueModels);
+      setAvailableModels(uniqueModels);
     }
-  }, [selectedVehicleBrand, vehicleData, isEditing]);
+  }, [selectedVehicleBrand, vehicleData, isEditing, wheelCategory, selectedModel]);
 
   // Recompute vehicle types/services for customer flow when wheel category changes
   useEffect(() => {
@@ -1143,21 +1222,26 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                   <ReactSelect
                     isClearable
                     isSearchable
-                    placeholder={wheelCategory ? "Type to search vehicle brand..." : "Select category first"}
+                    placeholder={wheelCategory ? (selectedModel ? "Brand will be auto-selected" : "Type to search vehicle brand...") : "Select category first"}
                     options={(wheelCategory ? availableVehicleBrands : []).map(brand => ({ value: brand, label: brand }))}
                     value={selectedVehicleBrand ? { value: selectedVehicleBrand, label: selectedVehicleBrand } : null}
                     onChange={(selected) => setSelectedVehicleBrand(selected?.value || '')}
                     classNamePrefix="react-select"
                     noOptionsMessage={() => "No brands found"}
-                    isDisabled={!wheelCategory}
+                    isDisabled={!wheelCategory || !!selectedModel}
                   />
+                  {selectedModel && !selectedVehicleBrand && (
+                    <p className="text-sm text-muted-foreground">
+                      Brand will be automatically selected based on the chosen model
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="selectedModel">Vehicle Model</Label>
                   <ReactSelect
                     isClearable
                     isSearchable
-                    placeholder={selectedVehicleBrand ? "Type to search vehicle model..." : (wheelCategory ? "Select vehicle brand first" : "Select category first")}
+                    placeholder={wheelCategory ? "Type to search vehicle model..." : "Select category first"}
                     options={availableModels.map(model => ({ value: model.name, label: model.name }))}
                     value={selectedModel ? { value: selectedModel, label: selectedModel } : null}
                     onChange={(selected) => {
@@ -1167,7 +1251,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                       setSelectedModelId(modelObj?.id || '');
                     }}
                     classNamePrefix="react-select"
-                    isDisabled={!wheelCategory || !selectedVehicleBrand}
+                    isDisabled={!wheelCategory}
                     noOptionsMessage={() => "No models found"}
                   />
                 </div>
