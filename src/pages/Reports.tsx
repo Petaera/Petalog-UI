@@ -243,6 +243,13 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
       console.log('🔍 After location filter:', filteredLogs.length, 'records');
     }
 
+    // Only count approved/closed tickets for revenue calculations (excluding Pay Later/credit)
+    filteredLogs = filteredLogs.filter(log => 
+      log.approval_status === 'approved' && 
+      String(log.payment_mode || '').toLowerCase() !== 'credit'
+    );
+    console.log('🔍 After approval status filter (only approved/closed tickets, excluding Pay Later):', filteredLogs.length, 'records');
+
     if (vehicleType !== "all") {
       filteredLogs = filteredLogs.filter(log => {
         const normalizedLogType = (log.vehicle_type || '').toString().trim();

@@ -104,9 +104,12 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
 
 
       // Build queries with location filter if needed
+      // Only count approved/closed tickets for today's income (excluding Pay Later/credit)
       let todayQuery = supabase
         .from('logs-man')
-        .select('Amount, created_at, location_id')
+        .select('Amount, created_at, location_id, approval_status, payment_mode')
+        .eq('approval_status', 'approved') // Only count approved/closed tickets
+        .neq('payment_mode', 'credit') // Exclude Pay Later/credit tickets
         .gte('created_at', startOfDay.toISOString())
         .lt('created_at', endOfDay.toISOString());
       
@@ -118,7 +121,7 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
       
       
       
-      // Calculate stats
+      // Calculate stats - only for approved/closed tickets
       const totalVehiclesToday = todayData?.length || 0;
       const revenueToday = todayData?.reduce((sum, log) => sum + (log.Amount || 0), 0) || 0;
       
