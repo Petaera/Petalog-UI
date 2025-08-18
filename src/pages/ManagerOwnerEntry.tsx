@@ -529,7 +529,33 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
 
     if (entryType === 'customer') {
       if (wheelCategory) {
-        const filteredRows = priceMatrix.filter(row => doesTypeMatchWheelCategory((row as any).type, wheelCategory));
+        const filteredRows = priceMatrix.filter(row => {
+          // If no wheel category is selected, show all rows
+          if (!wheelCategory) return true;
+          
+          // If the row doesn't have a type field, show it (fallback)
+          if (!(row as any).type) return true;
+          
+          // Otherwise, apply the type filtering
+          return doesTypeMatchWheelCategory((row as any).type, wheelCategory);
+        });
+        
+        console.log('🔍 Service filtering debug (Manager):', {
+          wheelCategory,
+          totalRows: priceMatrix.length,
+          filteredRows: filteredRows.length,
+          sampleRows: priceMatrix.slice(0, 3).map(row => ({ 
+            VEHICLE: row.VEHICLE, 
+            SERVICE: row.SERVICE, 
+            type: (row as any).type 
+          })),
+          filteredSampleRows: filteredRows.slice(0, 3).map(row => ({ 
+            VEHICLE: row.VEHICLE, 
+            SERVICE: row.SERVICE, 
+            type: (row as any).type 
+          }))
+        });
+        
         const uniqueVehicles = [...new Set(filteredRows.map(row => row.VEHICLE && row.VEHICLE.trim()).filter(Boolean))];
         const uniqueServices = [...new Set(filteredRows.map(row => row.SERVICE && row.SERVICE.trim()).filter(Boolean))];
         setVehicleTypes(uniqueVehicles);
@@ -557,7 +583,16 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
       return;
     }
 
-    const filteredRows = priceMatrix.filter(row => doesTypeMatchWheelCategory((row as any).type, wheelCategory));
+    const filteredRows = priceMatrix.filter(row => {
+      // If no wheel category is selected, show all rows
+      if (!wheelCategory) return true;
+      
+      // If the row doesn't have a type field, show it (fallback)
+      if (!(row as any).type) return true;
+      
+      // Otherwise, apply the type filtering
+      return doesTypeMatchWheelCategory((row as any).type, wheelCategory);
+    });
     const uniqueVehicles = [...new Set(filteredRows.map(row => row.VEHICLE && row.VEHICLE.trim()).filter(Boolean))];
     const uniqueServices = [...new Set(filteredRows.map(row => row.SERVICE && row.SERVICE.trim()).filter(Boolean))];
     setVehicleTypes(uniqueVehicles);
@@ -946,6 +981,9 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
         toast.success('Entry updated successfully!');
       } else {
         // Insert new log entry
+        // Find the selected UPI account details
+        const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
+        
         const { error: insertError } = await supabase.from('logs-man').insert([
           {
             vehicle_id: vehicleId,
@@ -1215,13 +1253,35 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                         isMulti
                         options={
                           vehicleType
-                            ? sortServicesWithPriority(
-                                priceMatrix
+                            ? (() => {
+                                const filteredServices = priceMatrix
                                   .filter(row => row.VEHICLE && row.VEHICLE.trim() === vehicleType.trim())
-                                  .filter(row => doesTypeMatchWheelCategory((row as any).type, wheelCategory))
+                                  // Only filter by type if the type field exists and wheelCategory is set
+                                  .filter(row => {
+                                    // If no wheel category is selected, show all services for the vehicle type
+                                    if (!wheelCategory) return true;
+                                    
+                                    // If the row doesn't have a type field, show it (fallback)
+                                    if (!(row as any).type) return true;
+                                    
+                                    // Otherwise, apply the type filtering
+                                    return doesTypeMatchWheelCategory((row as any).type, wheelCategory);
+                                  })
                                   .map(row => row.SERVICE)
-                                  .filter((v, i, arr) => v && arr.indexOf(v) === i)
-                              ).map(option => ({ value: option, label: option }))
+                                  .filter((v, i, arr) => v && arr.indexOf(v) === i);
+                                
+                                const sortedServices = sortServicesWithPriority(filteredServices);
+                                const options = sortedServices.map(option => ({ value: option, label: option }));
+                                
+                                console.log('🚗 Service dropdown options for', vehicleType, ':', {
+                                  wheelCategory,
+                                  filteredServices,
+                                  sortedServices,
+                                  options
+                                });
+                                
+                                return options;
+                              })()
                             : []
                         }
                         value={service.map(option => ({
