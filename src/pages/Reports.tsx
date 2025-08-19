@@ -246,12 +246,11 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
       console.log('🔍 After location filter:', filteredLogs.length, 'records');
     }
 
-    // Only count approved/closed tickets for revenue calculations (excluding Pay Later/credit)
-    filteredLogs = filteredLogs.filter(log => 
-      log.approval_status === 'approved' && 
-      String(log.payment_mode || '').toLowerCase() !== 'credit'
-    );
-    console.log('🔍 After approval status filter (only approved/closed tickets, excluding Pay Later):', filteredLogs.length, 'records');
+         // Only count approved/closed tickets for revenue calculations (including Pay Later/credit for display)
+     filteredLogs = filteredLogs.filter(log => 
+       log.approval_status === 'approved'
+     );
+     console.log('🔍 After approval status filter (only approved/closed tickets):', filteredLogs.length, 'records');
 
     if (vehicleType !== "all") {
       filteredLogs = filteredLogs.filter(log => {
@@ -285,42 +284,57 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
       console.log('🔍 After manager filter:', filteredLogs.length, 'records');
     }
 
-    console.log('📊 Final filtered data:', filteredLogs.length, 'records');
+         console.log('📊 Final filtered data:', filteredLogs.length, 'records');
+     
+     // Debug: Log all unique payment modes found
+     const uniquePaymentModes = [...new Set(filteredLogs.map(log => log.payment_mode))];
+     console.log('🔍 Unique payment modes found:', uniquePaymentModes);
 
     // Calculate statistics
     const totalRevenue = filteredLogs.reduce((sum, log) => sum + (log.Amount || 0), 0);
     const totalVehicles = filteredLogs.length;
     const avgService = totalVehicles > 0 ? totalRevenue / totalVehicles : 0;
 
-    // Payment mode breakdown
-    const paymentModeBreakdown = filteredLogs.reduce((acc, log) => {
-      const paymentMode = log.payment_mode || 'Cash';
-      const normalizedMode = paymentMode.toLowerCase();
-      
-      if (!acc[normalizedMode]) {
-        acc[normalizedMode] = { 
-          mode: paymentMode, 
-          count: 0, 
-          revenue: 0,
-          upiAccounts: {} // For UPI breakdown by account
-        };
-      }
-      
-      acc[normalizedMode].count++;
-      acc[normalizedMode].revenue += log.Amount || 0;
-      
-      // If it's UPI, track by account
-      if (normalizedMode === 'upi' && log.upi_account_name) {
-        const accountName = log.upi_account_name;
-        if (!acc[normalizedMode].upiAccounts[accountName]) {
-          acc[normalizedMode].upiAccounts[accountName] = { count: 0, revenue: 0 };
-        }
-        acc[normalizedMode].upiAccounts[accountName].count++;
-        acc[normalizedMode].upiAccounts[accountName].revenue += log.Amount || 0;
-      }
-      
-      return acc;
-    }, {} as Record<string, any>);
+         // Payment mode breakdown
+     const paymentModeBreakdown = filteredLogs.reduce((acc, log) => {
+       const paymentMode = log.payment_mode || 'Cash';
+       const normalizedMode = paymentMode.toLowerCase();
+       
+       // Debug logging for payment modes
+       console.log('🔍 Processing payment mode:', {
+         original: paymentMode,
+         normalized: normalizedMode,
+         amount: log.Amount,
+         vehicleNumber: log.vehicle_number
+       });
+       
+       if (!acc[normalizedMode]) {
+         acc[normalizedMode] = { 
+           mode: paymentMode, // Keep original case for display
+           count: 0, 
+           revenue: 0,
+           upiAccounts: {} // For UPI breakdown by account
+         };
+       }
+       
+       acc[normalizedMode].count++;
+       acc[normalizedMode].revenue += log.Amount || 0;
+       
+       // If it's UPI, track by account
+       if (normalizedMode === 'upi' && log.upi_account_name) {
+         const accountName = log.upi_account_name;
+         if (!acc[normalizedMode].upiAccounts[accountName]) {
+           acc[normalizedMode].upiAccounts[accountName] = { count: 0, revenue: 0 };
+         }
+         acc[normalizedMode].upiAccounts[accountName].count++;
+         acc[normalizedMode].upiAccounts[accountName].revenue += log.Amount || 0;
+       }
+       
+       return acc;
+     }, {} as Record<string, any>);
+     
+     // Debug logging for final breakdown
+     console.log('📊 Final payment mode breakdown:', paymentModeBreakdown);
 
     // Service breakdown
     const serviceBreakdown = filteredLogs.reduce((acc, log) => {
@@ -830,12 +844,12 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
 
 
 
-      {/* Payment Mode Breakdown */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Payment Mode Breakdown</CardTitle>
-        </CardHeader>
-        <CardContent>
+             {/* Payment Mode Breakdown */}
+       <Card>
+         <CardHeader>
+           <CardTitle>Payment Mode Breakdown</CardTitle>
+         </CardHeader>
+                   <CardContent>
           <div className="space-y-4">
             {filteredData.paymentModeBreakdown.length === 0 ? (
               <div className="text-center p-4 text-muted-foreground">
@@ -897,12 +911,12 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
         {filteredData.paymentModeBreakdown.map((item: any) => (
           <Card key={`payment-summary-${item.mode}`} className="border-2 border-accent/20">
             <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                {item.mode === 'Cash' && <span className="text-green-600">💵</span>}
-                {item.mode === 'UPI' && <span className="text-blue-600">📱</span>}
-                {item.mode === 'Credit' && <span className="text-orange-600">💳</span>}
-                {item.mode}
-              </CardTitle>
+                                                                                       <CardTitle className="text-lg flex items-center gap-2">
+                   {(item.mode === 'Cash' || item.mode?.toLowerCase() === 'cash') && <span className="text-green-600">💵</span>}
+                   {(item.mode === 'UPI' || item.mode?.toLowerCase() === 'upi') && <span className="text-blue-600">📱</span>}
+                   {(item.mode === 'Credit' || item.mode?.toLowerCase() === 'credit') && <span className="text-orange-600">💳</span>}
+                   {item.mode}
+                 </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="text-center">
