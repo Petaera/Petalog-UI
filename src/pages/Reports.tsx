@@ -20,6 +20,7 @@ interface Vehicle {
   id: string;
   vehicle_number: string;
   vehicle_type: string;
+  vehicle_model: string;
   owner_name: string;
   phone_number: string;
   service_type: string;
@@ -368,6 +369,7 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
         id: log.id,
         vehicle_number: log.vehicle_number,
         vehicle_type: log.vehicle_type,
+        vehicle_model: log.vehicle_model,
         owner_name: log.Name,
         phone_number: log.Phone_no,
         service_type: log.service,
@@ -409,7 +411,7 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
       'Vehicle Number': vehicle.vehicle_number,
       'Owner Name': vehicle.owner_name,
       'Phone': vehicle.phone_number,
-      'Vehicle Type': vehicle.vehicle_type,
+      'Vehicle Model': vehicle.vehicle_model || 'N/A',
       'Service Type': vehicle.service_type,
       'Price': vehicle.price,
       'Entry Type': vehicle.entry_type,
@@ -809,7 +811,7 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
                   <tr className="border-b">
                     <th className="text-left p-2 font-medium">Vehicle No.</th>
                     <th className="text-left p-2 font-medium">Owner</th>
-                    <th className="text-left p-2 font-medium">Type</th>
+                    <th className="text-left p-2 font-medium">Model</th>
                     <th className="text-left p-2 font-medium">Service</th>
                     <th className="text-left p-2 font-medium">Price</th>
                     <th className="text-left p-2 font-medium">Entry Type</th>
@@ -828,7 +830,7 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
                         </div>
                       </td>
                       <td className="p-2">
-                        <Badge variant="outline">{vehicle.vehicle_type}</Badge>
+                        <Badge variant="outline">{vehicle.vehicle_model || 'N/A'}</Badge>
                       </td>
                       <td className="p-2">{vehicle.service_type}</td>
                       <td className="p-2 font-semibold text-financial">₹{vehicle.price?.toLocaleString() || 0}</td>
