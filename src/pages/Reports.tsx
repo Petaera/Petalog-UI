@@ -56,6 +56,7 @@ interface LogEntry {
   created_at: string;
   approval_status: string;
   manager_id?: string;
+  upi_account_name?: string; // Added for UPI breakdown
 }
 
 interface Location {
@@ -206,7 +207,8 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
     if (dateRange === "today") {
       filteredLogs = filteredLogs.filter(log => {
         const logDate = new Date(log.created_at);
-        return logDate >= today;
+        const logDateOnly = new Date(logDate.getFullYear(), logDate.getMonth(), logDate.getDate());
+        return logDateOnly.getTime() === today.getTime();
       });
     } else if (dateRange === "yesterday") {
       const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
@@ -290,6 +292,36 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
     const totalVehicles = filteredLogs.length;
     const avgService = totalVehicles > 0 ? totalRevenue / totalVehicles : 0;
 
+    // Payment mode breakdown
+    const paymentModeBreakdown = filteredLogs.reduce((acc, log) => {
+      const paymentMode = log.payment_mode || 'Cash';
+      const normalizedMode = paymentMode.toLowerCase();
+      
+      if (!acc[normalizedMode]) {
+        acc[normalizedMode] = { 
+          mode: paymentMode, 
+          count: 0, 
+          revenue: 0,
+          upiAccounts: {} // For UPI breakdown by account
+        };
+      }
+      
+      acc[normalizedMode].count++;
+      acc[normalizedMode].revenue += log.Amount || 0;
+      
+      // If it's UPI, track by account
+      if (normalizedMode === 'upi' && log.upi_account_name) {
+        const accountName = log.upi_account_name;
+        if (!acc[normalizedMode].upiAccounts[accountName]) {
+          acc[normalizedMode].upiAccounts[accountName] = { count: 0, revenue: 0 };
+        }
+        acc[normalizedMode].upiAccounts[accountName].count++;
+        acc[normalizedMode].upiAccounts[accountName].revenue += log.Amount || 0;
+      }
+      
+      return acc;
+    }, {} as Record<string, any>);
+
     // Service breakdown
     const serviceBreakdown = filteredLogs.reduce((acc, log) => {
       const service = log.service || 'Unknown';
@@ -314,6 +346,10 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
     }, {} as Record<string, any>);
 
     // Convert to arrays and add percentages
+    const paymentModeBreakdownArray = Object.values(paymentModeBreakdown).map((item: any) => ({
+      ...item,
+      percentage: totalRevenue > 0 ? (item.revenue / totalRevenue) * 100 : 0
+    }));
     const serviceBreakdownArray = Object.values(serviceBreakdown);
     const vehicleDistributionArray = Object.values(vehicleDistribution).map((item: any) => ({
       ...item,
@@ -385,6 +421,7 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
       totalRevenue,
       totalVehicles,
       avgService,
+      paymentModeBreakdown: paymentModeBreakdownArray,
       serviceBreakdown: serviceBreakdownArray,
       vehicleDistribution: vehicleDistributionArray,
       filteredVehicles: processedVehicles
@@ -407,17 +444,23 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
   };
 
   const exportToCSV = () => {
-    const csvData = filteredData.filteredVehicles.map(vehicle => ({
-      'Vehicle Number': vehicle.vehicle_number,
-      'Owner Name': vehicle.owner_name,
-      'Phone': vehicle.phone_number,
-      'Vehicle Model': vehicle.vehicle_model || 'N/A',
-      'Service Type': vehicle.service_type,
-      'Price': vehicle.price,
-      'Entry Type': vehicle.entry_type,
-      'Date': format(new Date(vehicle.created_at), 'dd/MM/yyyy HH:mm'),
-      'Location': locations.find(loc => loc.id === vehicle.location_id)?.name || 'Unknown'
-    }));
+    const csvData = filteredData.filteredVehicles.map(vehicle => {
+      // Find the corresponding log entry to get payment mode and UPI account info
+      const logEntry = logs.find(log => log.id === vehicle.id);
+      return {
+        'Vehicle Number': vehicle.vehicle_number,
+        'Owner Name': vehicle.owner_name,
+        'Phone': vehicle.phone_number,
+        'Vehicle Model': vehicle.vehicle_model || 'N/A',
+        'Service Type': vehicle.service_type,
+        'Price': vehicle.price,
+        'Payment Mode': logEntry?.payment_mode || 'Cash',
+        'UPI Account': logEntry?.upi_account_name || 'N/A',
+        'Entry Type': vehicle.entry_type,
+        'Date': format(new Date(vehicle.created_at), 'dd/MM/yyyy HH:mm'),
+        'Location': locations.find(loc => loc.id === vehicle.location_id)?.name || 'Unknown'
+      };
+    });
     
     const csvString = [
       Object.keys(csvData[0] || {}).join(','),
@@ -429,6 +472,33 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
     const a = document.createElement('a');
     a.href = url;
     a.download = `car-wash-report-${format(new Date(), 'dd-MM-yyyy')}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const exportPaymentBreakdown = () => {
+    const breakdownData = filteredData.paymentModeBreakdown.map(item => ({
+      'Payment Mode': item.mode,
+      'Total Revenue': item.revenue,
+      'Vehicle Count': item.count,
+      'Percentage of Total': `${item.percentage.toFixed(1)}%`,
+      'UPI Accounts': item.mode?.toLowerCase() === 'upi' && Object.keys(item.upiAccounts || {}).length > 0 
+        ? Object.entries(item.upiAccounts).map(([accountName, accountData]: [string, any]) => 
+            `${accountName}: ₹${accountData.revenue} (${accountData.count} vehicles)`
+          ).join('; ')
+        : 'N/A'
+    }));
+    
+    const csvString = [
+      Object.keys(breakdownData[0] || {}).join(','),
+      ...breakdownData.map(row => Object.values(row).join(','))
+    ].join('\n');
+    
+    const blob = new Blob([csvString], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `payment-breakdown-${format(new Date(), 'dd-MM-yyyy')}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
@@ -481,6 +551,10 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
           <Button variant="outline" size="sm" onClick={exportToCSV} disabled={loading}>
             <FileSpreadsheet className="h-4 w-4 mr-2" />
             Export CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportPaymentBreakdown} disabled={loading}>
+            <BarChart3 className="h-4 w-4 mr-2" />
+            Export Payment Breakdown
           </Button>
           <Button variant="outline" size="sm" onClick={fetchAllData} disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <BarChart3 className="h-4 w-4 mr-2" />}
@@ -690,7 +764,7 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
       </Card>
 
       {/* Revenue Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card className="metric-card-financial">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
@@ -729,6 +803,137 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
             <p className="text-xs text-muted-foreground">Per vehicle</p>
           </CardContent>
         </Card>
+
+        <Card className="metric-card-warning">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Today's Collection</CardTitle>
+            <Badge variant="outline" className="text-warning border-warning">
+              Today Only
+            </Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-warning">
+              ₹{(() => {
+                const todayLogs = logs.filter(log => {
+                  const logDate = new Date(log.created_at);
+                  const today = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+                  const logDateOnly = new Date(logDate.getFullYear(), logDate.getMonth(), logDate.getDate());
+                  return logDateOnly.getTime() === today.getTime() && log.approval_status === 'approved';
+                });
+                return todayLogs.reduce((sum, log) => sum + (log.Amount || 0), 0).toLocaleString();
+              })()}
+            </div>
+            <p className="text-xs text-muted-foreground">Today's total collection</p>
+          </CardContent>
+        </Card>
+      </div>
+
+
+
+      {/* Payment Mode Breakdown */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Payment Mode Breakdown</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {filteredData.paymentModeBreakdown.length === 0 ? (
+              <div className="text-center p-4 text-muted-foreground">
+                No payment mode data available
+              </div>
+            ) : (
+              filteredData.paymentModeBreakdown.map((item: any, index: number) => (
+                <div key={`payment-mode-breakdown-${item.mode || 'unknown'}-${index}`} className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
+                  <div>
+                    <p className="font-medium">{item.mode || 'Unknown Mode'}</p>
+                    <p className="text-sm text-muted-foreground">{item.count} vehicles • ₹{Math.round(item.revenue || 0).toLocaleString()} avg</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-financial">₹{(item.revenue || 0).toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {filteredData.totalRevenue > 0 ? (((item.revenue || 0) / filteredData.totalRevenue) * 100).toFixed(1) : 0}% of total
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* UPI Account Breakdown - Only show if there are UPI payments */}
+      {filteredData.paymentModeBreakdown.some((item: any) => item.mode?.toLowerCase() === 'upi' && Object.keys(item.upiAccounts || {}).length > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>UPI Account Breakdown</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {filteredData.paymentModeBreakdown
+                .filter((item: any) => item.mode?.toLowerCase() === 'upi')
+                .map((upiItem: any) => 
+                  Object.entries(upiItem.upiAccounts || {}).map(([accountName, accountData]: [string, any]) => (
+                    <div key={`upi-account-${accountName}`} className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div>
+                        <p className="font-medium text-blue-900">{accountName}</p>
+                        <p className="text-sm text-blue-700">{accountData.count} vehicles • ₹{Math.round(accountData.revenue / accountData.count || 0).toLocaleString()} avg</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold text-blue-900">₹{(accountData.revenue || 0).toLocaleString()}</p>
+                        <p className="text-xs text-blue-700">
+                          {upiItem.revenue > 0 ? (((accountData.revenue || 0) / upiItem.revenue) * 100).toFixed(1) : 0}% of UPI total
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Payment Mode Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {filteredData.paymentModeBreakdown.map((item: any) => (
+          <Card key={`payment-summary-${item.mode}`} className="border-2 border-accent/20">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                {item.mode === 'Cash' && <span className="text-green-600">💵</span>}
+                {item.mode === 'UPI' && <span className="text-blue-600">📱</span>}
+                {item.mode === 'Credit' && <span className="text-orange-600">💳</span>}
+                {item.mode}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="text-center">
+                <div className="text-3xl font-bold text-primary">₹{item.revenue.toLocaleString()}</div>
+                <p className="text-sm text-muted-foreground">Total Revenue</p>
+              </div>
+              
+              <div className="flex items-center justify-between text-sm">
+                <span>Vehicles:</span>
+                <span className="font-semibold">{item.count}</span>
+              </div>
+              
+              <div className="flex items-center justify-between text-sm">
+                <span>Percentage:</span>
+                <span className="font-semibold text-primary">{item.percentage.toFixed(1)}%</span>
+              </div>
+              
+              {item.mode?.toLowerCase() === 'upi' && Object.keys(item.upiAccounts || {}).length > 0 && (
+                <div className="pt-2 border-t">
+                  <p className="text-xs font-medium text-muted-foreground mb-2">UPI Accounts:</p>
+                  {Object.entries(item.upiAccounts).map(([accountName, accountData]: [string, any]) => (
+                    <div key={accountName} className="flex items-center justify-between text-xs py-1">
+                      <span className="truncate">{accountName}</span>
+                      <span className="font-medium">₹{accountData.revenue.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Service Breakdown */}
