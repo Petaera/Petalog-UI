@@ -1111,6 +1111,109 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       }
     } catch (err: any) {
       toast.error('Submission failed: ' + (err?.message || err));
+    } finally {
+      setIsSubmitDisabled(false);
+    }
+  };
+
+  const handleCheckout = async () => {
+    // Disable submit button for 5 seconds
+    setIsSubmitDisabled(true);
+    
+    const trimmedCustomerName = customerName.trim();
+    
+    if (!selectedLocation) {
+      toast.error('Please select a location from the toolbar');
+      setIsSubmitDisabled(false); // Re-enable button on validation error
+      return;
+    }
+    
+    if (!vehicleNumber || !vehicleType || (entryType === 'customer' && service.length === 0)) {
+      toast.error('Please fill in all required fields (Vehicle Number, Vehicle Type, and Service)');
+      setIsSubmitDisabled(false); // Re-enable button on validation error
+      return;
+    }
+
+    try {
+      // Use the utility function to get or create vehicle ID
+      const vehicleId = await getOrCreateVehicleId(vehicleNumber, vehicleType);
+      
+      const imageUrl = null; // Temporarily set to null since scratch marking is disabled
+      
+      // Calculate final amount
+      const priceNum = parseFloat(amount) || 0;
+      const discountNum = discount === '' ? 0 : parseFloat(discount) || 0;
+      const finalAmount = priceNum - discountNum;
+
+      // For checkout, we directly set the ticket as approved and closed
+      const currentTime = new Date().toISOString();
+
+      // Insert new log entry directly as approved
+      const { error: insertError } = await supabase.from('logs-man').insert([
+        {
+          vehicle_id: vehicleId,
+          vehicle_number: vehicleNumber,
+          location_id: selectedLocation,
+          entry_type: entryType,
+          image_url: imageUrl,
+          created_by: user?.id,
+          Amount: finalAmount,
+          discount: discountNum,
+          remarks: remarks,
+          // payment_mode is decided at checkout in Manual Logs
+          service: service.join(','), // Store as comma-separated string
+          vehicle_type: vehicleType,
+          workshop: entryType === 'workshop' ? workshop : null,
+          wheel_type: mapWheelCategoryToTypeCode(wheelCategory),
+          // Customer details
+          Name: trimmedCustomerName || null,
+          Phone_no: phoneNumber || null,
+          'D.O.B': dateOfBirth || null,
+          Location: customerLocation || null,
+          // Vehicle details
+          vehicle_brand: selectedVehicleBrand || null,
+          vehicle_model: selectedModel || null,
+          Brand_id: selectedModelId || null,
+          // Set as approved immediately
+          approval_status: 'approved',
+          // Set entry and exit time to current time (immediate checkout)
+          entry_time: currentTime,
+          exit_time: currentTime,
+          approved_at: currentTime,
+          // Set payment date to current time
+          payment_date: currentTime,
+        },
+      ]);
+      
+      if (insertError) throw insertError;
+      
+      toast.success('Entry checked out successfully! Ticket is now closed.');
+      
+      // Reset form
+      setVehicleNumber('');
+      setVehicleType('');
+      setService([]); // Reset service to empty array
+      setAmount('500');
+      setDiscount('');
+      setRemarks('');
+      setCustomerName('');
+      setPhoneNumber('');
+      setDateOfBirth('');
+      setCustomerLocation('');
+      setSelectedVehicleBrand('');
+      setSelectedModel('');
+      setSelectedModelId('');
+      setWheelCategory('4 Wheeler');
+      setWorkshop('');
+      setUseCustomDateTime(false);
+      setCustomEntryDate(new Date().toISOString().split('T')[0]);
+      setCustomEntryTime(new Date().toTimeString().slice(0, 5));
+      
+    } catch (error) {
+      console.error('Error checking out entry:', error);
+      toast.error('Failed to checkout entry: ' + error.message);
+    } finally {
+      setIsSubmitDisabled(false);
     }
   };
 
@@ -1560,7 +1663,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       </div>
 
       {/* Submit Button */}
-      <div className="flex justify-center">
+      <div className="flex justify-center gap-4">
         <Button 
           variant="default" 
           size="lg" 
@@ -1570,6 +1673,19 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         >
           {isEditing ? 'Update Entry' : 'Submit Entry'}
         </Button>
+        
+        {/* Checkout Button - only show when no custom date is given */}
+        {!useCustomDateTime && !isEditing && (
+          <Button 
+            variant="outline" 
+            size="lg" 
+            className="px-8"
+            onClick={handleCheckout}
+            disabled={isSubmitDisabled}
+          >
+            Checkout
+          </Button>
+        )}
       </div>
     </div>
   );

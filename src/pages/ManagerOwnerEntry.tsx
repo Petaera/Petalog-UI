@@ -1062,6 +1062,125 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
       setEditLogId(null);
     } catch (err: any) {
       toast.error('Submission failed: ' + (err?.message || err));
+    } finally {
+      setIsSubmitDisabled(false);
+    }
+  };
+
+  const handleCheckout = async () => {
+    // Disable submit button for 5 seconds
+    setIsSubmitDisabled(true);
+    
+    const trimmedCustomerName = customerName.trim();
+    
+    if (!vehicleNumber || !vehicleType || (entryType === 'customer' && service.length === 0)) {
+      toast.error('Please fill in all required fields (Vehicle Number, Vehicle Type, and Service)');
+      setIsSubmitDisabled(false); // Re-enable button on validation error
+      return;
+    }
+
+    // Validate UPI account selection if UPI is selected
+    if (paymentMode === 'upi' && !selectedUpiAccount) {
+      toast.error('Please select a UPI account');
+      setIsSubmitDisabled(false);
+      return;
+    }
+
+    try {
+      // Use the utility function to get or create vehicle ID
+      const vehicleId = await getOrCreateVehicleId(vehicleNumber, vehicleType);
+      
+      const imageUrl = null; // Set to null since scratch marking is commented out
+      
+      // Calculate final amount
+      const priceNum = parseFloat(amount) || 0;
+      const discountNum = discount === '' ? 0 : parseFloat(discount) || 0;
+      const finalAmount = priceNum - discountNum;
+
+      // For checkout, we directly set the ticket as approved and closed
+      const currentTime = new Date().toISOString();
+
+      // Find the selected UPI account details
+      const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
+
+      // Insert new log entry directly as approved
+      const { error: insertError } = await supabase.from('logs-man').insert([
+        {
+          vehicle_id: vehicleId,
+          vehicle_number: vehicleNumber,
+          location_id: user?.assigned_location,
+          entry_type: entryType,
+          image_url: imageUrl,
+          created_by: user?.id,
+          Amount: finalAmount,
+          discount: discountNum,
+          remarks: remarks,
+          payment_mode: paymentMode,
+          service: service.join(','), // Store as comma-separated string
+          vehicle_type: vehicleType,
+          workshop: entryType === 'workshop' ? workshop : null,
+          wheel_type: mapWheelCategoryToTypeCode(wheelCategory),
+          // Customer details
+          Name: trimmedCustomerName || null,
+          Phone_no: phoneNumber || null,
+          'D.O.B': dateOfBirth || null,
+          Location: customerLocation || null,
+          // Vehicle details
+          vehicle_brand: selectedVehicleBrand || null,
+          vehicle_model: selectedModel || null,
+          Brand_id: selectedModelId || null,
+          // Set as approved immediately
+          approval_status: 'approved',
+          // Set entry and exit time to current time (immediate checkout)
+          entry_time: currentTime,
+          exit_time: currentTime,
+          approved_at: currentTime,
+          // Set payment date to current time
+          payment_date: currentTime,
+          // UPI account information if UPI is selected
+          ...(paymentMode === 'upi' && selectedAccount ? {
+            upi_account_id: selectedUpiAccount,
+            upi_account_name: selectedAccount.account_name,
+            upi_id: selectedAccount.upi_id,
+          } : {}),
+        },
+      ]);
+      
+      if (insertError) throw insertError;
+      
+      toast.success('Entry checked out successfully! Ticket is now closed.');
+      
+      // Reset form
+      setVehicleNumber('');
+      setVehicleType('');
+      setService([]); // Reset service to empty array
+      setAmount('500');
+      setDiscount('');
+      setRemarks('');
+      setPaymentMode('cash');
+      setSelectedUpiAccount(''); // Reset UPI account selection
+      setCustomerName('');
+      setPhoneNumber('');
+      setDateOfBirth('');
+      setCustomerLocation('');
+      setSelectedVehicleBrand('');
+      setSelectedModel('');
+      setSelectedModelId('');
+      setWheelCategory('4 Wheeler');
+      setWorkshop('');
+      setUseCustomDateTime(false);
+      setCustomEntryDate(new Date().toISOString().split('T')[0]);
+      setCustomEntryTime(new Date().toTimeString().slice(0, 5));
+      
+      // Reset edit mode
+      setIsEditing(false);
+      setEditLogId(null);
+      
+    } catch (error) {
+      console.error('Error checking out entry:', error);
+      toast.error('Failed to checkout entry: ' + error.message);
+    } finally {
+      setIsSubmitDisabled(false);
     }
   };
 
@@ -1501,7 +1620,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
         </div>
 
         {/* Submit Button */}
-        <div className="flex justify-center">
+        <div className="flex justify-center gap-4">
           <Button 
             variant="default" 
             size="lg" 
@@ -1511,6 +1630,19 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
           >
             {isEditing ? 'Update Entry' : 'Submit Entry'}
           </Button>
+          
+          {/* Checkout Button - only show when no custom date is given */}
+          {!useCustomDateTime && !isEditing && (
+            <Button 
+              variant="outline" 
+              size="lg" 
+              className="px-8"
+              onClick={handleCheckout}
+              disabled={isSubmitDisabled}
+            >
+              Checkout
+            </Button>
+          )}
         </div>
        </div>
    );
