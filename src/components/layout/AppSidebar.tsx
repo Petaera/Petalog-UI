@@ -49,6 +49,7 @@ export function AppSidebar() {
         { title: "Dashboard", url: "/dashboard", icon: Home },
         { title: "Manual Entry", url: "/manager-owner-entry", icon: Car },
         { title: "Manual Logs", url: "/manager-manual-logs", icon: PenTool },
+        { title: "Partnerships", url: "/location-partnerships", icon: Users },
       ]
     : [
         { title: "Dashboard", url: "/dashboard", icon: Home },
@@ -57,6 +58,7 @@ export function AppSidebar() {
         { title: "Comparison", url: "/comparison", icon: FileText },
         { title: "Reports & Statistics", url: "/reports", icon: BarChart3 },
         { title: "Manager Access", url: "/manager-access", icon: Users },
+        { title: "Partnerships", url: "/location-partnerships", icon: Users },
         { title: "Price Settings", url: "/price-settings", icon: Settings },
         { title: "Vehicle History", url: "/vehicle-history", icon: Search },
         { title: "Owner Manual Entry", url: "/owner-entry", icon: Car },

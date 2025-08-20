@@ -37,6 +37,7 @@ import ManagerReports from "./pages/ManagerReports";
 import ManagerPriceSettings from "./pages/ManagerPriceSettings";
 import ManagerVehicleHistory from "./pages/ManagerVehicleHistory";
 import ManagerOwnerEntry from "./pages/ManagerOwnerEntry";
+import LocationPartnershipsPage from "./pages/LocationPartnershipsPage";
 
 import NotFound from "./pages/NotFound";
 import { Layout } from "@/components/layout/Layout";
@@ -145,16 +146,16 @@ const App = () => (
                   </ProtectedRoute>
                 } 
               />
-              <Route 
-                path="/automatic-logs" 
-                element={
-                  <ProtectedRoute requiredRole="owner">
-                    <Layout>
-                      <AutomaticLogs />
-                    </Layout>
-                  </ProtectedRoute>
-                }
-              />
+                             <Route 
+                 path="/automatic-logs" 
+                 element={
+                   <ProtectedRoute requiredRole="owner">
+                     <Layout>
+                       <AutomaticLogs />
+                     </Layout>
+                   </ProtectedRoute>
+                 }
+               />
               
               {/* Owner routes */}
               <Route 
@@ -227,25 +228,34 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
-              <Route 
-                path="/owner-entry" 
-                element={
-                  <ProtectedRoute requiredRole="owner">
-                    <Layout>
-                      <OwnerEntry />
-                    </Layout>
-                  </ProtectedRoute>
-                }
-              />
-              
-              <Route 
-                path="/manager-settings" 
-                element={
-                  <ProtectedRoute requiredRole="owner">
-                    <ManagerSettings />
-                  </ProtectedRoute>
-                } 
-              />
+                             <Route 
+                 path="/owner-entry" 
+                 element={
+                   <ProtectedRoute requiredRole="owner">
+                     <Layout>
+                       <OwnerEntry />
+                     </Layout>
+                   </ProtectedRoute>
+                 }
+               />
+               
+               <Route 
+                 path="/location-partnerships" 
+                 element={
+                   <ProtectedRoute requiredRole={["owner", "manager"]}>
+                     <LocationPartnershipsPage />
+                   </ProtectedRoute>
+                 }
+               />
+               
+               <Route 
+                 path="/manager-settings" 
+                 element={
+                   <ProtectedRoute requiredRole="owner">
+                     <ManagerSettings />
+                   </ProtectedRoute>
+                 } 
+               />
               
               <Route 
                 path="/manager-settings/staff" 
