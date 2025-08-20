@@ -58,21 +58,17 @@ export default function LocationPartnerships({ locationId, locationName }: Locat
     try {
       setLoading(true);
       
-      // For now, show the current owner from the existing database structure
-      // This will work until we set up the full partnership system
+      const allOwners: any[] = [];
+      
+      // First, check the old own_id system
       const { data: locationData, error: locationError } = await supabase
         .from('locations')
         .select('own_id')
         .eq('id', locationId)
         .single();
 
-      if (locationError) {
-        console.error('Error fetching location:', locationError);
-        return;
-      }
-
-      if (locationData?.own_id) {
-        // Get the current owner's details
+      if (!locationError && locationData?.own_id) {
+        // Get the current owner's details from the old system
         const { data: ownerData, error: ownerError } = await supabase
           .from('users')
           .select('id, email, role')
@@ -80,17 +76,63 @@ export default function LocationPartnerships({ locationId, locationName }: Locat
           .single();
 
         if (!ownerError && ownerData) {
-          setOwners([{
-            id: 'current',
+          allOwners.push({
+            id: 'current_old',
             owner_id: ownerData.id,
             owner_email: ownerData.email,
             ownership_percentage: 100,
             is_primary_owner: true
-          }]);
+          });
         }
       }
+      
+      // Then, check the new location_owners system
+      try {
+        const { data: partnershipData, error: partnershipError } = await supabase
+          .from('location_owners')
+          .select('owner_id, ownership_percentage, is_primary_owner')
+          .eq('location_id', locationId);
+        
+        if (!partnershipError && partnershipData && partnershipData.length > 0) {
+          // Get owner details for each partnership
+          for (const partnership of partnershipData) {
+            const { data: ownerData, error: ownerError } = await supabase
+              .from('users')
+              .select('id, email, role')
+              .eq('id', partnership.owner_id)
+              .single();
+            
+            if (!ownerError && ownerData) {
+              // Check if this owner is already in the list (from old system)
+              const existingOwner = allOwners.find(owner => owner.owner_id === ownerData.id);
+              if (!existingOwner) {
+                allOwners.push({
+                  id: `partnership_${partnership.owner_id}`,
+                  owner_id: ownerData.id,
+                  owner_email: ownerData.email,
+                  ownership_percentage: partnership.ownership_percentage,
+                  is_primary_owner: partnership.is_primary_owner
+                });
+              }
+            }
+          }
+        }
+      } catch (partnershipError) {
+        console.log('Partnership system not accessible:', partnershipError);
+      }
+      
+      // Set the owners state
+      if (allOwners.length > 0) {
+        setOwners(allOwners);
+        console.log('Found owners:', allOwners);
+      } else {
+        setOwners([]);
+        console.log('No owners found');
+      }
+      
     } catch (error) {
       console.error('Error in fetchLocationOwners:', error);
+      setOwners([]);
     } finally {
       setLoading(false);
     }

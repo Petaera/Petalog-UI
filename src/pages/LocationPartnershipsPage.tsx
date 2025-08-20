@@ -349,11 +349,72 @@ export default function LocationPartnershipsPage() {
           filterType: filter.filterType
         });
         
-        // Apply basic fallback if no filter
-        console.log('🔄 Applying basic fallback filter...');
-        if (user.role === 'owner' && user.own_id) {
-          locationQuery = locationQuery.eq('own_id', user.own_id);
-          console.log('🔄 Applied own_id fallback filter:', user.own_id);
+        // Apply comprehensive filtering for owners
+        if (user.role === 'owner') {
+          console.log('🔄 Applying comprehensive owner filtering...');
+          
+          // For owners, we need to get locations from both systems
+          // First, get locations from the old own_id system
+          let ownIdLocations: any[] = [];
+          if (user.own_id) {
+            const { data: ownIdData, error: ownIdError } = await supabase
+              .from('locations')
+              .select('id, name, address')
+              .eq('own_id', user.own_id);
+            
+            if (!ownIdError && ownIdData) {
+              ownIdLocations = ownIdData;
+              console.log('🔄 Found locations from own_id system:', ownIdLocations.length);
+            }
+          }
+          
+          // Then, get locations from the new location_owners system
+          let partnershipLocations: any[] = [];
+          try {
+            const { data: partnershipData, error: partnershipError } = await supabase
+              .from('location_owners')
+              .select('location_id')
+              .eq('owner_id', user.id);
+            
+            if (!partnershipError && partnershipData && partnershipData.length > 0) {
+              const locationIds = partnershipData.map(lo => lo.location_id);
+              console.log('🔄 Found location IDs from partnership system:', locationIds);
+              
+              // Get the actual location data
+              const { data: partnershipLocData, error: partnershipLocError } = await supabase
+                .from('locations')
+                .select('id, name, address')
+                .in('id', locationIds);
+              
+              if (!partnershipLocError && partnershipLocData) {
+                partnershipLocations = partnershipLocData;
+                console.log('🔄 Found locations from partnership system:', partnershipLocations.length);
+              }
+            }
+          } catch (partnershipError) {
+            console.log('🔄 Partnership system not accessible, skipping:', partnershipError);
+          }
+          
+          // Combine both sets of locations, removing duplicates
+          const allLocationIds = new Set([
+            ...ownIdLocations.map(loc => loc.id),
+            ...partnershipLocations.map(loc => loc.id)
+          ]);
+          
+          console.log('🔄 Total unique locations found:', allLocationIds.size);
+          console.log('🔄 Location IDs:', Array.from(allLocationIds));
+          
+          if (allLocationIds.size > 0) {
+            // Use the IN clause to get all locations
+            locationQuery = locationQuery.in('id', Array.from(allLocationIds));
+            console.log('🔄 Applied comprehensive filter for', allLocationIds.size, 'locations');
+          } else {
+            // Fallback to own_id if no locations found
+            if (user.own_id) {
+              locationQuery = locationQuery.eq('own_id', user.own_id);
+              console.log('🔄 Applied own_id fallback filter:', user.own_id);
+            }
+          }
         } else if (user.role === 'manager' && user.assigned_location) {
           locationQuery = locationQuery.eq('id', user.assigned_location);
           console.log('🔄 Applied assigned_location fallback filter:', user.assigned_location);

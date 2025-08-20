@@ -85,22 +85,12 @@ export const getLocationFilter = (user: any) => {
   }
 
   if (user.role === 'owner') {
-    // For owners, use a simple approach that works with both systems
+    // For owners, let the component handle the complex filtering
     return {
-      query: (baseQuery: any) => {
-        // Simple fallback approach - if own_id exists, use it
-        // This will work regardless of whether the partnership system is set up
-        if (user.own_id) {
-          return baseQuery.eq('own_id', user.own_id);
-        }
-        
-        // If no own_id, try to use the partnership system
-        // But don't make it complex - just return the base query
-        return baseQuery;
-      },
+      query: null, // Return null to let component handle filtering
       isFiltered: true,
-      filterType: 'owner_simple',
-      reason: `Owner filtering by own_id for user: ${user.id}`
+      filterType: 'owner_complex',
+      reason: `Owner filtering handled by component for user: ${user.id}`
     };
   }
 
@@ -115,7 +105,7 @@ export const getLocationFilter = (user: any) => {
 
   // For managers without assigned_location or any other role
   return {
-    query: (baseQuery: any) => baseQuery.eq('id', 'no-access'), // This will return no results
+    query: null, // Return null instead of restrictive query
     isFiltered: true,
     filterType: 'no_access',
     reason: 'No access granted - missing required permissions'

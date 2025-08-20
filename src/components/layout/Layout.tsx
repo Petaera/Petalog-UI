@@ -11,7 +11,7 @@ import Reports from '@/pages/Reports';
 import VehicleHistory from '@/pages/VehicleHistory';
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/contexts/AuthContext";
-import { applyLocationFilter, getLocationFilterDescription } from "@/lib/utils";
+import { getLocationFilterDescription } from "@/lib/utils";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -68,14 +68,88 @@ export function Layout({ children }: LayoutProps) {
 
         let query = supabase.from("locations").select("id, name, address");
         
-        // Apply location filter based on user role and permissions
-        query = applyLocationFilter(query, user);
+        // Apply comprehensive location filtering based on user role and permissions
+        if (user.role === 'owner') {
+          console.log('🔄 Layout: Applying comprehensive owner filtering...');
+          
+          // For owners, we need to get locations from both systems
+          // First, get locations from the old own_id system
+          let ownIdLocations: any[] = [];
+          if (user.own_id) {
+            const { data: ownIdData, error: ownIdError } = await supabase
+              .from('locations')
+              .select('id, name, address')
+              .eq('own_id', user.own_id);
+            
+            if (!ownIdError && ownIdData) {
+              ownIdLocations = ownIdData;
+              console.log('🔄 Layout: Found locations from own_id system:', ownIdLocations.length);
+            }
+          }
+          
+          // Then, get locations from the new location_owners system
+          let partnershipLocations: any[] = [];
+          try {
+            const { data: partnershipData, error: partnershipError } = await supabase
+              .from('location_owners')
+              .select('location_id')
+              .eq('owner_id', user.id);
+            
+            if (!partnershipError && partnershipData && partnershipData.length > 0) {
+              const locationIds = partnershipData.map(lo => lo.location_id);
+              console.log('🔄 Layout: Found location IDs from partnership system:', locationIds);
+              
+              // Get the actual location data
+              const { data: partnershipLocData, error: partnershipLocError } = await supabase
+                .from('locations')
+                .select('id, name, address')
+                .in('id', locationIds);
+              
+              if (!partnershipLocError && partnershipLocData) {
+                partnershipLocations = partnershipLocData;
+                console.log('🔄 Layout: Found locations from partnership system:', partnershipLocations.length);
+              }
+            }
+          } catch (partnershipError) {
+            console.log('🔄 Layout: Partnership system not accessible, skipping:', partnershipError);
+          }
+          
+          // Combine both sets of locations, removing duplicates
+          const allLocationIds = new Set([
+            ...ownIdLocations.map(loc => loc.id),
+            ...partnershipLocations.map(loc => loc.id)
+          ]);
+          
+          console.log('🔄 Layout: Total unique locations found:', allLocationIds.size);
+          
+          if (allLocationIds.size > 0) {
+            // Use the IN clause to get all locations
+            query = query.in('id', Array.from(allLocationIds));
+            console.log('🔄 Layout: Applied comprehensive filter for', allLocationIds.size, 'locations');
+          } else {
+            // Fallback to own_id if no locations found
+            if (user.own_id) {
+              query = query.eq('own_id', user.own_id);
+              console.log('🔄 Layout: Applied own_id fallback filter:', user.own_id);
+            }
+          }
+        } else if (user.role === 'manager' && user.assigned_location) {
+          query = query.eq('id', user.assigned_location);
+          console.log('🔄 Layout: Applied assigned_location filter:', user.assigned_location);
+        } else {
+          // For managers without assigned_location or any other role
+          query = query.eq('id', 'no-access'); // This will return no results
+          console.log('🔄 Layout: No access granted - missing required permissions');
+        }
         
         const { data, error } = await query;
         
         if (error) {
+          console.error('Layout: Error fetching locations:', error);
           return;
         }
+        
+        console.log('Layout: Fetched locations:', data?.length || 0);
         
         if (data && data.length > 0) {
           setLocations(data);
@@ -98,6 +172,7 @@ export function Layout({ children }: LayoutProps) {
           setSelectedLocation("");
         }
       } catch (error) {
+        console.error('Layout: Error in fetchLocations:', error);
         // Silent fail for location fetch errors
       } finally {
         setIsLoading(false);
