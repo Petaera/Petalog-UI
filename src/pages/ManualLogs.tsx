@@ -76,10 +76,10 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
     setCheckoutServices(log?.service ? String(log.service).split(',').map((s:string)=>s.trim()).filter(Boolean) : []);
     
     // Calculate original amount by adding discount back to the current amount
-    const currentAmount = log?.Amount != null ? Number(log.Amount) : 0;
+    const currentAmount = log?.Amount+log?.discount != null ? Number(log.Amount+log?.discount) : 0;
     const discountAmount = log?.discount != null ? Number(log.discount) : 0;
     const originalAmount = currentAmount - discountAmount;
-    setCheckoutAmount(originalAmount > 0 ? String(originalAmount) : '');
+    setCheckoutAmount(currentAmount > 0 ? String(currentAmount) : '');
     
     setSelectedUpiAccount(''); // Reset UPI account selection
     setCheckoutRemarks(''); // Reset remarks
@@ -1048,7 +1048,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                 </div>
                 <div>
                   <Label>Amount</Label>
-                  <div className="mt-1 text-sm font-medium">{settleLog?.Amount != null ? formatCurrency(settleLog.Amount) : '-'}</div>
+                  <div className="mt-1 text-sm font-medium">{settleLog?.Amount-settleLog?.discount!= null ? formatCurrency(settleLog?.Amount-settleLog?.discount) : '-'}</div>
                 </div>
               </div>
               <div>

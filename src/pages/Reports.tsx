@@ -81,7 +81,7 @@ interface User {
 }
 
 export default function Reports({ selectedLocation }: { selectedLocation?: string }) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [dateRange, setDateRange] = useState("today");
   const [vehicleType, setVehicleType] = useState("all");
   const [service, setService] = useState("all");
@@ -98,6 +98,8 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+
+
 
   // Fetch all data from Supabase
   const fetchAllData = async () => {
@@ -818,6 +820,7 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
           </CardContent>
         </Card>
 
+        {/* Today's Collection - Commented out
         <Card className="metric-card-warning">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Today's Collection</CardTitle>
@@ -840,6 +843,7 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
             <p className="text-xs text-muted-foreground">Today's total collection</p>
           </CardContent>
         </Card>
+        */}
       </div>
 
 
