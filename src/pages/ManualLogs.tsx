@@ -74,7 +74,13 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
     setCheckoutPaymentMode((log?.payment_mode as any) || 'cash');
     setCheckoutDiscount(log?.discount != null ? String(log.discount) : '');
     setCheckoutServices(log?.service ? String(log.service).split(',').map((s:string)=>s.trim()).filter(Boolean) : []);
-    setCheckoutAmount(log?.Amount != null ? String(log.Amount) : '');
+    
+    // Calculate original amount by adding discount back to the current amount
+    const currentAmount = log?.Amount != null ? Number(log.Amount) : 0;
+    const discountAmount = log?.discount != null ? Number(log.discount) : 0;
+    const originalAmount = currentAmount - discountAmount;
+    setCheckoutAmount(originalAmount > 0 ? String(originalAmount) : '');
+    
     setSelectedUpiAccount(''); // Reset UPI account selection
     setCheckoutRemarks(''); // Reset remarks
 
@@ -721,7 +727,12 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                               <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{log.Name || "-"}</td>
                               <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden xl:table-cell">{log.Phone_no || "-"}</td>
                               <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 hidden md:table-cell">
-                                {log.Amount ? formatCurrency(log.Amount) : "-"}
+                                {(() => {
+                                  const currentAmount = log.Amount || 0;
+                                  const discountAmount = log.discount || 0;
+                                  const originalAmount = currentAmount - discountAmount;
+                                  return originalAmount > 0 ? formatCurrency(originalAmount) : "-";
+                                })()}
                               </td>
                               <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
                               <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
@@ -806,7 +817,12 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                               <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{log.Name || "-"}</td>
                               <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden xl:table-cell">{log.Phone_no || "-"}</td>
                               <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 hidden md:table-cell">
-                                {log.Amount ? formatCurrency(log.Amount) : "-"}
+                                 {(() => {
+                                  const currentAmount = log.Amount || 0;
+                                  const discountAmount = log.discount || 0;
+                                  const originalAmount = currentAmount - discountAmount;
+                                  return originalAmount > 0 ? formatCurrency(originalAmount) : "-";
+                                })()}
                               </td>
                               <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
                               <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">

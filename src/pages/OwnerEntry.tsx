@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Car } from "lucide-react";
+import { Car, Banknote, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Checkbox } from '@/components/ui/checkbox';
 import ReactSelect from 'react-select';
 import { getOrCreateVehicleId } from "@/lib/utils";
+import { useUpiAccounts } from '@/hooks/useUpiAccounts';
 
 // Add SERVICE_PRICES fallback at the top-level
 const SERVICE_PRICES: { [key: string]: number } = {
@@ -136,7 +137,8 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
   const [entryType, setEntryType] = useState('customer');
   const [discount, setDiscount] = useState('');
   const [remarks, setRemarks] = useState('');
-  // Payment mode moved to Manual Logs checkout popup; no state needed here
+  // Payment mode state for cash/UPI selection
+  const [paymentMode, setPaymentMode] = useState<'cash' | 'upi' | 'credit'>('cash');
   // const [scratchImage, setScratchImage] = useState<Blob | null>(null);
   const [workshop, setWorkshop] = useState('');
   const [workshopOptions, setWorkshopOptions] = useState<string[]>([]);
@@ -180,10 +182,21 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
   // Loading state for auto-fill
   const [isLoadingVehicleData, setIsLoadingVehicleData] = useState(false);
 
+  // UPI accounts state
+  const [selectedUpiAccount, setSelectedUpiAccount] = useState<string>('');
+  const { accounts: upiAccounts, loading: upiAccountsLoading } = useUpiAccounts();
+
   const { user } = useAuth();
 
   // Store edit data for later use
   const [pendingEditData, setPendingEditData] = useState<any>(null);
+
+  // Reset UPI account selection when payment mode changes
+  useEffect(() => {
+    if (paymentMode !== 'upi') {
+      setSelectedUpiAccount('');
+    }
+  }, [paymentMode]);
 
   // Check for edit data on component mount
   useEffect(() => {
@@ -541,7 +554,9 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         setEntryType(logData.entryType || 'normal');
         setDiscount(logData.discount || '');
         setRemarks(logData.remarks || '');
-        // Payment mode selection is handled during checkout in Manual Logs
+        // Payment mode from edit data or default to cash
+        setPaymentMode(logData.payment_mode || 'cash');
+        setSelectedUpiAccount(logData.upi_account_id || '');
         setCustomerName(logData.customerName || '');
         setPhoneNumber(logData.phoneNumber || '');
         setDateOfBirth(logData.dateOfBirth || '');
@@ -927,6 +942,20 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       return;
     }
 
+    // Validate UPI account selection when UPI payment mode is selected
+    if (paymentMode === 'upi' && !selectedUpiAccount) {
+      toast.error('Please select a UPI account when using UPI payment mode');
+      setIsSubmitDisabled(false); // Re-enable button on validation error
+      return;
+    }
+
+    // Validate that UPI accounts are available when UPI payment mode is selected
+    if (paymentMode === 'upi' && upiAccounts.length === 0) {
+      toast.error('No UPI accounts found. Please add UPI accounts in the settings first.');
+      setIsSubmitDisabled(false); // Re-enable button on validation error
+      return;
+    }
+
     // Validate custom date and time if enabled
     if (useCustomDateTime) {
       const selectedDateTime = new Date(`${customEntryDate}T${customEntryTime}`);
@@ -1010,7 +1039,9 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
             Amount: finalAmount,
             discount: discountNum,
             remarks: remarks,
-            // payment_mode is decided at checkout in Manual Logs
+            // Payment mode and UPI account information
+            payment_mode: paymentMode,
+            upi_account_id: paymentMode === 'upi' ? selectedUpiAccount : null,
             service: service.join(','), // Store as comma-separated string
             vehicle_type: vehicleType,
             workshop: entryType === 'workshop' ? workshop : null,
@@ -1053,7 +1084,9 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
             Amount: finalAmount,
             discount: discountNum,
             remarks: remarks,
-            // payment_mode is decided at checkout in Manual Logs
+            // Payment mode and UPI account information
+            payment_mode: paymentMode,
+            upi_account_id: paymentMode === 'upi' ? selectedUpiAccount : null,
             service: service.join(','), // Store as comma-separated string
             vehicle_type: vehicleType,
             workshop: entryType === 'workshop' ? workshop : null,
@@ -1095,7 +1128,9 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         setAmount('500');
         setDiscount('');
         setRemarks('');
-        // Payment mode reset not needed here
+        // Reset payment mode and UPI account selection
+        setPaymentMode('cash');
+        setSelectedUpiAccount('');
         // setScratchImage(null);
         setCustomerName('');
         setPhoneNumber('');
@@ -1134,6 +1169,20 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       return;
     }
 
+    // Validate UPI account selection when UPI payment mode is selected
+    if (paymentMode === 'upi' && !selectedUpiAccount) {
+      toast.error('Please select a UPI account when using UPI payment mode');
+      setIsSubmitDisabled(false); // Re-enable button on validation error
+      return;
+    }
+
+    // Validate that UPI accounts are available when UPI payment mode is selected
+    if (paymentMode === 'upi' && upiAccounts.length === 0) {
+      toast.error('No UPI accounts found. Please add UPI accounts in the settings first.');
+      setIsSubmitDisabled(false); // Re-enable button on validation error
+      return;
+    }
+
     try {
       // Use the utility function to get or create vehicle ID
       const vehicleId = await getOrCreateVehicleId(vehicleNumber, vehicleType);
@@ -1160,7 +1209,9 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
           Amount: finalAmount,
           discount: discountNum,
           remarks: remarks,
-          // payment_mode is decided at checkout in Manual Logs
+          // Payment mode and UPI account information
+          payment_mode: paymentMode,
+          upi_account_id: paymentMode === 'upi' ? selectedUpiAccount : null,
           service: service.join(','), // Store as comma-separated string
           vehicle_type: vehicleType,
           workshop: entryType === 'workshop' ? workshop : null,
@@ -1196,6 +1247,9 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       setAmount('500');
       setDiscount('');
       setRemarks('');
+      // Reset payment mode and UPI account selection
+      setPaymentMode('cash');
+      setSelectedUpiAccount('');
       setCustomerName('');
       setPhoneNumber('');
       setDateOfBirth('');
@@ -1601,41 +1655,110 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                 </div>
               </div>
 
-              {/* Payment Mode moved to Manual Logs checkout popup */}
-              {/**
-               <div className="space-y-2">
-                 <Label>Payment Mode</Label>
-                 <div className="flex gap-2">
-                   <Button 
-                     variant={paymentMode === 'cash' ? 'default' : 'outline'} 
-                     size="sm" 
-                     className="flex-1"
-                     onClick={() => setPaymentMode('cash')}
-                   >
-                     <Banknote className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                     <span className="text-xs sm:text-sm">Cash</span>
-                   </Button>
-                   <Button 
-                     variant={paymentMode === 'upi' ? 'default' : 'outline'} 
-                     size="sm" 
-                     className="flex-1"
-                     onClick={() => setPaymentMode('upi')}
-                   >
-                     <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                     <span className="text-xs sm:text-sm">UPI</span>
-                   </Button>
-                   <Button 
-                     variant={paymentMode === 'credit' ? 'default' : 'outline'} 
-                     size="sm" 
-                     className="flex-1"
-                     onClick={() => setPaymentMode('credit')}
-                   >
-                     <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                     <span className="text-xs sm:text-sm">Pay Later</span>
-                   </Button>
-                 </div>
-               </div>
-              **/}
+              {/* Payment Mode Selection */}
+              <div className="space-y-2">
+                <Label>Payment Mode</Label>
+                <div className="flex gap-2">
+                  <Button 
+                    variant={paymentMode === 'cash' ? 'default' : 'outline'} 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => setPaymentMode('cash')}
+                  >
+                    <Banknote className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                    <span className="text-xs sm:text-sm">Cash</span>
+                  </Button>
+                  <Button 
+                    variant={paymentMode === 'upi' ? 'default' : 'outline'} 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => setPaymentMode('upi')}
+                  >
+                    <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                    <span className="text-xs sm:text-sm">UPI</span>
+                  </Button>
+                  <Button 
+                    variant={paymentMode === 'credit' ? 'default' : 'outline'} 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => setPaymentMode('credit')}
+                  >
+                    <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                    <span className="text-xs sm:text-sm">Pay Later</span>
+                  </Button>
+                </div>
+                {paymentMode === 'upi' && (
+                  <p className="text-xs text-muted-foreground">
+                    Select a UPI account below to display the QR code for payment
+                  </p>
+                )}
+                {paymentMode === 'credit' && (
+                  <p className="text-xs text-muted-foreground">
+                    Customer will pay later. Ticket will be marked as pending payment.
+                  </p>
+                )}
+              </div>
+
+              {/* UPI Account Selection */}
+              {paymentMode === 'upi' && (
+                <div className="space-y-2">
+                  <Label>Select UPI Account</Label>
+                  {upiAccountsLoading ? (
+                    <div className="text-sm text-muted-foreground">Loading UPI accounts...</div>
+                  ) : upiAccounts.length === 0 ? (
+                    <div className="p-3 border rounded-lg bg-muted/20">
+                      <p className="text-sm text-muted-foreground text-center">
+                        No UPI accounts found. Please add UPI accounts in the settings first.
+                      </p>
+                      <p className="text-xs text-muted-foreground text-center mt-1">
+                        You can switch to Cash payment mode or add UPI accounts in the settings.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <Select value={selectedUpiAccount} onValueChange={setSelectedUpiAccount}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select UPI account" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {upiAccounts.map((account) => (
+                            <SelectItem key={account.id} value={account.id}>
+                              {account.account_name} - {account.upi_id}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </>
+                  )}
+                  
+                  {/* QR Code Display */}
+                  {selectedUpiAccount && (
+                    <div className="mt-4 space-y-2">
+                      <Label>QR Code</Label>
+                      {(() => {
+                        const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
+                        if (selectedAccount?.qr_code_url) {
+                          return (
+                            <div className="flex justify-center p-2">
+                              <img 
+                                src={selectedAccount.qr_code_url} 
+                                alt={`QR Code for ${selectedAccount.account_name}`}
+                                className="w-32 h-32 object-contain border rounded-lg shadow-sm"
+                              />
+                            </div>
+                          );
+                        } else {
+                          return (
+                            <div className="text-sm text-muted-foreground text-center py-8 border rounded-lg bg-muted/20">
+                              No QR code available for this account
+                            </div>
+                          );
+                        }
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="remarks">Remarks</Label>
