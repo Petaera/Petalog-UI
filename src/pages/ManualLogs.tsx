@@ -52,10 +52,18 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
 
   // UPI accounts state
   const [selectedUpiAccount, setSelectedUpiAccount] = useState<string>('');
-  const { accounts: upiAccounts, loading: upiAccountsLoading } = useUpiAccounts();
+  const { accounts: upiAccounts, loading: upiAccountsLoading } = useUpiAccounts(selectedLocation);
 
   // Checkout remarks state
   const [checkoutRemarks, setCheckoutRemarks] = useState<string>('');
+
+  // Reset UPI account selection when selectedLocation changes
+  useEffect(() => {
+    if (selectedLocation) {
+      setSelectedUpiAccount('');
+      console.log('📍 Location changed, resetting UPI account selection');
+    }
+  }, [selectedLocation]);
 
   useEffect(() => {
     if (selectedLocation) {
@@ -821,7 +829,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                                   const currentAmount = log.Amount || 0;
                                   const discountAmount = log.discount || 0;
                                   const originalAmount = currentAmount - discountAmount;
-                                  return originalAmount > 0 ? formatCurrency(originalAmount) : "-";
+                                  return currentAmount > 0 ? formatCurrency(currentAmount) : "-";
                                 })()}
                               </td>
                               <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
@@ -974,7 +982,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                     <SelectContent>
                       {upiAccounts.map((account) => (
                         <SelectItem key={account.id} value={account.id}>
-                          {account.account_name} - {account.upi_id}
+                          {account.account_name} - {account.upi_id} ({account.location_name || 'N/A'})
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1075,7 +1083,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                     <SelectContent>
                       {upiAccounts.map((account) => (
                         <SelectItem key={account.id} value={account.id}>
-                          {account.account_name} - {account.upi_id}
+                          {account.account_name} - {account.upi_id} ({account.location_name || 'N/A'})
                         </SelectItem>
                       ))}
                     </SelectContent>

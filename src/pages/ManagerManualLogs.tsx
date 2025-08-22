@@ -50,7 +50,7 @@ export default function ManagerManualLogs() {
     setCheckoutServices(log?.service ? String(log.service).split(',').map((s:string)=>s.trim()).filter(Boolean) : []);
     
     // Calculate original amount by adding discount back to the current amount
-    const currentAmount = log?.Amount != null ? Number(log.Amount) : 0;
+    const currentAmount = log?.Amount+log?.discount != null ? Number(log.Amount+log.discount) : 0;
     const discountAmount = log?.discount != null ? Number(log.discount) : 0;
     const originalAmount = currentAmount - discountAmount;
     setCheckoutAmount(originalAmount > 0 ? String(originalAmount) : '');

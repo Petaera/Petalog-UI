@@ -184,7 +184,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
 
   // UPI accounts state
   const [selectedUpiAccount, setSelectedUpiAccount] = useState<string>('');
-  const { accounts: upiAccounts, loading: upiAccountsLoading } = useUpiAccounts();
+  const { accounts: upiAccounts, loading: upiAccountsLoading } = useUpiAccounts(selectedLocation);
 
   const { user } = useAuth();
 
@@ -811,6 +811,21 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
     const t = setTimeout(fetchVisits, 300);
     return () => { cancelled = true; clearTimeout(t); };
   }, [vehicleNumber]);
+
+  // Reset UPI account selection when payment mode changes
+  useEffect(() => {
+    if (paymentMode !== 'upi') {
+      setSelectedUpiAccount('');
+    }
+  }, [paymentMode]);
+
+  // Reset UPI account selection when selectedLocation changes
+  useEffect(() => {
+    if (selectedLocation) {
+      setSelectedUpiAccount('');
+      console.log('📍 Location changed, resetting UPI account selection');
+    }
+  }, [selectedLocation]);
 
   const handleVehicleNumberChange = (value: string) => {
     setVehicleNumber(value.toUpperCase());
@@ -1562,7 +1577,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                     <SelectContent>
                       {upiAccounts.map((account) => (
                         <SelectItem key={account.id} value={account.id}>
-                          {account.account_name} - {account.upi_id}
+                          {account.account_name} - {account.upi_id} ({account.location_name || 'N/A'})
                         </SelectItem>
                       ))}
                     </SelectContent>

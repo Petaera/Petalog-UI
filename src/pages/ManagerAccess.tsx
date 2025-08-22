@@ -41,7 +41,8 @@ export default function ManagerAccess() {
     ifsc_code: '',
     bank_name: '',
     upi_id: '',
-    additional_notes: ''
+    additional_notes: '',
+    location_id: '' // Add location_id field
   });
   const [qrCodeFile, setQrCodeFile] = useState<File | null>(null);
   const [qrCodePreview, setQrCodePreview] = useState<string>('');
@@ -64,30 +65,72 @@ export default function ManagerAccess() {
   useEffect(() => {
     const fetchLocations = async () => {
       try {
-        let query = supabase.from('locations').select('id, name');
+        let allLocations: { id: string; name: string }[] = [];
         
-        // Apply location filter based on user role and own_id
+        // First, get locations from the old own_id system
         if (user?.role === 'owner' && user?.own_id) {
-          console.log('👑 Owner filtering locations by own_id:', user.own_id);
-          query = query.eq('own_id', user.own_id);
+          console.log('👑 Owner fetching locations by own_id:', user.own_id);
+          const { data: ownIdData, error: ownIdError } = await supabase
+            .from('locations')
+            .select('id, name')
+            .eq('own_id', user.own_id);
+          
+          if (!ownIdError && ownIdData) {
+            allLocations.push(...ownIdData);
+            console.log('✅ Found locations from own_id system:', ownIdData.length);
+          }
         } else if (user?.role === 'manager' && user?.assigned_location) {
-          console.log('👨‍💼 Manager filtering locations by assigned location:', user.assigned_location);
-          query = query.eq('id', user.assigned_location);
-        } else {
-          console.log('⚠️ No location filter applied - showing all locations');
+          console.log('👨‍💼 Manager fetching assigned location:', user.assigned_location);
+          const { data: assignedData, error: assignedError } = await supabase
+            .from('locations')
+            .select('id, name')
+            .eq('id', user.assigned_location);
+          
+          if (!assignedError && assignedData) {
+            allLocations.push(...assignedData);
+            console.log('✅ Found assigned location:', assignedData.length);
+          }
         }
         
-        const { data, error } = await query;
-        
-        if (error) {
-          console.error('❌ Error fetching locations:', error);
-          toast.error('Failed to fetch locations');
-          return;
+        // Then, get locations from the partnership system
+        try {
+          const { data: partnershipData, error: partnershipError } = await supabase
+            .from('location_owners')
+            .select('location_id')
+            .eq('owner_id', user?.id);
+          
+          if (!partnershipError && partnershipData && partnershipData.length > 0) {
+            const locationIds = partnershipData.map(lo => lo.location_id);
+            console.log('🔄 Found location IDs from partnership system:', locationIds);
+            
+            // Get the actual location data for partnerships
+            const { data: partnershipLocData, error: partnershipLocError } = await supabase
+              .from('locations')
+              .select('id, name')
+              .in('id', locationIds);
+            
+            if (!partnershipLocError && partnershipLocData) {
+              // Add partnership locations, avoiding duplicates
+              for (const partnershipLoc of partnershipLocData) {
+                if (!allLocations.find(loc => loc.id === partnershipLoc.id)) {
+                  allLocations.push(partnershipLoc);
+                }
+              }
+              console.log('✅ Added partnership locations:', partnershipLocData.length);
+            }
+          }
+        } catch (partnershipError) {
+          console.log('🔄 Partnership system not accessible, skipping:', partnershipError);
         }
         
-        if (data && data.length > 0) {
-          console.log('✅ Fetched locations for manager assignment:', data.length);
-          setLocations(data);
+        // Remove duplicates and set locations
+        const uniqueLocations = allLocations.filter((location, index, self) => 
+          index === self.findIndex(loc => loc.id === location.id)
+        );
+        
+        if (uniqueLocations.length > 0) {
+          console.log('✅ Total unique locations found:', uniqueLocations.length);
+          setLocations(uniqueLocations);
         } else {
           console.log('ℹ️ No locations found for current user');
           setLocations([]);
@@ -178,19 +221,72 @@ export default function ManagerAccess() {
       try {
         console.log('🔄 Refreshing owner payment details...');
         
-        // Fetch the owner's payment details (there should only be one record per owner)
-        const { data, error } = await supabase
-          .from('owner_payment_details')
-          .select('*')
-          .eq('owner_id', user.id);
+        let allPaymentDetails: any[] = [];
+        
+        // First, get payment details from locations owned via own_id
+        if (user?.own_id) {
+          const { data: ownIdData, error: ownIdError } = await supabase
+            .from('owner_payment_details')
+            .select(`
+              *,
+              locations:location_id (
+                id,
+                name
+              )
+            `)
+            .eq('owner_id', user.id);
 
-        if (error) {
-          console.error('❌ Error fetching owner payment details:', error);
-          toast.error('Failed to fetch payment details');
-        } else {
-          console.log('✅ Fetched owner payment details:', data);
-          setAllPaymentDetails(data || []);
+          if (!ownIdError && ownIdData) {
+            allPaymentDetails.push(...ownIdData);
+            console.log('✅ Found payment details from own_id locations:', ownIdData.length);
+          }
         }
+        
+        // Then, get payment details from partnership locations
+        try {
+          const { data: partnershipData, error: partnershipError } = await supabase
+            .from('location_owners')
+            .select('location_id')
+            .eq('owner_id', user.id);
+          
+          if (!partnershipError && partnershipData && partnershipData.length > 0) {
+            const locationIds = partnershipData.map(lo => lo.location_id);
+            console.log('🔄 Fetching payment details from partnership locations:', locationIds);
+            
+            // Get payment details for partnership locations
+            const { data: partnershipPaymentData, error: partnershipPaymentError } = await supabase
+              .from('owner_payment_details')
+              .select(`
+                *,
+                locations:location_id (
+                  id,
+                  name
+                )
+              `)
+              .in('location_id', locationIds);
+
+            if (!partnershipPaymentError && partnershipPaymentData) {
+              // Add partnership payment details, avoiding duplicates
+              for (const partnershipPayment of partnershipPaymentData) {
+                if (!allPaymentDetails.find(payment => payment.id === partnershipPayment.id)) {
+                  allPaymentDetails.push(partnershipPayment);
+                }
+              }
+              console.log('✅ Added payment details from partnership locations:', partnershipPaymentData.length);
+            }
+          }
+        } catch (partnershipError) {
+          console.log('🔄 Partnership system not accessible for payment details, skipping:', partnershipError);
+        }
+        
+        // Remove duplicates and set payment details
+        const uniquePaymentDetails = allPaymentDetails.filter((payment, index, self) => 
+          index === self.findIndex(p => p.id === payment.id)
+        );
+        
+        console.log('✅ Total unique payment details found:', uniquePaymentDetails.length);
+        setAllPaymentDetails(uniquePaymentDetails);
+        
       } catch (error) {
         console.error('💥 Error refreshing owner payment details:', error);
         toast.error('Failed to refresh payment details');
@@ -211,7 +307,8 @@ export default function ManagerAccess() {
       ifsc_code: detail.ifsc_code || '',
       bank_name: detail.bank_name || '',
       upi_id: detail.upi_id || '',
-      additional_notes: detail.additional_notes || ''
+      additional_notes: detail.additional_notes || '',
+      location_id: detail.location_id || '' // Set location_id for editing
     });
     setQrCodePreview(detail.qr_code_url || '');
     setQrCodeFile(null);
@@ -226,7 +323,8 @@ export default function ManagerAccess() {
       ifsc_code: '',
       bank_name: '',
       upi_id: '',
-      additional_notes: ''
+      additional_notes: '',
+      location_id: '' // Reset location_id
     });
     setQrCodePreview('');
     setQrCodeFile(null);
@@ -266,6 +364,12 @@ export default function ManagerAccess() {
       return;
     }
 
+    // For UPI payments, location is required
+    if (paymentDetails.payment_method === 'upi' && !paymentDetails.location_id) {
+      toast.error('Please select a location for UPI payment method');
+      return;
+    }
+
     setSavingPayment(true);
 
     try {
@@ -291,7 +395,8 @@ export default function ManagerAccess() {
         upi_id: paymentDetails.upi_id || null,
         qr_code_url: qrCodeUrl || null,
         additional_notes: paymentDetails.additional_notes || null,
-        is_active: true
+        is_active: true,
+        location_id: paymentDetails.location_id || null // Add location_id to payment data
       };
 
              let data, error;
@@ -334,7 +439,8 @@ export default function ManagerAccess() {
          ifsc_code: '',
          bank_name: '',
          upi_id: '',
-         additional_notes: ''
+         additional_notes: '',
+         location_id: '' // Clear location_id
        });
        setQrCodePreview('');
        setQrCodeFile(null);
@@ -574,13 +680,13 @@ export default function ManagerAccess() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
-                             <div className="flex items-center gap-2">
-                 <CreditCard className="h-5 w-5" />
-                 {editingPaymentDetail 
-                   ? `Edit Payment Details - ${editingPaymentDetail.payment_method?.replace('_', ' ')}`
-                   : (user?.role === 'owner' ? 'Add New Payment Details' : 'View Owner Payment Details')
-                 }
-               </div>
+              <div className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5" />
+                {editingPaymentDetail 
+                  ? `Edit Payment Details - ${editingPaymentDetail.payment_method?.replace('_', ' ')}`
+                  : (user?.role === 'owner' ? 'Add New Payment Details (Location-Specific for UPI, Including Partnerships)' : 'View Owner Payment Details')
+                }
+              </div>
               <div className="flex gap-2">
                 
                 
@@ -655,14 +761,34 @@ export default function ManagerAccess() {
 
               {/* UPI Fields */}
               {paymentDetails.payment_method === 'upi' && (
-                <div className="space-y-2">
-                  <Label htmlFor="upi_id">UPI ID</Label>
-                  <Input
-                    id="upi_id"
-                    value={paymentDetails.upi_id}
-                    onChange={(e) => handlePaymentInputChange('upi_id', e.target.value)}
-                    placeholder="example@upi"
-                  />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="upi_id">UPI ID</Label>
+                    <Input
+                      id="upi_id"
+                      value={paymentDetails.upi_id}
+                      onChange={(e) => handlePaymentInputChange('upi_id', e.target.value)}
+                      placeholder="example@upi"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="location_id">Assigned Location</Label>
+                    <Select 
+                      value={paymentDetails.location_id} 
+                      onValueChange={(value) => handlePaymentInputChange('location_id', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select location" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {locations.map((location) => (
+                          <SelectItem key={location.id} value={location.id}>
+                            {location.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               )}
 
@@ -761,14 +887,14 @@ export default function ManagerAccess() {
           <CardHeader>
                          <CardTitle className="flex items-center gap-2">
                <CreditCard className="h-5 w-5" />
-               Owner Payment Details (Shared Across All Locations)
+               Owner Payment Details (Location-Specific UPI Accounts)
              </CardTitle>
            </CardHeader>
            <CardContent>
              <div className="space-y-4">
-                               <p className="text-sm text-muted-foreground">
-                  You can add multiple payment methods (UPI, Bank Transfer, Cash, etc.) that will be shared across all your locations. Managers at your locations can view these details.
-                </p>
+               <p className="text-sm text-muted-foreground">
+                 You can add multiple payment methods. UPI accounts are now location-specific - each UPI account will be assigned to a specific location. Bank transfer and other payment methods remain shared across all locations. The location dropdown includes both your owned locations and partnership locations. Managers at your locations can view these details.
+               </p>
               
               {/* Payment Details Table */}
               <div className="space-y-4">
@@ -784,10 +910,11 @@ export default function ManagerAccess() {
                         <TableHead>User</TableHead>
                         <TableHead>Role</TableHead>
                         <TableHead>Payment Method</TableHead>
+                        <TableHead>Location</TableHead>
                         <TableHead>Account Details</TableHead>
                         <TableHead>QR Code</TableHead>
-                                                 <TableHead>Status</TableHead>
-                         <TableHead>Actions</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -803,6 +930,9 @@ export default function ManagerAccess() {
                           </TableCell>
                           <TableCell className="capitalize">
                             {detail.payment_method?.replace('_', ' ')}
+                          </TableCell>
+                          <TableCell>
+                            {detail.locations?.name || 'N/A'}
                           </TableCell>
                           <TableCell>
                             {detail.payment_method === 'bank_transfer' && (

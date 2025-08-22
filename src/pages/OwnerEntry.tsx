@@ -184,7 +184,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
 
   // UPI accounts state
   const [selectedUpiAccount, setSelectedUpiAccount] = useState<string>('');
-  const { accounts: upiAccounts, loading: upiAccountsLoading } = useUpiAccounts();
+  const { accounts: upiAccounts, loading: upiAccountsLoading } = useUpiAccounts(selectedLocation);
 
   const { user } = useAuth();
 
@@ -197,6 +197,14 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       setSelectedUpiAccount('');
     }
   }, [paymentMode]);
+
+  // Reset UPI account selection when selectedLocation changes
+  useEffect(() => {
+    if (selectedLocation) {
+      setSelectedUpiAccount('');
+      console.log('📍 Location changed, resetting UPI account selection');
+    }
+  }, [selectedLocation]);
 
   // Check for edit data on component mount
   useEffect(() => {
@@ -1723,7 +1731,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                         <SelectContent>
                           {upiAccounts.map((account) => (
                             <SelectItem key={account.id} value={account.id}>
-                              {account.account_name} - {account.upi_id}
+                              {account.account_name} - {account.upi_id} ({account.location_name || 'N/A'})
                             </SelectItem>
                           ))}
                         </SelectContent>
