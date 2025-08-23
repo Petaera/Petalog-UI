@@ -1346,32 +1346,6 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                   </Select>
                 </div>
               </div>
-              {/* Vehicle Number */}
-              <div className="space-y-2">
-                <Label htmlFor="vehicleNumber">Vehicle Number</Label>
-                <div className="relative">
-                  <Input 
-                    id="vehicleNumber"
-                    placeholder="Enter vehicle number (KL07AB0001)" 
-                    className="text-center font-mono text-lg uppercase"
-                    value={vehicleNumber}
-                    onChange={(e) => handleVehicleNumberChange(e.target.value)}
-                  />
-                  {isLoadingVehicleData && (
-                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-                    </div>
-                  )}
-                </div>
-                {vehicleNumber && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <div className={`w-2 h-2 rounded-full ${visitCount > 0 ? 'bg-success' : 'bg-warning'}`}></div>
-                    <span className="text-muted-foreground">
-                      {visitCount > 0 ? `Previous Visits: ${visitCount} ${visitCount === 1 ? 'time' : 'times'}` : 'New Customer'}
-                    </span>
-                  </div>
-                )}
-              </div>
 
               {/* Custom Entry Date and Time */}
               <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
@@ -1413,6 +1387,33 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                 {useCustomDateTime && (
                   <div className="text-sm text-muted-foreground">
                     Entry will be recorded for: {customEntryDate} at {customEntryTime}
+                  </div>
+                )}
+              </div>
+
+              {/* Vehicle Number */}
+              <div className="space-y-2">
+                <Label htmlFor="vehicleNumber">Vehicle Number</Label>
+                <div className="relative">
+                  <Input 
+                    id="vehicleNumber"
+                    placeholder="Enter vehicle number (KL07AB0001)" 
+                    className="text-center font-mono text-lg uppercase"
+                    value={vehicleNumber}
+                    onChange={(e) => handleVehicleNumberChange(e.target.value)}
+                  />
+                  {isLoadingVehicleData && (
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                    </div>
+                  )}
+                </div>
+                {vehicleNumber && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <div className={`w-2 h-2 rounded-full ${visitCount > 0 ? 'bg-success' : 'bg-warning'}`}></div>
+                    <span className="text-muted-foreground">
+                      {visitCount > 0 ? `Previous Visits: ${visitCount} ${visitCount === 1 ? 'time' : 'times'}` : 'New Customer'}
+                    </span>
                   </div>
                 )}
               </div>
