@@ -285,16 +285,16 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
             setTimeout(() => {
               setEditVehicleNumber(null);
               console.log('Cleared edit vehicle number tracker');
-            }, 5000);
-          }, 2500); // Extended delay to ensure auto-fill doesn't interfere
-        }, 500); // Increased delay to ensure all state updates are complete
+            }, 10000); // Extended delay to 10 seconds to prevent interference
+          }, 5000); // Extended delay to 5 seconds to ensure auto-fill doesn't interfere
+        }, 1000); // Increased delay to ensure all state updates are complete
         
         // Clear the sessionStorage and pending edit data
         sessionStorage.removeItem('editLogData');
         setPendingEditData(null);
         
         toast.success('Edit mode activated. Please review and update the entry.');
-      }, 300); // Increased delay to ensure proper state updates
+      }, 500); // Increased delay to ensure proper state updates
     }
   }, [pendingEditData, vehicleData]);
 
@@ -575,9 +575,9 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
 
   // Reset and repopulate dropdowns when entryType changes
   useEffect(() => {
-    // Don't reset if we're applying edit data
-    if (isApplyingEditData) {
-      console.log('Skipping entryType reset due to isApplyingEditData flag');
+    // Don't reset if we're applying edit data or in edit mode
+    if (isApplyingEditData || isEditing) {
+      console.log('Skipping entryType reset due to isApplyingEditData flag or edit mode');
       return;
     }
     
@@ -628,7 +628,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
       setVehicleTypes([]);
       setServiceOptions([]);
     }
-  }, [entryType, priceMatrix, wheelCategory, isApplyingEditData]);
+  }, [entryType, priceMatrix, wheelCategory, isApplyingEditData, isEditing]);
 
   // Recompute vehicle types/services for customer flow when wheel category changes
   useEffect(() => {
@@ -640,8 +640,8 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
         console.log('Resetting vehicleType and service due to no wheelCategory (not editing, not applying edit data)');
         setVehicleType('');
         setService([]);
-      } else if (isApplyingEditData) {
-        console.log('Skipping vehicleType and service reset due to isApplyingEditData flag (no wheelCategory)');
+      } else if (isApplyingEditData || isEditing) {
+        console.log('Skipping vehicleType and service reset due to isApplyingEditData flag or edit mode');
       }
       return;
     }
@@ -666,16 +666,16 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
           setVehicleType('');
           setService([]);
           if (wheelCategory !== 'other') setAmount('');
-        } else if (isApplyingEditData) {
-          console.log('Skipping vehicleType and service reset due to isApplyingEditData flag');
+        } else if (isApplyingEditData || isEditing) {
+          console.log('Skipping vehicleType and service reset due to isApplyingEditData flag or edit mode');
         }
   }, [wheelCategory, priceMatrix, entryType, isEditing, isApplyingEditData]);
 
   // When workshop changes, update vehicle types
   useEffect(() => {
-    // Don't reset if we're applying edit data
-    if (isApplyingEditData) {
-      console.log('Skipping workshop reset due to isApplyingEditData flag');
+    // Don't reset if we're applying edit data or in edit mode
+    if (isApplyingEditData || isEditing) {
+      console.log('Skipping workshop reset due to isApplyingEditData flag or edit mode');
       return;
     }
     
@@ -689,10 +689,16 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
       setAmount('');
       setServiceOptions([]);
     }
-  }, [workshop, entryType, workshopPriceMatrix, isApplyingEditData]);
+  }, [workshop, entryType, workshopPriceMatrix, isApplyingEditData, isEditing]);
   
   // Calculate amount based on entry type and selections
   useEffect(() => {
+    // Don't calculate amount if we're applying edit data or in edit mode
+    if (isApplyingEditData || isEditing) {
+      console.log('🛡️ Amount calculation blocked: isApplyingEditData=', isApplyingEditData, 'isEditing=', isEditing);
+      return;
+    }
+    
     // If category is Other, allow manual amount entry and skip auto-calculation
     if (wheelCategory === 'other') {
       return;
@@ -726,7 +732,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
     } else {
       setAmount('');
     }
-  }, [entryType, vehicleType, service, workshop, priceMatrix, workshopPriceMatrix, wheelCategory]);
+  }, [entryType, vehicleType, service, workshop, priceMatrix, workshopPriceMatrix, wheelCategory, isApplyingEditData, isEditing]);
 
   // Timer effect to re-enable submit button after 5 seconds
   useEffect(() => {
@@ -754,11 +760,20 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
 
   // Auto-fill customer and vehicle brand/model details from most recent manual log
   useEffect(() => {
-    if (isEditing || isApplyingEditData) return; // don't override when editing an existing entry or applying edit data
+    if (isEditing || isApplyingEditData) {
+      console.log('🛡️ Auto-fill blocked: isEditing=', isEditing, 'isApplyingEditData=', isApplyingEditData);
+      return; // don't override when editing an existing entry or applying edit data
+    }
     
     // Don't auto-fill if this vehicle number was just set from edit data
     if (editVehicleNumber && vehicleNumber.trim() === editVehicleNumber.trim()) {
       console.log('Skipping auto-fill for vehicle number from edit data:', vehicleNumber);
+      return;
+    }
+    
+    // Additional protection: don't auto-fill if we're in edit mode or recently applied edit data
+    if (editLogId || isEditing) {
+      console.log('🛡️ Auto-fill blocked: editLogId=', editLogId, 'isEditing=', isEditing);
       return;
     }
     
@@ -785,6 +800,12 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
 
     const loadLatestDetails = async () => {
       try {
+        // Double-check protection before proceeding
+        if (isEditing || isApplyingEditData || editLogId) {
+          console.log('🛡️ Auto-fill cancelled: protection check failed');
+          return;
+        }
+        
         setIsLoadingVehicleData(true);
         const { data, error } = await supabase
           .from('logs-man')
@@ -795,6 +816,12 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
         if (error || !data || data.length === 0) {
           // No previous data found, clear the form
           if (!cancelled) {
+            // Final protection check before clearing
+            if (isEditing || isApplyingEditData || editLogId) {
+              console.log('🛡️ Auto-fill clear blocked: protection check failed');
+              return;
+            }
+            
             setCustomerName('');
             setPhoneNumber('');
             setDateOfBirth('');
@@ -814,6 +841,12 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
         }
         if (cancelled) return;
 
+        // Final protection check before setting data
+        if (isEditing || isApplyingEditData || editLogId) {
+          console.log('🛡️ Auto-fill data setting blocked: protection check failed');
+          return;
+        }
+
         const last = data[0] as any;
         
         // Always populate with the latest data for this vehicle number
@@ -830,6 +863,11 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
         setSelectedVehicleBrand(last.vehicle_brand || '');
         setTimeout(() => {
           if (!cancelled) {
+            // Protection check before setting model
+            if (isEditing || isApplyingEditData || editLogId) {
+              console.log('🛡️ Auto-fill model setting blocked: protection check failed');
+              return;
+            }
             setSelectedModel(last.vehicle_model || '');
             setSelectedModelId(last.Brand_id || '');
           }
@@ -842,7 +880,14 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
             );
             if (match && (match as any).type != null) {
               const derived = mapTypeToWheelCategory(normalizeTypeString((match as any).type));
-              if (derived && !cancelled) setWheelCategory(derived);
+              if (derived && !cancelled) {
+                // Protection check before setting wheel category
+                if (isEditing || isApplyingEditData || editLogId) {
+                  console.log('🛡️ Auto-fill wheel category setting blocked: protection check failed');
+                  return;
+                }
+                setWheelCategory(derived);
+              }
             }
           } catch {}
         }
@@ -855,9 +900,9 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
       }
     };
 
-    const t = setTimeout(loadLatestDetails, 300);
+    const t = setTimeout(loadLatestDetails, 500); // Increased delay to give edit mode more time
     return () => { cancelled = true; clearTimeout(t); };
-  }, [vehicleNumber, isEditing, vehicleData, isApplyingEditData]);
+  }, [vehicleNumber, isEditing, vehicleData, isApplyingEditData, editLogId, editVehicleNumber]);
 
   // Fetch number of manual visits from logs-man for the typed vehicle number
   useEffect(() => {
