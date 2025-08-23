@@ -190,6 +190,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
 
   // Store edit data for later use
   const [pendingEditData, setPendingEditData] = useState<any>(null);
+  const [isApplyingEditData, setIsApplyingEditData] = useState(false);
 
   // Reset UPI account selection when payment mode changes
   useEffect(() => {
@@ -292,7 +293,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
 
   // Update available brands when wheel category changes
   useEffect(() => {
-    if (vehicleData.length === 0) {
+    if (vehicleData.length === 0 || isApplyingEditData) {
       setAvailableVehicleBrands([]);
       return;
     }
@@ -317,17 +318,17 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
     const uniqueBrands = [...new Set(filteredBrands)] as string[];
     setAvailableVehicleBrands(uniqueBrands);
 
-    // Reset selections when wheel category changes (only if not editing)
-    if (!isEditing) {
+    // Reset selections when wheel category changes (only if not editing and not applying edit data)
+    if (!isEditing && !isApplyingEditData) {
       setSelectedVehicleBrand('');
       setSelectedModel('');
       setSelectedModelId('');
     }
-  }, [wheelCategory, vehicleData, isEditing]);
+  }, [wheelCategory, vehicleData, isEditing, isApplyingEditData]);
 
   // Update available models when wheel category changes (show all models for the wheel category)
   useEffect(() => {
-    if (vehicleData.length === 0) {
+    if (vehicleData.length === 0 || isApplyingEditData) {
       setAvailableModels([]);
       return;
     }
@@ -361,13 +362,13 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
     console.log('All models for wheel category:', uniqueModels);
     setAvailableModels(uniqueModels);
 
-    // Reset selections when wheel category changes (only if not editing)
-    if (!isEditing) {
+    // Reset selections when wheel category changes (only if not editing and not applying edit data)
+    if (!isEditing && !isApplyingEditData) {
       setSelectedVehicleBrand('');
       setSelectedModel('');
       setSelectedModelId('');
     }
-  }, [wheelCategory, vehicleData, isEditing]);
+  }, [wheelCategory, vehicleData, isEditing, isApplyingEditData]);
 
   // Auto-select brand when model is selected
   useEffect(() => {
@@ -456,7 +457,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
   // Recompute vehicle types/services for customer flow when wheel category changes
   useEffect(() => {
     if (entryType !== 'customer') return;
-    if (!wheelCategory) {
+    if (!wheelCategory || isApplyingEditData) {
       // Require wheeler selection first
       setVehicleTypes([]);
       setServiceOptions([]);
@@ -500,8 +501,8 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
     setServiceOptions(uniqueServices);
 
     // Only reset vehicle type and service if the current selections are no longer valid
-    // for the new wheel category
-    if (!isEditing) {
+    // for the new wheel category and not applying edit data
+    if (!isEditing && !isApplyingEditData) {
       // Check if current vehicle type is still valid for the new wheel category
       if (vehicleType && !uniqueVehicles.includes(vehicleType)) {
         setVehicleType('');
@@ -517,7 +518,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       // For other, amount will be manual; keep as is
       if (wheelCategory !== 'other') setAmount('');
     }
-  }, [wheelCategory, priceMatrix, entryType, isEditing, vehicleType, service]);
+  }, [entryType, priceMatrix, isEditing, wheelCategory, isApplyingEditData]);
 
   useEffect(() => {
     const fetchServicePrices = async () => {
@@ -555,6 +556,9 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       const logData = pendingEditData;
       console.log('Applying edit data after data loaded:', logData);
       
+      // Set flag to prevent race conditions
+      setIsApplyingEditData(true);
+      
       // Use setTimeout to ensure all data is properly loaded
       setTimeout(() => {
         // Pre-fill form fields with edit data
@@ -569,9 +573,6 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         setPhoneNumber(logData.phoneNumber || '');
         setDateOfBirth(logData.dateOfBirth || '');
         setCustomerLocation(logData.customerLocation || '');
-        setSelectedVehicleBrand(logData.selectedVehicleBrand || '');
-        setSelectedModel(logData.selectedModel || '');
-        setSelectedModelId(logData.selectedModelId || '');
         setWorkshop(logData.workshop || '');
 
         // Handle custom entry date and time
@@ -623,6 +624,16 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
           }, 200);
         }, 100);
         
+        // Set brand and model selections after a delay to ensure wheel category and available options are populated
+        setTimeout(() => {
+          setSelectedVehicleBrand(logData.selectedVehicleBrand || '');
+          setSelectedModel(logData.selectedModel || '');
+          setSelectedModelId(logData.selectedModelId || '');
+          
+          // Clear the flag after all data is applied
+          setIsApplyingEditData(false);
+        }, 300);
+        
         // Set edit mode
         setIsEditing(true);
         setEditLogId(logData.id);
@@ -653,8 +664,8 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
 
   // Reset and repopulate dropdowns when entryType changes
   useEffect(() => {
-    // Don't reset if we're in edit mode
-    if (isEditing) return;
+    // Don't reset if we're in edit mode or applying edit data
+    if (isEditing || isApplyingEditData) return;
     
     setWorkshop('');
     setVehicleType('');
@@ -686,12 +697,12 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       setVehicleTypes([]);
       setServiceOptions([]);
     }
-  }, [entryType, priceMatrix, isEditing, wheelCategory]);
+  }, [entryType, priceMatrix, isEditing, wheelCategory, isApplyingEditData]);
 
   // When workshop changes, update vehicle types
   useEffect(() => {
-    // Don't reset if we're in edit mode
-    if (isEditing) return;
+    // Don't reset if we're in edit mode or applying edit data
+    if (isEditing || isApplyingEditData) return;
     
     if (entryType === 'workshop' && workshop) {
       const filtered = workshopPriceMatrix.filter(row => row.WORKSHOP === workshop);
@@ -702,7 +713,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       setAmount('');
       setServiceOptions([]);
     }
-  }, [workshop, entryType, workshopPriceMatrix, isEditing]);
+  }, [workshop, entryType, workshopPriceMatrix, isEditing, isApplyingEditData]);
   
   // Calculate amount based on entry type and selections
   useEffect(() => {
