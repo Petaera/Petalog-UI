@@ -72,7 +72,7 @@ export default function ManagerManualLogs({ selectedLocation }: ManagerManualLog
     const currentAmount = log?.Amount+log?.discount != null ? Number(log.Amount+log.discount) : 0;
     const discountAmount = log?.discount != null ? Number(log.discount) : 0;
     const originalAmount = currentAmount - discountAmount;
-    setCheckoutAmount(originalAmount > 0 ? String(originalAmount) : '');
+    setCheckoutAmount(currentAmount > 0 ? String(currentAmount) : '');
     setSelectedUpiAccount(''); // Reset UPI account selection
     setCheckoutRemarks(''); // Reset remarks
 

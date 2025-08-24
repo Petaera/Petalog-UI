@@ -1255,7 +1255,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
       // Calculate final amount
       const priceNum = parseFloat(amount) || 0;
       const discountNum = discount === '' ? 0 : parseFloat(discount) || 0;
-      const finalAmount = priceNum - discountNum;
+      const finalAmount = priceNum ;
 
       // For checkout, we directly set the ticket as approved and closed
       const currentTime = new Date().toISOString();
