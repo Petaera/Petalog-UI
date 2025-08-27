@@ -893,9 +893,9 @@ export default function ManagerManualLogs({ selectedLocation }: ManagerManualLog
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {loading ? (
-                        <tr><td colSpan={10} className="text-center py-4">Loading...</td></tr>
+                        <tr><td colSpan={11} className="text-center py-4">Loading...</td></tr>
                       ) : payLaterLogs.length === 0 ? (
-                        <tr><td colSpan={10} className="text-center py-4 text-muted-foreground">
+                        <tr><td colSpan={11} className="text-center py-4 text-muted-foreground">
                           {selectedDate ? `No pay later tickets for ${new Date(selectedDate).toLocaleDateString()}` : 'No pay later tickets'}
                         </td></tr>
                       ) : (
@@ -929,7 +929,18 @@ export default function ManagerManualLogs({ selectedLocation }: ManagerManualLog
                               <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100 text-xs">Pay Later</Badge>
                             </td>
                             <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
-                              <Button size="sm" variant="default" className="text-xs" onClick={() => openSettle(log)}>Settle</Button>
+                              <div className="flex flex-col sm:flex-row gap-1">
+                                <Button size="sm" variant="default" className="text-xs" onClick={() => openSettle(log)}>Settle</Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-xs"
+                                  onClick={() => handleEdit(log)}
+                                >
+                                  <Edit className="h-3 w-3 mr-1" />
+                                  Edit
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -1026,6 +1037,14 @@ export default function ManagerManualLogs({ selectedLocation }: ManagerManualLog
                               </Badge>
                             </td>
                             <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleEdit(log)}
+                              >
+                                <Edit className="h-3 w-3 mr-1" />
+                                Edit
+                              </Button>
                               <Button
                                 size="sm"
                                 variant="destructive"
