@@ -17,6 +17,8 @@ import ReactSelect from 'react-select';
 import { getOrCreateVehicleId } from "@/lib/utils";
 import { useUpiAccounts } from '@/hooks/useUpiAccounts';
 
+import { ChevronDown, Calendar } from 'lucide-react';
+
 // Add SERVICE_PRICES fallback at the top-level
 const SERVICE_PRICES: { [key: string]: number } = {
   'basic': 200,
@@ -126,6 +128,23 @@ interface OwnerEntryProps {
 }
 
 export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
+
+const [selectedDateOption, setSelectedDateOption] = useState('today');
+const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
+
+const getDisplayDate = () => {
+  switch (selectedDateOption) {
+    case 'today':
+      return 'Today';
+    case 'yesterday':
+      return 'Yesterday';
+    case 'custom':
+      return new Date(customEntryDate).toLocaleDateString();
+    default:
+      return 'Today';
+  }
+};
+
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [vehicleTypes, setVehicleTypes] = useState<string[]>([]);
   const [serviceOptions, setServiceOptions] = useState<string[]>([]);
@@ -1288,6 +1307,8 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
     } finally {
       setIsSubmitDisabled(false);
     }
+
+    
   };
 
   return (
@@ -1305,16 +1326,6 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
           </Badge>
         </div>
       </div>
-
-
-
-
-
-
-
-
-
-
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {/* Entry Form */}
@@ -1376,52 +1387,139 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
               
             </div>
 
-           {/* Custom Entry Date and Time */}
-            <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="useCustomDateTime"
-                  checked={useCustomDateTime}
-                  onCheckedChange={(checked) => setUseCustomDateTime(checked as boolean)}
-                />
-                <Label htmlFor="useCustomDateTime" className="text-base font-semibold">
-                  Use Custom Entry Date & Time
-                </Label>
+            
+            
+              <div className="space-y-2">
+                <Label htmlFor="wheelCategory">Category</Label>
+                <Select value={wheelCategory} onValueChange={setWheelCategory}>
+                  <SelectTrigger id="wheelCategory">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="2">2 Wheeler</SelectItem>
+                    <SelectItem value="4">4 Wheeler</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              
-              {useCustomDateTime && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="customEntryDate">Entry Date</Label>
-                    <Input
-                      id="customEntryDate"
-                      type="date"
-                      value={customEntryDate}
-                      onChange={(e) => setCustomEntryDate(e.target.value)}
-                      max={new Date().toISOString().split('T')[0]}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="customEntryTime">Entry Time</Label>
-                    <Input
-                      id="customEntryTime"
-                      type="time"
-                      value={customEntryTime}
-                      onChange={(e) => setCustomEntryTime(e.target.value)}
-                    />
-                  </div>
-                </div>
-              )}
-              
-              {useCustomDateTime && (
-                <div className="text-sm text-muted-foreground">
-                  Entry will be recorded for: {customEntryDate} at {customEntryTime}
-                </div>
-              )}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+{/* Custom Entry Date and Time */}
+<div className="space-y-4 p-4 border rounded-lg bg-muted/20">
+  <Label className="text-base font-semibold">Entry Date & Time</Label>
+  
+  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    {/* Date Selector */}
+    <div className="space-y-2">
+      <Label>Entry Date</Label>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setIsDateDropdownOpen(!isDateDropdownOpen)}
+          className="w-full flex items-center justify-between px-3 py-2 border rounded-md bg-background hover:bg-muted/50 transition-colors"
+        >
+          <span>{getDisplayDate()}</span>
+          <ChevronDown className="h-4 w-4" />
+        </button>
+        
+        {isDateDropdownOpen && (
+          <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-background border rounded-md shadow-lg">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedDateOption('today');
+                setCustomEntryDate(new Date().toISOString().split('T')[0]);
+                setIsDateDropdownOpen(false);
+              }}
+              className="w-full px-3 py-2 text-left hover:bg-muted transition-colors"
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedDateOption('yesterday');
+                const yesterday = new Date();
+                yesterday.setDate(yesterday.getDate() - 1);
+                setCustomEntryDate(yesterday.toISOString().split('T')[0]);
+                setIsDateDropdownOpen(false);
+              }}
+              className="w-full px-3 py-2 text-left hover:bg-muted transition-colors"
+            >
+              Yesterday
+            </button>
+            <div className="p-2 border-t">
+              <Label className="text-sm text-muted-foreground mb-2 block">Custom Day</Label>
+              <Input
+                type="date"
+                value={customEntryDate}
+                onChange={(e) => {
+                  setCustomEntryDate(e.target.value);
+                  setSelectedDateOption('custom');
+                  setIsDateDropdownOpen(false);
+                }}
+                max={new Date().toISOString().split('T')[0]}
+                className="w-full"
+              />
             </div>
+          </div>
+        )}
+      </div>
+    </div>
+    
+    {/* Time Selector */}
+    <div className="space-y-2">
+      <Label htmlFor="customEntryTime">Entry Time</Label>
+      <Input
+        id="customEntryTime"
+        type="time"
+        value={customEntryTime}
+        onChange={(e) => setCustomEntryTime(e.target.value)}
+      />
+    </div>
+  </div>
+  
+  <div className="text-sm text-muted-foreground">
+    Entry will be recorded for: {getDisplayDate()} at {customEntryTime}
+  </div>
+</div>
 
            
-{/* Vehicle Brand and Model */}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            {/* Vehicle Brand and Model */}
             <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
               <Label className="text-base font-semibold">Vehicle Details</Label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1467,88 +1565,78 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
               </div>
             </div>
 
-            
-              <div className="space-y-2">
-                <Label htmlFor="wheelCategory">Category</Label>
-                <Select value={wheelCategory} onValueChange={setWheelCategory}>
-                  <SelectTrigger id="wheelCategory">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="2">2 Wheeler</SelectItem>
-                    <SelectItem value="4">4 Wheeler</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            
+
+
+
+
+
             {/* Service Selection */}
-      {entryType === 'customer' && (
-        <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
-          <Label className="text-base font-semibold">Service Selection</Label>
+            {entryType === 'customer' && (
+              <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
+                <Label className="text-base font-semibold">Service Selection</Label>
 
-          {/* Vehicle Type */}
-          <div className="space-y-2">
-            <Label htmlFor="vehicleType">Vehicle Type</Label>
-            <Select
-              value={vehicleType}
-              onValueChange={(val) => {
-                setVehicleType(val);
-                // ---------- Reset services and preselect Free Wash-----------
-                setService(["Free Wash"]);
-              }}
-              disabled={!wheelCategory}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={wheelCategory ? "Select vehicle type" : "Select category first"} />
-              </SelectTrigger>
-              <SelectContent>
-                {sortVehicleTypesWithPriority(vehicleTypes).map(type => (
-                  <SelectItem key={type} value={type}>{type}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+                {/* Vehicle Type */}
+                <div className="space-y-2">
+                  <Label htmlFor="vehicleType">Vehicle Type</Label>
+                  <Select
+                    value={vehicleType}
+                    onValueChange={(val) => {
+                      setVehicleType(val);
+                      // ---------- Reset services and preselect FULL WASH-----------
+                      setService(["FULL WASH"]);
+                    }}
+                    disabled={!wheelCategory}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={wheelCategory ? "Select vehicle type" : "Select category first"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sortVehicleTypesWithPriority(vehicleTypes).map(type => (
+                        <SelectItem key={type} value={type}>{type}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-          {/* Service Chosen */}
-          <div className="space-y-2">
-            <Label htmlFor="service">Service Chosen</Label>
-            <ReactSelect
-              isMulti
-              options={
-                vehicleType
-                  ? (() => {
-                      let filteredServices = priceMatrix
-                        .filter(row => row.VEHICLE && row.VEHICLE.trim() === vehicleType.trim())
-                        .filter(row => {
-                          if (!wheelCategory) return true;
-                          if (!(row as any).type) return true;
-                          return doesTypeMatchWheelCategory((row as any).type, wheelCategory);
-                        })
-                        .map(row => row.SERVICE)
-                        .filter((v, i, arr) => v && arr.indexOf(v) === i);
+                {/* Service Chosen */}
+                <div className="space-y-2">
+                  <Label htmlFor="service">Service Chosen</Label>
+                  <ReactSelect
+                    isMulti
+                    options={
+                      vehicleType
+                        ? (() => {
+                            let filteredServices = priceMatrix
+                              .filter(row => row.VEHICLE && row.VEHICLE.trim() === vehicleType.trim())
+                              .filter(row => {
+                                if (!wheelCategory) return true;
+                                if (!(row as any).type) return true;
+                                return doesTypeMatchWheelCategory((row as any).type, wheelCategory);
+                              })
+                              .map(row => row.SERVICE)
+                              .filter((v, i, arr) => v && arr.indexOf(v) === i);
 
-                      // ------ Always include Free Wash--------
-                      if (!filteredServices.includes("Free Wash")) {
-                        filteredServices = ["Free Wash", ...filteredServices];
-                      }
+                            // ------ Always include FULL WASH--------
+                            if (!filteredServices.includes("FULL WASH")) {
+                              filteredServices = ["FULL WASH", ...filteredServices];
+                            }
 
-                      const sortedServices = sortServicesWithPriority(filteredServices);
-                      return sortedServices.map(option => ({ value: option, label: option }));
-                    })()
-                  : []
-              }
-              value={service.map(option => ({ value: option, label: option }))}
-              onChange={(selected) =>
-                setService(Array.isArray(selected) ? selected.map((s: any) => s.value) : [])
-              }
-              placeholder={vehicleType ? "Select services" : (wheelCategory ? "Select vehicle type first" : "Select category first")}
-              classNamePrefix="react-select"
-              isDisabled={!wheelCategory || !vehicleType}
-            />
-          </div>
-        </div>
-      )}
+                            const sortedServices = sortServicesWithPriority(filteredServices);
+                            return sortedServices.map(option => ({ value: option, label: option }));
+                          })()
+                        : []
+                    }
+                    value={service.map(option => ({ value: option, label: option }))}
+                    onChange={(selected) =>
+                      setService(Array.isArray(selected) ? selected.map((s: any) => s.value) : [])
+                    }
+                    placeholder={vehicleType ? "Select services" : (wheelCategory ? "Select vehicle type first" : "Select category first")}
+                    classNamePrefix="react-select"
+                    isDisabled={!wheelCategory || !vehicleType}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Workshop Selection */}
             {entryType === 'workshop' && (
