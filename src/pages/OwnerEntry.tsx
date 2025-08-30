@@ -1424,119 +1424,140 @@ const getDisplayDate = () => {
 <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
   <div className="space-y-2">
     <Label>Entry Date</Label>
-    <div className="relative">
+    <div className="flex items-center gap-2">
+      {/* Previous Date Button */}
       <button
         type="button"
-        onClick={() => setIsDateDropdownOpen(!isDateDropdownOpen)}
-        className="w-full flex items-center justify-between px-3 py-2 border rounded-md bg-background hover:bg-muted/50 transition-colors"
+        onClick={() => {
+          const currentDate = new Date(customEntryDate);
+          currentDate.setDate(currentDate.getDate() - 1);
+          setCustomEntryDate(currentDate.toISOString().split('T')[0]);
+          
+          // Update the selected option based on the new date
+          const today = new Date();
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          
+          const currentDateStr = currentDate.toISOString().split('T')[0];
+          const todayStr = today.toISOString().split('T')[0];
+          const yesterdayStr = yesterday.toISOString().split('T')[0];
+          
+          if (currentDateStr === todayStr) {
+            setSelectedDateOption('today');
+          } else if (currentDateStr === yesterdayStr) {
+            setSelectedDateOption('yesterday');
+          } else {
+            setSelectedDateOption('custom');
+          }
+        }}
+        className="flex items-center justify-center w-10 h-10 border rounded-md bg-background hover:bg-muted/50 transition-colors"
       >
-        <span>{getDisplayDate()}</span>
-        <div className="flex flex-col">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              const currentDate = new Date(customEntryDate);
-              currentDate.setDate(currentDate.getDate() - 1);
-              setCustomEntryDate(currentDate.toISOString().split('T')[0]);
-              
-              // Update the selected option based on the new date
-              const today = new Date();
-              const yesterday = new Date();
-              yesterday.setDate(yesterday.getDate() - 1);
-              
-              if (currentDate.toDateString() === today.toDateString()) {
-                setSelectedDateOption('today');
-              } else if (currentDate.toDateString() === yesterday.toDateString()) {
-                setSelectedDateOption('yesterday');
-              } else {
-                setSelectedDateOption('custom');
-              }
-            }}
-            className="p-0.5 hover:bg-muted/50 transition-colors rounded"
-          >
-            <ChevronDown className="h-3 w-3 rotate-180" />
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              const currentDate = new Date(customEntryDate);
-              const today = new Date();
-              
-              // Only allow moving forward if not already at today's date
-              if (currentDate.toDateString() !== today.toDateString()) {
-                currentDate.setDate(currentDate.getDate() + 1);
-                setCustomEntryDate(currentDate.toISOString().split('T')[0]);
-                
-                // Update the selected option based on the new date
-                const yesterday = new Date();
-                yesterday.setDate(yesterday.getDate() - 1);
-                
-                if (currentDate.toDateString() === today.toDateString()) {
-                  setSelectedDateOption('today');
-                } else if (currentDate.toDateString() === yesterday.toDateString()) {
-                  setSelectedDateOption('yesterday');
-                } else {
-                  setSelectedDateOption('custom');
-                }
-              }
-            }}
-            className="p-0.5 hover:bg-muted/50 transition-colors rounded"
-          >
-            <ChevronDown className="h-3 w-3" />
-          </button>
-        </div>
+        <ChevronDown className="h-5 w-5 rotate-90" />
       </button>
       
-      {isDateDropdownOpen && (
-        <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-background border rounded-md shadow-lg">
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedDateOption('today');
-              setCustomEntryDate(new Date().toISOString().split('T')[0]);
-              setIsDateDropdownOpen(false);
-            }}
-            className="w-full px-3 py-2 text-left hover:bg-muted transition-colors"
-          >
-            Today
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedDateOption('yesterday');
-              const yesterday = new Date();
-              yesterday.setDate(yesterday.getDate() - 1);
-              setCustomEntryDate(yesterday.toISOString().split('T')[0]);
-              setIsDateDropdownOpen(false);
-            }}
-            className="w-full px-3 py-2 text-left hover:bg-muted transition-colors"
-          >
-            Yesterday
-          </button>
-          <div className="p-2 border-t">
-            <Label className="text-sm text-muted-foreground mb-2 block">Custom Day</Label>
-            <Input
-              type="date"
-              value={customEntryDate}
-              onChange={(e) => {
-                setCustomEntryDate(e.target.value);
-                setSelectedDateOption('custom');
+      {/* Date Display */}
+      <div className="relative flex-1">
+        <button
+          type="button"
+          onClick={() => setIsDateDropdownOpen(!isDateDropdownOpen)}
+          className="w-full flex items-center justify-between px-3 py-2 border rounded-md bg-background hover:bg-muted/50 transition-colors"
+        >
+          <span>{getDisplayDate()}</span>
+          <ChevronDown className="h-4 w-4" />
+        </button>
+        
+        {isDateDropdownOpen && (
+          <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-background border rounded-md shadow-lg">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedDateOption('today');
+                setCustomEntryDate(new Date().toISOString().split('T')[0]);
                 setIsDateDropdownOpen(false);
               }}
-              max={new Date().toISOString().split('T')[0]}
-              className="w-full"
-            />
+              className="w-full px-3 py-2 text-left hover:bg-muted transition-colors"
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedDateOption('yesterday');
+                const yesterday = new Date();
+                yesterday.setDate(yesterday.getDate() - 1);
+                setCustomEntryDate(yesterday.toISOString().split('T')[0]);
+                setIsDateDropdownOpen(false);
+              }}
+              className="w-full px-3 py-2 text-left hover:bg-muted transition-colors"
+            >
+              Yesterday
+            </button>
+            <div className="p-2 border-t">
+              <Label className="text-sm text-muted-foreground mb-2 block">Custom Day</Label>
+              <Input
+                type="date"
+                value={customEntryDate}
+                onChange={(e) => {
+                  setCustomEntryDate(e.target.value);
+                  setSelectedDateOption('custom');
+                  setIsDateDropdownOpen(false);
+                }}
+                max={new Date().toISOString().split('T')[0]}
+                className="w-full"
+              />
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
+      
+      {/* Next Date Button */}
+      <button
+        type="button"
+        onClick={() => {
+          const currentDate = new Date(customEntryDate);
+          const today = new Date();
+          
+          const currentDateStr = customEntryDate;
+          const todayStr = today.toISOString().split('T')[0];
+          
+          // Only allow moving forward if not already at today's date
+          if (currentDateStr < todayStr) {
+            currentDate.setDate(currentDate.getDate() + 1);
+            const newDateStr = currentDate.toISOString().split('T')[0];
+            setCustomEntryDate(newDateStr);
+            
+            // Update the selected option based on the new date
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            const yesterdayStr = yesterday.toISOString().split('T')[0];
+            
+            if (newDateStr === todayStr) {
+              setSelectedDateOption('today');
+            } else if (newDateStr === yesterdayStr) {
+              setSelectedDateOption('yesterday');
+            } else {
+              setSelectedDateOption('custom');
+            }
+          }
+        }}
+        className={`flex items-center justify-center w-10 h-10 border rounded-md transition-colors ${
+          customEntryDate === new Date().toISOString().split('T')[0]
+            ? 'bg-muted/30 cursor-not-allowed opacity-50' 
+            : 'bg-background hover:bg-muted/50 cursor-pointer'
+        }`}
+        disabled={customEntryDate === new Date().toISOString().split('T')[0]}
+      >
+        <ChevronDown className="h-5 w-5 -rotate-90" />
+      </button>
     </div>
   </div>
   
   <div className="text-sm text-muted-foreground">
     This entry will be recorded for <strong>{(() => {
-      const date = new Date(customEntryDate);
+      // Parse date correctly to avoid timezone issues
+      const dateParts = customEntryDate.split('-');
+      const date = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
+      
       const dateStr = date.toLocaleDateString('en-US', { 
         weekday: 'long',
         year: 'numeric', 
