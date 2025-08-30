@@ -202,15 +202,6 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
       console.log('🔍 After search filter:', filteredLogs.length, 'records');
     }
 
-
-
-
-
-
-
-  
-
-
 // Apply date range filter
 const now = new Date();
 const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -279,25 +270,6 @@ if (dateRange === "today") {
 }
 
 console.log("🔍 After date filter:", filteredLogs.length, "records");
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     // Apply other filters
     // Get the current location from the toolbar context
     const currentLocation = user?.role === 'manager' ? user?.assigned_location : 
@@ -665,120 +637,86 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
               />
             </div>
             
+      {/* Date Range Filter */}
+      <div className="space-y-2">
+        <Label className="flex items-center gap-2">
+          <Calendar className="h-4 w-4" />
+          Date Range
+        </Label>
+        <Select value={dateRange} onValueChange={setDateRange}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="today">Today</SelectItem>
+            <SelectItem value="yesterday">Yesterday</SelectItem>
+            <SelectItem value="singleday">Single Day</SelectItem>
+            <SelectItem value="last7days">Last 7 Days</SelectItem>
+            <SelectItem value="last30days">Last 30 Days</SelectItem>
+            <SelectItem value="custom">Custom Range</SelectItem>
+          </SelectContent>
+        </Select>
 
+        {/* Single Day Selection */}
+        {dateRange === "singleday" && (
+          <div className="space-y-2 pt-2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="w-full">
+                  {customFromDate ? format(customFromDate, "PPP") : "Pick a Date"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0">
+                <CalendarComponent
+                  mode="single"
+                  selected={customFromDate}
+                  onSelect={(date) => {
+                    setCustomFromDate(date);
+                    setCustomToDate(date); // ✅ treat as single-day (from = to)
+                  }}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+        )}
 
-
-
-
-
-
-
-
-
-
-
-
-
-{/* Date Range Filter */}
-<div className="space-y-2">
-  <Label className="flex items-center gap-2">
-    <Calendar className="h-4 w-4" />
-    Date Range
-  </Label>
-  <Select value={dateRange} onValueChange={setDateRange}>
-    <SelectTrigger>
-      <SelectValue />
-    </SelectTrigger>
-    <SelectContent>
-      <SelectItem value="today">Today</SelectItem>
-      <SelectItem value="yesterday">Yesterday</SelectItem>
-      <SelectItem value="singleday">Single Day</SelectItem>
-      <SelectItem value="last7days">Last 7 Days</SelectItem>
-      <SelectItem value="last30days">Last 30 Days</SelectItem>
-      <SelectItem value="custom">Custom Range</SelectItem>
-    </SelectContent>
-  </Select>
-
-  {/* Single Day Selection */}
-  {dateRange === "singleday" && (
-    <div className="space-y-2 pt-2">
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button variant="outline" size="sm" className="w-full">
-            {customFromDate ? format(customFromDate, "PPP") : "Pick a Date"}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0">
-          <CalendarComponent
-            mode="single"
-            selected={customFromDate}
-            onSelect={(date) => {
-              setCustomFromDate(date);
-              setCustomToDate(date); // ✅ treat as single-day (from = to)
-            }}
-            initialFocus
-          />
-        </PopoverContent>
-      </Popover>
-    </div>
-  )}
-
-  {/* Custom Range Selection */}
-  {dateRange === "custom" && (
-    <div className="space-y-2 pt-2">
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button variant="outline" size="sm" className="w-full">
-            {customFromDate ? format(customFromDate, "PPP") : "From Date"}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0">
-          <CalendarComponent
-            mode="single"
-            selected={customFromDate}
-            onSelect={setCustomFromDate}
-            initialFocus
-          />
-        </PopoverContent>
-      </Popover>
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button variant="outline" size="sm" className="w-full">
-            {customToDate ? format(customToDate, "PPP") : "To Date"}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0">
-          <CalendarComponent
-            mode="single"
-            selected={customToDate}
-            onSelect={setCustomToDate}
-            initialFocus
-          />
-        </PopoverContent>
-      </Popover>
-    </div>
-  )}
-</div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        {/* Custom Range Selection */}
+        {dateRange === "custom" && (
+          <div className="space-y-2 pt-2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="w-full">
+                  {customFromDate ? format(customFromDate, "PPP") : "From Date"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0">
+                <CalendarComponent
+                  mode="single"
+                  selected={customFromDate}
+                  onSelect={setCustomFromDate}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="w-full">
+                  {customToDate ? format(customToDate, "PPP") : "To Date"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0">
+                <CalendarComponent
+                  mode="single"
+                  selected={customToDate}
+                  onSelect={setCustomToDate}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+        )}
+      </div>
 
             {/* Vehicle Type Filter */}
             <div className="space-y-2">
