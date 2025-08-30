@@ -1306,6 +1306,16 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         </div>
       </div>
 
+
+
+
+
+
+
+
+
+
+
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {/* Entry Form */}
         <Card>
@@ -1336,22 +1346,37 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                   </Button>
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="wheelCategory">Category</Label>
-                <Select value={wheelCategory} onValueChange={setWheelCategory}>
-                  <SelectTrigger id="wheelCategory">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="2">2 Wheeler</SelectItem>
-                    <SelectItem value="4">4 Wheeler</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
+
+               {/* Vehicle Number */}
+            <div className="space-y-2">
+              <Label htmlFor="vehicleNumber">Vehicle Number</Label>
+              <div className="relative">
+                <Input 
+                  id="vehicleNumber"
+                  placeholder="Enter vehicle number (KL07AB0001)" 
+                  className="text-center font-mono text-lg uppercase"
+                  value={vehicleNumber}
+                  onChange={(e) => handleVehicleNumberChange(e.target.value)}
+                />
+                {isLoadingVehicleData && (
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                  </div>
+                )}
               </div>
+              {vehicleNumber && (
+                <div className="flex items-center gap-2 text-sm">
+                  <div className={`w-2 h-2 rounded-full ${visitCount > 0 ? 'bg-success' : 'bg-warning'}`}></div>
+                  <span className="text-muted-foreground">
+                    {visitCount > 0 ? `Previous Visits: ${visitCount} ${visitCount === 1 ? 'time' : 'times'}` : 'New Customer'}
+                  </span>
+                </div>
+              )}
+            </div>
+              
             </div>
 
-            {/* Custom Entry Date and Time */}
+           {/* Custom Entry Date and Time */}
             <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
               <div className="flex items-center gap-2">
                 <Checkbox
@@ -1395,58 +1420,12 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
               )}
             </div>
 
-            {/* Vehicle Number */}
-            <div className="space-y-2">
-              <Label htmlFor="vehicleNumber">Vehicle Number</Label>
-              <div className="relative">
-                <Input 
-                  id="vehicleNumber"
-                  placeholder="Enter vehicle number (KL07AB0001)" 
-                  className="text-center font-mono text-lg uppercase"
-                  value={vehicleNumber}
-                  onChange={(e) => handleVehicleNumberChange(e.target.value)}
-                />
-                {isLoadingVehicleData && (
-                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-                  </div>
-                )}
-              </div>
-              {vehicleNumber && (
-                <div className="flex items-center gap-2 text-sm">
-                  <div className={`w-2 h-2 rounded-full ${visitCount > 0 ? 'bg-success' : 'bg-warning'}`}></div>
-                  <span className="text-muted-foreground">
-                    {visitCount > 0 ? `Previous Visits: ${visitCount} ${visitCount === 1 ? 'time' : 'times'}` : 'New Customer'}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            
-
-            {/* Vehicle Brand and Model */}
+           
+{/* Vehicle Brand and Model */}
             <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
               <Label className="text-base font-semibold">Vehicle Details</Label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="selectedVehicleBrand">Vehicle Brand</Label>
-                  <ReactSelect
-                    isClearable
-                    isSearchable
-                    placeholder={wheelCategory ? (selectedModel ? "Brand will be auto-selected" : "Type to search vehicle brand...") : "Select category first"}
-                    options={(wheelCategory ? availableVehicleBrands : []).map(brand => ({ value: brand, label: brand }))}
-                    value={selectedVehicleBrand ? { value: selectedVehicleBrand, label: selectedVehicleBrand } : null}
-                    onChange={(selected) => setSelectedVehicleBrand(selected?.value || '')}
-                    classNamePrefix="react-select"
-                    noOptionsMessage={() => "No brands found"}
-                    isDisabled={!wheelCategory || !!selectedModel}
-                  />
-                  {selectedModel && !selectedVehicleBrand && (
-                    <p className="text-sm text-muted-foreground">
-                      Brand will be automatically selected based on the chosen model
-                    </p>
-                  )}
-                </div>
+                
                 <div className="space-y-2">
                   <Label htmlFor="selectedModel">Vehicle Model</Label>
                   <ReactSelect
@@ -1466,107 +1445,110 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                     noOptionsMessage={() => "No models found"}
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="selectedVehicleBrand">Vehicle Brand</Label>
+                  <ReactSelect
+                    isClearable
+                    isSearchable
+                    placeholder={wheelCategory ? (selectedModel ? "Brand will be auto-selected" : "Type to search vehicle brand...") : "Select category first"}
+                    options={(wheelCategory ? availableVehicleBrands : []).map(brand => ({ value: brand, label: brand }))}
+                    value={selectedVehicleBrand ? { value: selectedVehicleBrand, label: selectedVehicleBrand } : null}
+                    onChange={(selected) => setSelectedVehicleBrand(selected?.value || '')}
+                    classNamePrefix="react-select"
+                    noOptionsMessage={() => "No brands found"}
+                    isDisabled={!wheelCategory || !!selectedModel}
+                  />
+                  {selectedModel && !selectedVehicleBrand && (
+                    <p className="text-sm text-muted-foreground">
+                      Brand will be automatically selected based on the chosen model
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Service Selection */}
-            {entryType === 'customer' && (
-              <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
-                <Label className="text-base font-semibold">Service Selection</Label>
-            <div className="space-y-2">
-                  <Label htmlFor="vehicleType">Vehicle Type</Label>
-                  <Select value={vehicleType} onValueChange={setVehicleType} disabled={!wheelCategory}>
-                    <SelectTrigger>
-                      <SelectValue placeholder={wheelCategory ? "Select vehicle type" : "Select category first"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sortVehicleTypesWithPriority(vehicleTypes).map(type => (
-                        <SelectItem key={type} value={type}>{type}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="service">Service Chosen</Label>
-                  <ReactSelect
-                    isMulti
-                    options={
-                      vehicleType
-                        ? (() => {
-                            const filteredServices = priceMatrix
-                              .filter(row => row.VEHICLE && row.VEHICLE.trim() === vehicleType.trim())
-                              // Only filter by type if the type field exists and wheelCategory is set
-                              .filter(row => {
-                                // If no wheel category is selected, show all services for the vehicle type
-                                if (!wheelCategory) return true;
-                                
-                                // If the row doesn't have a type field, show it (fallback)
-                                if (!(row as any).type) return true;
-                                
-                                // Otherwise, apply the type filtering
-                                return doesTypeMatchWheelCategory((row as any).type, wheelCategory);
-                              })
-                              .map(row => row.SERVICE)
-                              .filter((v, i, arr) => v && arr.indexOf(v) === i);
-                            
-                            const sortedServices = sortServicesWithPriority(filteredServices);
-                            const options = sortedServices.map(option => ({ value: option, label: option }));
-                            
-                            console.log('🚗 Service dropdown options for', vehicleType, ':', {
-                              wheelCategory,
-                              filteredServices,
-                              sortedServices,
-                              options
-                            });
-                            
-                            return options;
-                          })()
-                        : []
-                    }
-                    value={service.map(option => ({
-                      value: option,
-                      label: option
-                    }))}
-                    onChange={(selected) => setService(Array.isArray(selected) ? selected.map((s: any) => s.value) : [])}
-                    placeholder={vehicleType ? "Select services" : (wheelCategory ? "Select vehicle type first" : "Select category first")}
-                    classNamePrefix="react-select"
-                    isDisabled={!wheelCategory || !vehicleType}
-                    onMenuOpen={() => {
-                      console.log('Service menu opened. Vehicle type:', vehicleType);
-                      console.log('Wheel category:', wheelCategory);
-                      console.log('Price matrix:', priceMatrix);
-                      
-                      const availableServices = vehicleType
-                        ? priceMatrix
-                            .filter(row => row.VEHICLE && row.VEHICLE.trim() === vehicleType.trim())
-                            // Only filter by type if the type field exists and wheelCategory is set
-                            .filter(row => {
-                              // If no wheel category is selected, show all services for the vehicle type
-                              if (!wheelCategory) return true;
-                              
-                              // If the row doesn't have a type field, show it (fallback)
-                              if (!(row as any).type) return true;
-                              
-                              // Otherwise, apply the type filtering
-                              return doesTypeMatchWheelCategory((row as any).type, wheelCategory);
-                            })
-                            .map(row => row.SERVICE)
-                            .filter((v, i, arr) => v && arr.indexOf(v) === i)
-                        : [];
-                      
-                      console.log('Available services before sorting:', availableServices);
-                      console.log('Services filtered by vehicle type:', priceMatrix
-                        .filter(row => row.VEHICLE && row.VEHICLE.trim() === vehicleType.trim())
-                        .map(row => ({ SERVICE: row.SERVICE, VEHICLE: row.VEHICLE, type: (row as any).type }))
-                      );
-                      
-                      const sortedServices = sortServicesWithPriority(availableServices);
-                      console.log('Available services after sorting:', sortedServices);
-                    }}
-                  />
-                </div>
+            
+              <div className="space-y-2">
+                <Label htmlFor="wheelCategory">Category</Label>
+                <Select value={wheelCategory} onValueChange={setWheelCategory}>
+                  <SelectTrigger id="wheelCategory">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="2">2 Wheeler</SelectItem>
+                    <SelectItem value="4">4 Wheeler</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            )}
+            
+            {/* Service Selection */}
+      {entryType === 'customer' && (
+        <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
+          <Label className="text-base font-semibold">Service Selection</Label>
+
+          {/* Vehicle Type */}
+          <div className="space-y-2">
+            <Label htmlFor="vehicleType">Vehicle Type</Label>
+            <Select
+              value={vehicleType}
+              onValueChange={(val) => {
+                setVehicleType(val);
+                // ---------- Reset services and preselect Free Wash-----------
+                setService(["Free Wash"]);
+              }}
+              disabled={!wheelCategory}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={wheelCategory ? "Select vehicle type" : "Select category first"} />
+              </SelectTrigger>
+              <SelectContent>
+                {sortVehicleTypesWithPriority(vehicleTypes).map(type => (
+                  <SelectItem key={type} value={type}>{type}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Service Chosen */}
+          <div className="space-y-2">
+            <Label htmlFor="service">Service Chosen</Label>
+            <ReactSelect
+              isMulti
+              options={
+                vehicleType
+                  ? (() => {
+                      let filteredServices = priceMatrix
+                        .filter(row => row.VEHICLE && row.VEHICLE.trim() === vehicleType.trim())
+                        .filter(row => {
+                          if (!wheelCategory) return true;
+                          if (!(row as any).type) return true;
+                          return doesTypeMatchWheelCategory((row as any).type, wheelCategory);
+                        })
+                        .map(row => row.SERVICE)
+                        .filter((v, i, arr) => v && arr.indexOf(v) === i);
+
+                      // ------ Always include Free Wash--------
+                      if (!filteredServices.includes("Free Wash")) {
+                        filteredServices = ["Free Wash", ...filteredServices];
+                      }
+
+                      const sortedServices = sortServicesWithPriority(filteredServices);
+                      return sortedServices.map(option => ({ value: option, label: option }));
+                    })()
+                  : []
+              }
+              value={service.map(option => ({ value: option, label: option }))}
+              onChange={(selected) =>
+                setService(Array.isArray(selected) ? selected.map((s: any) => s.value) : [])
+              }
+              placeholder={vehicleType ? "Select services" : (wheelCategory ? "Select vehicle type first" : "Select category first")}
+              classNamePrefix="react-select"
+              isDisabled={!wheelCategory || !vehicleType}
+            />
+          </div>
+        </div>
+      )}
 
             {/* Workshop Selection */}
             {entryType === 'workshop' && (
@@ -1587,9 +1569,9 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="vehicleType">Vehicle Type</Label>
-                  <Select value={vehicleType} onValueChange={setVehicleType}>
+                  <Select value={vehicleType} onValueChange={setVehicleType} disabled={!wheelCategory}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select vehicle type" />
+                      <SelectValue placeholder={wheelCategory ? "Select vehicle type" : "Select category first"} />
                     </SelectTrigger>
                     <SelectContent>
                       {sortVehicleTypesWithPriority(vehicleTypes).map(type => (
