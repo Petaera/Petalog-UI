@@ -202,41 +202,101 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
       console.log('🔍 After search filter:', filteredLogs.length, 'records');
     }
 
-    // Apply date range filter
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    
-    if (dateRange === "today") {
-      filteredLogs = filteredLogs.filter(log => {
-        const logDate = new Date(log.created_at);
-        const logDateOnly = new Date(logDate.getFullYear(), logDate.getMonth(), logDate.getDate());
-        return logDateOnly.getTime() === today.getTime();
-      });
-    } else if (dateRange === "yesterday") {
-      const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-      filteredLogs = filteredLogs.filter(log => {
-        const logDate = new Date(log.created_at);
-        return logDate >= yesterday && logDate < today;
-      });
-    } else if (dateRange === "last7days") {
-      const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-      filteredLogs = filteredLogs.filter(log => {
-        const logDate = new Date(log.created_at);
-        return logDate >= weekAgo;
-      });
-    } else if (dateRange === "last30days") {
-      const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-      filteredLogs = filteredLogs.filter(log => {
-        const logDate = new Date(log.created_at);
-        return logDate >= monthAgo;
-      });
-    } else if (dateRange === "custom" && customFromDate && customToDate) {
-      filteredLogs = filteredLogs.filter(log => {
-        const logDate = new Date(log.created_at);
-        return logDate >= customFromDate && logDate <= customToDate;
-      });
+
+
+
+
+
+
+  
+
+
+// Apply date range filter
+const now = new Date();
+const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+if (dateRange === "today") {
+  filteredLogs = filteredLogs.filter(log => {
+    const logDate = new Date(log.created_at);
+    const logDateOnly = new Date(logDate.getFullYear(), logDate.getMonth(), logDate.getDate());
+    return logDateOnly.getTime() === today.getTime();
+  });
+
+} else if (dateRange === "yesterday") {
+  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+  filteredLogs = filteredLogs.filter(log => {
+    const logDate = new Date(log.created_at);
+    return logDate >= yesterday && logDate < today;
+  });
+
+} else if (dateRange === "last7days") {
+  const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+  filteredLogs = filteredLogs.filter(log => {
+    const logDate = new Date(log.created_at);
+    return logDate >= weekAgo;
+  });
+
+} else if (dateRange === "last30days") {
+  const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+  filteredLogs = filteredLogs.filter(log => {
+    const logDate = new Date(log.created_at);
+    return logDate >= monthAgo;
+  });
+
+} else if (dateRange === "singleday" && customFromDate) {
+  // ✅ Single day (from = to = selected date)
+  const singleDay = new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate());
+  const nextDay = new Date(singleDay.getTime() + 24 * 60 * 60 * 1000);
+
+  filteredLogs = filteredLogs.filter(log => {
+    const logDate = new Date(log.created_at);
+    return logDate >= singleDay && logDate < nextDay;
+  });
+
+} else if (dateRange === "custom" && (customFromDate || customToDate)) {
+  // ✅ Custom range (support partial selection too)
+  const from = customFromDate 
+    ? new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate()) 
+    : null;
+  const to = customToDate 
+    ? new Date(customToDate.getFullYear(), customToDate.getMonth(), customToDate.getDate()) 
+    : null;
+
+  filteredLogs = filteredLogs.filter(log => {
+    const logDate = new Date(log.created_at);
+
+    if (from && to) {
+      return logDate >= from && logDate <= to;
+    } else if (from) {
+      const nextDay = new Date(from.getTime() + 24 * 60 * 60 * 1000);
+      return logDate >= from && logDate < nextDay;
+    } else if (to) {
+      const prevDay = new Date(to.getTime() - 24 * 60 * 60 * 1000);
+      return logDate >= prevDay && logDate <= to;
     }
-    console.log('🔍 After date filter:', filteredLogs.length, 'records');
+    return true;
+  });
+}
+
+console.log("🔍 After date filter:", filteredLogs.length, "records");
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     // Apply other filters
     // Get the current location from the toolbar context
@@ -604,60 +664,121 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            {/* Date Range Filter */}
-            <div className="space-y-2">
-              <Label className="flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
-                Date Range
-              </Label>
-              <Select value={dateRange} onValueChange={setDateRange}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="today">Today</SelectItem>
-                  <SelectItem value="yesterday">Yesterday</SelectItem>
-                  <SelectItem value="last7days">Last 7 Days</SelectItem>
-                  <SelectItem value="last30days">Last 30 Days</SelectItem>
-                  <SelectItem value="custom">Custom Range</SelectItem>
-                </SelectContent>
-              </Select>
-              
-              {dateRange === "custom" && (
-                <div className="space-y-2 pt-2">
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" size="sm" className="w-full">
-                        {customFromDate ? format(customFromDate, "PPP") : "From Date"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <CalendarComponent
-                        mode="single"
-                        selected={customFromDate}
-                        onSelect={setCustomFromDate}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" size="sm" className="w-full">
-                        {customToDate ? format(customToDate, "PPP") : "To Date"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <CalendarComponent
-                        mode="single"
-                        selected={customToDate}
-                        onSelect={setCustomToDate}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              )}
-            </div>
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+{/* Date Range Filter */}
+<div className="space-y-2">
+  <Label className="flex items-center gap-2">
+    <Calendar className="h-4 w-4" />
+    Date Range
+  </Label>
+  <Select value={dateRange} onValueChange={setDateRange}>
+    <SelectTrigger>
+      <SelectValue />
+    </SelectTrigger>
+    <SelectContent>
+      <SelectItem value="today">Today</SelectItem>
+      <SelectItem value="yesterday">Yesterday</SelectItem>
+      <SelectItem value="singleday">Single Day</SelectItem>
+      <SelectItem value="last7days">Last 7 Days</SelectItem>
+      <SelectItem value="last30days">Last 30 Days</SelectItem>
+      <SelectItem value="custom">Custom Range</SelectItem>
+    </SelectContent>
+  </Select>
+
+  {/* Single Day Selection */}
+  {dateRange === "singleday" && (
+    <div className="space-y-2 pt-2">
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="outline" size="sm" className="w-full">
+            {customFromDate ? format(customFromDate, "PPP") : "Pick a Date"}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0">
+          <CalendarComponent
+            mode="single"
+            selected={customFromDate}
+            onSelect={(date) => {
+              setCustomFromDate(date);
+              setCustomToDate(date); // ✅ treat as single-day (from = to)
+            }}
+            initialFocus
+          />
+        </PopoverContent>
+      </Popover>
+    </div>
+  )}
+
+  {/* Custom Range Selection */}
+  {dateRange === "custom" && (
+    <div className="space-y-2 pt-2">
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="outline" size="sm" className="w-full">
+            {customFromDate ? format(customFromDate, "PPP") : "From Date"}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0">
+          <CalendarComponent
+            mode="single"
+            selected={customFromDate}
+            onSelect={setCustomFromDate}
+            initialFocus
+          />
+        </PopoverContent>
+      </Popover>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="outline" size="sm" className="w-full">
+            {customToDate ? format(customToDate, "PPP") : "To Date"}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0">
+          <CalendarComponent
+            mode="single"
+            selected={customToDate}
+            onSelect={setCustomToDate}
+            initialFocus
+          />
+        </PopoverContent>
+      </Popover>
+    </div>
+  )}
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
             {/* Vehicle Type Filter */}
             <div className="space-y-2">
