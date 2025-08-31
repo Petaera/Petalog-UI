@@ -637,33 +637,46 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
               />
             </div>
             
-      {/* Date Range Filter */}
-      <div className="space-y-2">
-        <Label className="flex items-center gap-2">
-          <Calendar className="h-4 w-4" />
-          Date Range
-        </Label>
-        <Select value={dateRange} onValueChange={setDateRange}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="today">Today</SelectItem>
-            <SelectItem value="yesterday">Yesterday</SelectItem>
-            <SelectItem value="singleday">Single Day</SelectItem>
-            <SelectItem value="last7days">Last 7 Days</SelectItem>
-            <SelectItem value="last30days">Last 30 Days</SelectItem>
-            <SelectItem value="custom">Custom Range</SelectItem>
-          </SelectContent>
-        </Select>
+             {/* Date Range Filter */}
+       <div className="space-y-3">
+         <Label className="flex items-center gap-2 text-sm font-medium">
+           <Calendar className="h-4 w-4" />
+           Date Range
+         </Label>
+         
+         {/* Date Range Selector */}
+         <Select value={dateRange} onValueChange={setDateRange}>
+           <SelectTrigger className="w-full">
+             <SelectValue placeholder="Select date range" />
+           </SelectTrigger>
+           <SelectContent>
+             <SelectItem value="today">Today</SelectItem>
+             <SelectItem value="yesterday">Yesterday</SelectItem>
+             <SelectItem value="singleday">Single Day</SelectItem>
+             <SelectItem value="last7days">Last 7 Days</SelectItem>
+             <SelectItem value="last30days">Last 30 Days</SelectItem>
+             <SelectItem value="custom">Custom Range</SelectItem>
+           </SelectContent>
+         </Select>
 
         {/* Single Day Selection */}
         {dateRange === "singleday" && (
-          <div className="space-y-2 pt-2">
+          <div className="space-y-2 pt-2 p-3 bg-muted/30 rounded-lg border">
+            <Label className="text-xs font-medium text-muted-foreground">Select a specific date</Label>
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="w-full">
-                  {customFromDate ? format(customFromDate, "PPP") : "Pick a Date"}
+                <Button variant="outline" size="sm" className="w-full justify-start">
+                  {customFromDate ? (
+                    <span className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4" />
+                      {format(customFromDate, "PPP")}
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4" />
+                      Pick a Date
+                    </span>
+                  )}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0">
@@ -678,43 +691,98 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
                 />
               </PopoverContent>
             </Popover>
+            {customFromDate && (
+              <div className="text-xs text-muted-foreground">
+                Showing data for: <span className="font-medium">{format(customFromDate, "PPP")}</span>
+              </div>
+            )}
           </div>
         )}
 
         {/* Custom Range Selection */}
         {dateRange === "custom" && (
-          <div className="space-y-2 pt-2">
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="w-full">
-                  {customFromDate ? format(customFromDate, "PPP") : "From Date"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <CalendarComponent
-                  mode="single"
-                  selected={customFromDate}
-                  onSelect={setCustomFromDate}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="w-full">
-                  {customToDate ? format(customToDate, "PPP") : "To Date"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <CalendarComponent
-                  mode="single"
-                  selected={customToDate}
-                  onSelect={setCustomToDate}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+          <div className="space-y-2 pt-2 p-3 bg-muted/30 rounded-lg border">
+            <Label className="text-xs font-medium text-muted-foreground">Select date range</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="w-full justify-start">
+                    {customFromDate ? (
+                      <span className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4" />
+                        {format(customFromDate, "PPP")}
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4" />
+                        From Date
+                      </span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <CalendarComponent
+                    mode="single"
+                    selected={customFromDate}
+                    onSelect={setCustomFromDate}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="w-full justify-start">
+                    {customToDate ? (
+                      <span className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4" />
+                        {format(customToDate, "PPP")}
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4" />
+                        To Date
+                      </span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <CalendarComponent
+                    mode="single"
+                    selected={customToDate}
+                    onSelect={setCustomToDate}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            {(customFromDate || customToDate) && (
+              <div className="text-xs text-muted-foreground">
+                {customFromDate && customToDate ? (
+                  <>Showing data from <span className="font-medium">{format(customFromDate, "PPP")}</span> to <span className="font-medium">{format(customToDate, "PPP")}</span></>
+                ) : customFromDate ? (
+                  <>Showing data from <span className="font-medium">{format(customFromDate, "PPP")}</span></>
+                ) : (
+                  <>Showing data until <span className="font-medium">{format(customToDate, "PPP")}</span></>
+                )}
+              </div>
+            )}
           </div>
+        )}
+
+        {/* Clear Filters Button */}
+        {(dateRange !== "today" || customFromDate || customToDate) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setDateRange("today");
+              setCustomFromDate(undefined);
+              setCustomToDate(undefined);
+            }}
+            className="w-full text-xs text-muted-foreground hover:text-foreground"
+          >
+            Reset to Today
+          </Button>
         )}
       </div>
 
