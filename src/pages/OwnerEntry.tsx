@@ -1,3 +1,5 @@
+//OwnerEntry.tsx
+
 import { useState, useEffect } from 'react';
 import { Car, Banknote, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -145,149 +147,149 @@ const getDisplayDate = () => {
   }
 };
 
-const [vehicleNumber, setVehicleNumber] = useState('');
-const [vehicleTypes, setVehicleTypes] = useState<string[]>([]);
-const [serviceOptions, setServiceOptions] = useState<string[]>([]);
-const [priceMatrix, setPriceMatrix] = useState<any[]>([]);
-const [vehicleType, setVehicleType] = useState('');
-// Change service to array for multi-select
-const [service, setService] = useState<string[]>([]);
-const [amount, setAmount] = useState('');
-const [entryType, setEntryType] = useState('customer');
-const [discount, setDiscount] = useState('');
-const [remarks, setRemarks] = useState('');
-// Payment mode state for cash/UPI selection
-const [paymentMode, setPaymentMode] = useState<'cash' | 'upi' | 'credit'>('cash');
-// const [scratchImage, setScratchImage] = useState<Blob | null>(null);
-const [workshop, setWorkshop] = useState('');
-const [workshopOptions, setWorkshopOptions] = useState<string[]>([]);
-const [workshopPriceMatrix, setWorkshopPriceMatrix] = useState<any[]>([]);
-// 2/4/Other selector next to entry type
-const [wheelCategory, setWheelCategory] = useState<string>('');
+  const [vehicleNumber, setVehicleNumber] = useState('');
+  const [vehicleTypes, setVehicleTypes] = useState<string[]>([]);
+  const [serviceOptions, setServiceOptions] = useState<string[]>([]);
+  const [priceMatrix, setPriceMatrix] = useState<any[]>([]);
+  const [vehicleType, setVehicleType] = useState('');
+  // Change service to array for multi-select
+  const [service, setService] = useState<string[]>([]);
+  const [amount, setAmount] = useState('');
+  const [entryType, setEntryType] = useState('customer');
+  const [discount, setDiscount] = useState('');
+  const [remarks, setRemarks] = useState('');
+  // Payment mode state for cash/UPI selection
+  const [paymentMode, setPaymentMode] = useState<'cash' | 'upi' | 'credit'>('cash');
+  // const [scratchImage, setScratchImage] = useState<Blob | null>(null);
+  const [workshop, setWorkshop] = useState('');
+  const [workshopOptions, setWorkshopOptions] = useState<string[]>([]);
+  const [workshopPriceMatrix, setWorkshopPriceMatrix] = useState<any[]>([]);
+  // 2/4/Other selector next to entry type
+  const [wheelCategory, setWheelCategory] = useState<string>('');
+  
+  // Customer details
+  const [customerName, setCustomerName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [customerLocation, setCustomerLocation] = useState('');
+  
+  // Vehicle brand and model
+  const [selectedVehicleBrand, setSelectedVehicleBrand] = useState('');
+  const [selectedModel, setSelectedModel] = useState('');
+  const [selectedModelId, setSelectedModelId] = useState('');
+  const [availableVehicleBrands, setAvailableVehicleBrands] = useState<string[]>([]);
+  const [availableModels, setAvailableModels] = useState<{name: string, id: string, brand: string}[]>([]);
+  const [vehicleData, setVehicleData] = useState<any[]>([]);
 
-// Customer details
-const [customerName, setCustomerName] = useState('');
-const [phoneNumber, setPhoneNumber] = useState('');
-const [dateOfBirth, setDateOfBirth] = useState('');
-const [customerLocation, setCustomerLocation] = useState('');
 
-// Vehicle brand and model
-const [selectedVehicleBrand, setSelectedVehicleBrand] = useState('');
-const [selectedModel, setSelectedModel] = useState('');
-const [selectedModelId, setSelectedModelId] = useState('');
-const [availableVehicleBrands, setAvailableVehicleBrands] = useState<string[]>([]);
-const [availableModels, setAvailableModels] = useState<{name: string, id: string, brand: string}[]>([]);
-const [vehicleData, setVehicleData] = useState<any[]>([]);
+  //workshop
+  const [customWorkshopName, setCustomWorkshopName] = useState('');
+  // Edit mode state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editLogId, setEditLogId] = useState<string | null>(null);
 
+  // Button disable state for 5 seconds after submit
+  const [isSubmitDisabled, setIsSubmitDisabled] = useState(false);
+  const [visitCount, setVisitCount] = useState<number>(0);
 
-//workshop
-const [customWorkshopName, setCustomWorkshopName] = useState('');
-// Edit mode state
-const [isEditing, setIsEditing] = useState(false);
-const [editLogId, setEditLogId] = useState<string | null>(null);
+  // Custom entry date and time
+  const [customEntryDate, setCustomEntryDate] = useState(() => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  });
+  const [customEntryTime, setCustomEntryTime] = useState(() => {
+    const now = new Date();
+    return now.toTimeString().slice(0, 5);
+  });
+  const [useCustomDateTime, setUseCustomDateTime] = useState(false);
 
-// Button disable state for 5 seconds after submit
-const [isSubmitDisabled, setIsSubmitDisabled] = useState(false);
-const [visitCount, setVisitCount] = useState<number>(0);
+  // Loading state for auto-fill
+  const [isLoadingVehicleData, setIsLoadingVehicleData] = useState(false);
 
-// Custom entry date and time
-const [customEntryDate, setCustomEntryDate] = useState(() => {
-  const today = new Date();
-  return today.toISOString().split('T')[0];
-});
-const [customEntryTime, setCustomEntryTime] = useState(() => {
-  const now = new Date();
-  return now.toTimeString().slice(0, 5);
-});
-const [useCustomDateTime, setUseCustomDateTime] = useState(false);
+  // UPI accounts state
+  const [selectedUpiAccount, setSelectedUpiAccount] = useState<string>('');
+  const { accounts: upiAccounts, loading: upiAccountsLoading } = useUpiAccounts(selectedLocation);
 
-// Loading state for auto-fill
-const [isLoadingVehicleData, setIsLoadingVehicleData] = useState(false);
+  const { user } = useAuth();
 
-// UPI accounts state
-const [selectedUpiAccount, setSelectedUpiAccount] = useState<string>('');
-const { accounts: upiAccounts, loading: upiAccountsLoading } = useUpiAccounts(selectedLocation);
+  // Store edit data for later use
+  const [pendingEditData, setPendingEditData] = useState<any>(null);
+  const [isApplyingEditData, setIsApplyingEditData] = useState(false);
 
-const { user } = useAuth();
-
-// Store edit data for later use
-const [pendingEditData, setPendingEditData] = useState<any>(null);
-const [isApplyingEditData, setIsApplyingEditData] = useState(false);
-
-// Reset UPI account selection when payment mode changes
-useEffect(() => {
-  if (paymentMode !== 'upi') {
-    setSelectedUpiAccount('');
-  }
-}, [paymentMode]);
-
-// Reset UPI account selection when selectedLocation changes
-useEffect(() => {
-  if (selectedLocation) {
-    setSelectedUpiAccount('');
-    console.log('📍 Location changed, resetting UPI account selection');
-  }
-}, [selectedLocation]);
-
-// Check for edit data on component mount
-useEffect(() => {
-  const editData = sessionStorage.getItem('editLogData');
-  if (editData) {
-    try {
-      const logData = JSON.parse(editData);
-      console.log('Edit data found:', logData);
-      setPendingEditData(logData);
-      
-      // Clear the sessionStorage
-      sessionStorage.removeItem('editLogData');
-    } catch (error) {
-      console.error('Error parsing edit data:', error);
-      toast.error('Error loading edit data');
+  // Reset UPI account selection when payment mode changes
+  useEffect(() => {
+    if (paymentMode !== 'upi') {
+      setSelectedUpiAccount('');
     }
-  }
-}, []);
+  }, [paymentMode]);
 
-// Fetch vehicle brands and models from Vehicles_in_india table
-useEffect(() => {
-  const fetchVehicleData = async () => {
-    console.log('Fetching from Vehicles_in_india table...');
-    
-    // Fetch all fields including id for Brand_id mapping
-    let result = await supabase
-      .from('Vehicles_in_india')
-      .select('id, "Vehicle Brands", "Models", type');
-    
-    console.log('Vehicles_in_india result:', result);
-    
-    // If that fails, try selecting all fields
-    if (result.error) {
-      console.log('Trying to select all fields...');
-      result = await supabase
-        .from('Vehicles_in_india')
-        .select('*');
-      console.log('Select all result:', result);
+  // Reset UPI account selection when selectedLocation changes
+  useEffect(() => {
+    if (selectedLocation) {
+      setSelectedUpiAccount('');
+      console.log('📍 Location changed, resetting UPI account selection');
     }
-    
-    const { data, error } = result;
-    
-    if (!error && data && data.length > 0) {
-      setVehicleData(data);
-      console.log('Vehicle brands and models data:', data);
-      console.log('Available fields:', Object.keys(data[0]));
-      
-      // Use the correct field names from Vehicles_in_india table
-      if (data[0].hasOwnProperty('Vehicle Brands')) {
-        // Defer brand list until wheeler is selected; keep full dataset in state
-        setAvailableVehicleBrands([]);
-      } else {
-        console.warn('Vehicle Brands field not found in data');
+  }, [selectedLocation]);
+
+  // Check for edit data on component mount
+  useEffect(() => {
+    const editData = sessionStorage.getItem('editLogData');
+    if (editData) {
+      try {
+        const logData = JSON.parse(editData);
+        console.log('Edit data found:', logData);
+        setPendingEditData(logData);
+        
+        // Clear the sessionStorage
+        sessionStorage.removeItem('editLogData');
+      } catch (error) {
+        console.error('Error parsing edit data:', error);
+        toast.error('Error loading edit data');
       }
-    } else {
-      console.log('No data found or error occurred');
     }
-  };
-  fetchVehicleData();
-}, []);
+  }, []);
+
+  // Fetch vehicle brands and models from Vehicles_in_india table
+  useEffect(() => {
+    const fetchVehicleData = async () => {
+      console.log('Fetching from Vehicles_in_india table...');
+      
+      // Fetch all fields including id for Brand_id mapping
+      let result = await supabase
+        .from('Vehicles_in_india')
+        .select('id, "Vehicle Brands", "Models", type');
+      
+      console.log('Vehicles_in_india result:', result);
+      
+      // If that fails, try selecting all fields
+      if (result.error) {
+        console.log('Trying to select all fields...');
+        result = await supabase
+          .from('Vehicles_in_india')
+          .select('*');
+        console.log('Select all result:', result);
+      }
+      
+      const { data, error } = result;
+      
+      if (!error && data && data.length > 0) {
+        setVehicleData(data);
+        console.log('Vehicle brands and models data:', data);
+        console.log('Available fields:', Object.keys(data[0]));
+        
+        // Use the correct field names from Vehicles_in_india table
+        if (data[0].hasOwnProperty('Vehicle Brands')) {
+          // Defer brand list until wheeler is selected; keep full dataset in state
+          setAvailableVehicleBrands([]);
+        } else {
+          console.warn('Vehicle Brands field not found in data');
+        }
+      } else {
+        console.log('No data found or error occurred');
+      }
+    };
+    fetchVehicleData();
+  }, []);
 
   // Helpers to map/compare wheel category to table type
   const normalizeTypeString = (value: any): string => String(value ?? '').trim();
@@ -1314,279 +1316,288 @@ useEffect(() => {
     
   };
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-return (
-  <div className="flex-1 p-4 lg:p-6 space-y-4 lg:space-y-6">
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-      <div className="flex items-center gap-2 lg:gap-4">
-        <div className="flex items-center gap-2">
-          <Car className="h-5 w-5 lg:h-6 lg:w-6 text-primary" />
-          <h1 className="text-xl lg:text-2xl font-bold">
-            {isEditing ? 'Edit Entry' : 'Manual Entry'}
-          </h1>
+  return (
+    <div className="flex-1 p-4 lg:p-6 space-y-4 lg:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-2 lg:gap-4">
+          <div className="flex items-center gap-2">
+            <Car className="h-5 w-5 lg:h-6 lg:w-6 text-primary" />
+            <h1 className="text-xl lg:text-2xl font-bold">
+              {isEditing ? 'Edit Entry' : 'Manual Entry'}
+            </h1>
+          </div>
+          <Badge variant="outline" className="bg-primary/10 text-primary border-primary">
+            {isEditing ? 'Edit Mode' : 'Owner Access'}
+          </Badge>
         </div>
-        <Badge variant="outline" className="bg-primary/10 text-primary border-primary">
-          {isEditing ? 'Edit Mode' : 'Owner Access'}
-        </Badge>
       </div>
-    </div>
 
-
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-    {/* Entry Form */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Vehicle Entry Details</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">          
-          {/* Entry Type + Entry Date */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Entry Type Section  */}
-                <div className="space-y-3">
-                  <Label className="text-base font-semibold text-foreground">Entry Type</Label>
-                  <div className="flex flex-col gap-2 p-1 bg-muted/30 rounded-lg">
-                    <Button
-                      variant={entryType === 'customer' ? 'default' : 'ghost'}
-                      size="default"
-                      className={`h-10 font-medium transition-all duration-200 justify-start ${
-                        entryType === 'customer' 
-                          ? 'bg-primary text-primary-foreground shadow-sm' 
-                          : 'text-muted-foreground hover:text-foreground hover:bg-background/80'
-                      }`}
-                      onClick={() => setEntryType('customer')}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${
-                          entryType === 'customer' ? 'bg-primary-foreground/80' : 'bg-muted-foreground/60'
-                        }`} />
-                        Customer
-                      </div>
-                    </Button>
-                    <Button
-                      variant={entryType === 'workshop' ? 'default' : 'ghost'}
-                      size="default"
-                      className={`h-10 font-medium transition-all duration-200 justify-start ${
-                        entryType === 'workshop' 
-                          ? 'bg-primary text-primary-foreground shadow-sm' 
-                          : 'text-muted-foreground hover:text-foreground hover:bg-background/80'
-                      }`}
-                      onClick={() => setEntryType('workshop')}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${
-                          entryType === 'workshop' ? 'bg-primary-foreground/80' : 'bg-muted-foreground/60'
-                        }`} />
-                        Workshop
-                      </div>
-                    </Button>
-                  </div>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        {/* Entry Form */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Vehicle Entry Details</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Entry Type + Wheeler */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Entry Type</Label>
+                <div className="flex gap-2">
+                  <Button
+                    variant={entryType === 'customer' ? 'default' : 'outline'}
+                    size="sm"
+                    className="flex-1 text-xs sm:text-sm"
+                    onClick={() => setEntryType('customer')}
+                  >
+                    Customer
+                  </Button>
+                  <Button
+                    variant={entryType === 'workshop' ? 'default' : 'outline'}
+                    size="sm"
+                    className="flex-1 text-xs sm:text-sm"
+                    onClick={() => setEntryType('workshop')}
+                  >
+                    Workshop
+                  </Button>
                 </div>
+              </div>
 
-
-
-
-                {/* Custom Entry Date */}
-                <div className="space-y-3 p-4 border rounded-lg bg-muted/20">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Entry Date</Label>
-                    <div className="flex items-center gap-2">
-                      {/* Previous Date Button */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const currentDate = new Date(customEntryDate);
-                          currentDate.setDate(currentDate.getDate() - 1);
-                          setCustomEntryDate(currentDate.toISOString().split('T')[0]);
-                          
-                          // Update the selected option based on the new date
-                          const today = new Date();
-                          const yesterday = new Date();
-                          yesterday.setDate(yesterday.getDate() - 1);
-                          
-                          const currentDateStr = currentDate.toISOString().split('T')[0];
-                          const todayStr = today.toISOString().split('T')[0];
-                          const yesterdayStr = yesterday.toISOString().split('T')[0];
-                          
-                          if (currentDateStr === todayStr) {
-                            setSelectedDateOption('today');
-                          } else if (currentDateStr === yesterdayStr) {
-                            setSelectedDateOption('yesterday');
-                          } else {
-                            setSelectedDateOption('custom');
-                          }
-                        }}
-                        className="flex items-center justify-center w-9 h-9 border rounded-md bg-background hover:bg-muted/50 transition-colors shadow-sm"
-                      >
-                        <ChevronDown className="h-4 w-4 rotate-90" />
-                      </button>
-                      
-                      {/* Date Display */}
-                      <div className="relative flex-1">
-                        <button
-                          type="button"
-                          onClick={() => setIsDateDropdownOpen(!isDateDropdownOpen)}
-                          className="w-full flex items-center justify-between px-3 py-2 border rounded-md bg-background hover:bg-muted/50 transition-colors shadow-sm text-sm"
-                        >
-                          <span className="font-medium">{getDisplayDate()}</span>
-                          <ChevronDown className="h-4 w-4" />
-                        </button>
-                        
-                        {isDateDropdownOpen && (
-                          <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-background border rounded-md shadow-lg">
-                            <div className="p-3">
-                              <Label className="text-xs text-muted-foreground mb-2 block">Custom Date</Label>
-                              <Input
-                                type="date"
-                                value={customEntryDate}
-                                onChange={(e) => {
-                                  setCustomEntryDate(e.target.value);
-                                  setSelectedDateOption('custom');
-                                  setIsDateDropdownOpen(false);
-                                }}
-                                max={new Date().toISOString().split('T')[0]}
-                                className="w-full text-sm"
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Next Date Button */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const currentDate = new Date(customEntryDate);
-                          const today = new Date();
-                          
-                          const currentDateStr = customEntryDate;
-                          const todayStr = today.toISOString().split('T')[0];
-                          
-                          // Only allow moving forward if not already at today's date
-                          if (currentDateStr < todayStr) {
-                            currentDate.setDate(currentDate.getDate() + 1);
-                            const newDateStr = currentDate.toISOString().split('T')[0];
-                            setCustomEntryDate(newDateStr);
-                            
-                            // Update the selected option based on the new date
-                            const yesterday = new Date();
-                            yesterday.setDate(yesterday.getDate() - 1);
-                            const yesterdayStr = yesterday.toISOString().split('T')[0];
-                            
-                            if (newDateStr === todayStr) {
-                              setSelectedDateOption('today');
-                            } else if (newDateStr === yesterdayStr) {
-                              setSelectedDateOption('yesterday');
-                            } else {
-                              setSelectedDateOption('custom');
-                            }
-                          }
-                        }}
-                        className={`flex items-center justify-center w-9 h-9 border rounded-md transition-colors shadow-sm ${
-                          customEntryDate === new Date().toISOString().split('T')[0]
-                            ? 'bg-muted/30 cursor-not-allowed opacity-50' 
-                            : 'bg-background hover:bg-muted/50 cursor-pointer'
-                        }`}
-                        disabled={customEntryDate === new Date().toISOString().split('T')[0]}
-                      >
-                        <ChevronDown className="h-4 w-4 -rotate-90" />
-                      </button>
-                    </div>
-                  </div>
-                  
-                  <div className="text-xs text-muted-foreground leading-relaxed">
-                    Entry recorded for <strong className="text-foreground">{(() => {
-                      // Parse date correctly to avoid timezone issues
-                      const dateParts = customEntryDate.split('-');
-                      const date = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
-                      
-                      const dateStr = date.toLocaleDateString('en-US', { 
-                        weekday: 'long',
-                        year: 'numeric', 
-                        month: 'long', 
-                        day: 'numeric' 
-                      });
-                      const now = new Date();
-                      const timeStr = now.toLocaleTimeString('en-US', {
-                        hour: 'numeric',
-                        minute: '2-digit',
-                        hour12: true
-                      });
-                      return `${dateStr} at ${timeStr}`;
-                    })()}</strong>
-                  </div>
-                </div>
-            </div>
-
-
-
-
-
-
-
-            {/* Vehicle Number - Separate section below */}
+               {/* Vehicle Number */}
             <div className="space-y-2">
-              <Label htmlFor="vehicleNumber" className="text-base font-medium">Vehicle Number</Label>
+              <Label htmlFor="vehicleNumber">Vehicle Number</Label>
               <div className="relative">
                 <Input 
                   id="vehicleNumber"
                   placeholder="Enter vehicle number (KL07AB0001)" 
-                  className="text-center font-mono text-lg uppercase tracking-wider h-12 border-2 focus:border-primary/50 shadow-sm"
+                  className="text-center font-mono text-lg uppercase"
                   value={vehicleNumber}
                   onChange={(e) => handleVehicleNumberChange(e.target.value)}
                 />
                 {isLoadingVehicleData && (
                   <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
                   </div>
                 )}
               </div>
               {vehicleNumber && (
-                <div className="flex items-center gap-2 text-sm bg-muted/30 px-3 py-2 rounded-md">
-                  <div className={`w-2 h-2 rounded-full ${visitCount > 0 ? 'bg-green-500' : 'bg-amber-500'}`}></div>
-                  <span className="text-muted-foreground font-medium">
+                <div className="flex items-center gap-2 text-sm">
+                  <div className={`w-2 h-2 rounded-full ${visitCount > 0 ? 'bg-success' : 'bg-warning'}`}></div>
+                  <span className="text-muted-foreground">
                     {visitCount > 0 ? `Previous Visits: ${visitCount} ${visitCount === 1 ? 'time' : 'times'}` : 'New Customer'}
                   </span>
                 </div>
-              )}   
+              )}
             </div>
-                      
-
-
-
-
-
-             {/* Category */}
-            <div className="space-y-2">
-              <Label htmlFor="wheelCategory">Category</Label>
-              <Select value={wheelCategory} onValueChange={setWheelCategory}>
-                <SelectTrigger id="wheelCategory">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="2">2 Wheeler</SelectItem>
-                  <SelectItem value="4">4 Wheeler</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
+              
             </div>
-
-
-
-
 
             
+            
+              <div className="space-y-2">
+                <Label htmlFor="wheelCategory">Category</Label>
+                <Select value={wheelCategory} onValueChange={setWheelCategory}>
+                  <SelectTrigger id="wheelCategory">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="2">2 Wheeler</SelectItem>
+                    <SelectItem value="4">4 Wheeler</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+{/* Custom Entry Date and Time */}
+<div className="space-y-4 p-4 border rounded-lg bg-muted/20">
+  <div className="space-y-2">
+    <Label>Entry Date</Label>
+    <div className="flex items-center gap-2">
+      {/* Previous Date Button */}
+      <button
+        type="button"
+        onClick={() => {
+          const currentDate = new Date(customEntryDate);
+          currentDate.setDate(currentDate.getDate() - 1);
+          setCustomEntryDate(currentDate.toISOString().split('T')[0]);
+          
+          // Update the selected option based on the new date
+          const today = new Date();
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          
+          const currentDateStr = currentDate.toISOString().split('T')[0];
+          const todayStr = today.toISOString().split('T')[0];
+          const yesterdayStr = yesterday.toISOString().split('T')[0];
+          
+          if (currentDateStr === todayStr) {
+            setSelectedDateOption('today');
+          } else if (currentDateStr === yesterdayStr) {
+            setSelectedDateOption('yesterday');
+          } else {
+            setSelectedDateOption('custom');
+          }
+        }}
+        className="flex items-center justify-center w-10 h-10 border rounded-md bg-background hover:bg-muted/50 transition-colors"
+      >
+        <ChevronDown className="h-5 w-5 rotate-90" />
+      </button>
+      
+      {/* Date Display */}
+      <div className="relative flex-1">
+        <button
+          type="button"
+          onClick={() => setIsDateDropdownOpen(!isDateDropdownOpen)}
+          className="w-full flex items-center justify-between px-3 py-2 border rounded-md bg-background hover:bg-muted/50 transition-colors"
+        >
+          <span>{getDisplayDate()}</span>
+          <ChevronDown className="h-4 w-4" />
+        </button>
+        
+        {isDateDropdownOpen && (
+          <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-background border rounded-md shadow-lg">
+            {/* <button
+              type="button"
+              onClick={() => {
+                setSelectedDateOption('today');
+                setCustomEntryDate(new Date().toISOString().split('T')[0]);
+                setIsDateDropdownOpen(false);
+              }}
+              className="w-full px-3 py-2 text-left hover:bg-muted transition-colors"
+            >
+              Today
+            </button> */}
+              {/* <button
+                type="button"
+                onClick={() => {
+                  setSelectedDateOption('yesterday');
+                  const yesterday = new Date();
+                  yesterday.setDate(yesterday.getDate() - 1);
+                  setCustomEntryDate(yesterday.toISOString().split('T')[0]);
+                  setIsDateDropdownOpen(false);
+                }}
+                className="w-full px-3 py-2 text-left hover:bg-muted transition-colors"
+              >
+                Yesterday
+              </button> */}
+            <div className="p-2 border-t">
+              <Label className="text-sm text-muted-foreground mb-2 block">Custom Day</Label>
+              <Input
+                type="date"
+                value={customEntryDate}
+                onChange={(e) => {
+                  setCustomEntryDate(e.target.value);
+                  setSelectedDateOption('custom');
+                  setIsDateDropdownOpen(false);
+                }}
+                max={new Date().toISOString().split('T')[0]}
+                className="w-full"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {/* Next Date Button */}
+      <button
+        type="button"
+        onClick={() => {
+          const currentDate = new Date(customEntryDate);
+          const today = new Date();
+          
+          const currentDateStr = customEntryDate;
+          const todayStr = today.toISOString().split('T')[0];
+          
+          // Only allow moving forward if not already at today's date
+          if (currentDateStr < todayStr) {
+            currentDate.setDate(currentDate.getDate() + 1);
+            const newDateStr = currentDate.toISOString().split('T')[0];
+            setCustomEntryDate(newDateStr);
+            
+            // Update the selected option based on the new date
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            const yesterdayStr = yesterday.toISOString().split('T')[0];
+            
+            if (newDateStr === todayStr) {
+              setSelectedDateOption('today');
+            } else if (newDateStr === yesterdayStr) {
+              setSelectedDateOption('yesterday');
+            } else {
+              setSelectedDateOption('custom');
+            }
+          }
+        }}
+        className={`flex items-center justify-center w-10 h-10 border rounded-md transition-colors ${
+          customEntryDate === new Date().toISOString().split('T')[0]
+            ? 'bg-muted/30 cursor-not-allowed opacity-50' 
+            : 'bg-background hover:bg-muted/50 cursor-pointer'
+        }`}
+        disabled={customEntryDate === new Date().toISOString().split('T')[0]}
+      >
+        <ChevronDown className="h-5 w-5 -rotate-90" />
+      </button>
+    </div>
+  </div>
+  
+  <div className="text-sm text-muted-foreground">
+    This entry will be recorded for <strong>{(() => {
+      // Parse date correctly to avoid timezone issues
+      const dateParts = customEntryDate.split('-');
+      const date = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
+      
+      const dateStr = date.toLocaleDateString('en-US', { 
+        weekday: 'long',
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
+      return `${dateStr} at ${timeStr}`;
+    })()}</strong>
+  </div>
+</div>
+
+           
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             {/* Vehicle Brand and Model */}
             <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
               <Label className="text-base font-semibold">Vehicle Details</Label>
@@ -1607,7 +1618,7 @@ return (
                       setSelectedModelId(modelObj?.id || '');
                     }}
                     classNamePrefix="react-select"
-                     isDisabled={!wheelCategory}
+                    isDisabled={!wheelCategory}
                     noOptionsMessage={() => "No models found"}
                   />
                 </div>
@@ -1632,7 +1643,6 @@ return (
                 </div>
               </div>
             </div>
-
 
 
 
@@ -1710,59 +1720,61 @@ return (
 
 
             {/* Workshop Selection */}
-            {entryType === 'workshop' && (
-              <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
-                <Label className="text-base font-semibold">Workshop Details</Label>
-                <div className="space-y-2">
-                  <Label htmlFor="workshop">Workshop</Label>
-                  <Select value={workshop} onValueChange={setWorkshop}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select workshop" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {workshopOptions.map(option => (
-                        <SelectItem key={option} value={option}>{option}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {/* Show textbox when "OTHER WORKSHOPS" is selected */}
-                {workshop === "OTHER WORKSHOPS" && (
-                  <div className="space-y-2">
-                    <Label htmlFor="customWorkshop">Enter Workshop Name</Label>
-                    <input
-                      type="text"
-                      id="customWorkshop"
-                      className="w-full p-2 border rounded-lg"
-                      placeholder="Type workshop name"
-                      value={customWorkshopName}
-                      onChange={(e) => setCustomWorkshopName(e.target.value)}
-                    />
-                  </div>
-                )}
-                <div className="space-y-2">
-                  <Label htmlFor="vehicleType">Vehicle Type</Label>
-                  <Select 
-                    value={vehicleType} 
-                    onValueChange={setVehicleType} 
-                    disabled={!wheelCategory && workshop !== "OTHER WORKSHOPS"}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={
-                        (!wheelCategory && workshop !== "OTHER WORKSHOPS") 
-                          ? "Select category first" 
-                          : "Select vehicle type"
-                      } />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sortVehicleTypesWithPriority(vehicleTypes).map(type => (
-                        <SelectItem key={type} value={type}>{type}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            )}
+{entryType === 'workshop' && (
+  <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
+    <Label className="text-base font-semibold">Workshop Details</Label>
+    <div className="space-y-2">
+      <Label htmlFor="workshop">Workshop</Label>
+      <Select value={workshop} onValueChange={setWorkshop}>
+        <SelectTrigger>
+          <SelectValue placeholder="Select workshop" />
+        </SelectTrigger>
+        <SelectContent>
+          {workshopOptions.map(option => (
+            <SelectItem key={option} value={option}>{option}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+
+    {/* Show textbox when "OTHER WORKSHOPS" is selected */}
+    {workshop === "OTHER WORKSHOPS" && (
+      <div className="space-y-2">
+        <Label htmlFor="customWorkshop">Enter Workshop Name</Label>
+        <input
+          type="text"
+          id="customWorkshop"
+          className="w-full p-2 border rounded-lg"
+          placeholder="Type workshop name"
+          value={customWorkshopName}
+          onChange={(e) => setCustomWorkshopName(e.target.value)}
+        />
+      </div>
+    )}
+
+    <div className="space-y-2">
+      <Label htmlFor="vehicleType">Vehicle Type</Label>
+      <Select 
+        value={vehicleType} 
+        onValueChange={setVehicleType} 
+        disabled={!wheelCategory && workshop !== "OTHER WORKSHOPS"}
+      >
+        <SelectTrigger>
+          <SelectValue placeholder={
+            (!wheelCategory && workshop !== "OTHER WORKSHOPS") 
+              ? "Select category first" 
+              : "Select vehicle type"
+          } />
+        </SelectTrigger>
+        <SelectContent>
+          {sortVehicleTypesWithPriority(vehicleTypes).map(type => (
+            <SelectItem key={type} value={type}>{type}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  </div>
+)}
 
 
 
@@ -1792,9 +1804,6 @@ return (
                   />
                 </div>
               </div>
-
-
-
 
               {/* Customer Details - moved just above payment method */}
               <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
@@ -1841,9 +1850,6 @@ return (
                   </div>
                 </div>
               </div>
-
-
-
 
               {/* Payment Mode Selection */}
               <div className="space-y-2">
@@ -1950,56 +1956,56 @@ return (
                 </div>
               )}
 
-            <div className="space-y-2">
-              <Label htmlFor="remarks">Remarks</Label>
-              <Textarea 
-                id="remarks" 
-                placeholder="Any additional notes..." 
-                rows={3} 
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-              />
+              <div className="space-y-2">
+                <Label htmlFor="remarks">Remarks</Label>
+                <Textarea 
+                  id="remarks" 
+                  placeholder="Any additional notes..." 
+                  rows={3} 
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                />
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-              {/* Scratch Marking Section - Disabled */}
-              {/* <Card>
-                <CardHeader>
-                  <CardTitle>Vehicle Scratch Marking</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ScratchMarking onSave={handleScratchSave} />
-                </CardContent>
-              </Card> */}
-    </div>
+        {/* Scratch Marking Section - Disabled */}
+        {/* <Card>
+          <CardHeader>
+            <CardTitle>Vehicle Scratch Marking</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ScratchMarking onSave={handleScratchSave} />
+          </CardContent>
+        </Card> */}
+      </div>
 
-    {/* Submit Button */}
-    <div className="flex justify-center gap-4">
-      <Button 
-        variant="default" 
-        size="lg" 
-        className="px-8"
-        onClick={handleSubmit}
-        disabled={isSubmitDisabled}
-      >
-        {isEditing ? 'Update Entry' : 'Submit Entry'}
-      </Button>
-      
-      {/* Checkout Button - only show when no custom date is given */}
-      {!useCustomDateTime && !isEditing && (
+      {/* Submit Button */}
+      <div className="flex justify-center gap-4">
         <Button 
-          variant="outline" 
+          variant="default" 
           size="lg" 
           className="px-8"
-          onClick={handleCheckout}
+          onClick={handleSubmit}
           disabled={isSubmitDisabled}
         >
-          Checkout
+          {isEditing ? 'Update Entry' : 'Submit Entry'}
         </Button>
-      )}
+        
+        {/* Checkout Button - only show when no custom date is given */}
+        {!useCustomDateTime && !isEditing && (
+          <Button 
+            variant="outline" 
+            size="lg" 
+            className="px-8"
+            onClick={handleCheckout}
+            disabled={isSubmitDisabled}
+          >
+            Checkout
+          </Button>
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
 }
