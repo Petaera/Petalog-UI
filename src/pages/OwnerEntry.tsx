@@ -179,6 +179,9 @@ const getDisplayDate = () => {
   const [availableModels, setAvailableModels] = useState<{name: string, id: string, brand: string}[]>([]);
   const [vehicleData, setVehicleData] = useState<any[]>([]);
 
+
+  //workshop
+  const [customWorkshopName, setCustomWorkshopName] = useState('');
   // Edit mode state
   const [isEditing, setIsEditing] = useState(false);
   const [editLogId, setEditLogId] = useState<string | null>(null);
@@ -1712,38 +1715,66 @@ const getDisplayDate = () => {
               </div>
             )}
 
+
+
             {/* Workshop Selection */}
-            {entryType === 'workshop' && (
-              <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
-                <Label className="text-base font-semibold">Workshop Details</Label>
-                <div className="space-y-2">
-                  <Label htmlFor="workshop">Workshop</Label>
-                  <Select value={workshop} onValueChange={setWorkshop}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select workshop" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {workshopOptions.map(option => (
-                        <SelectItem key={option} value={option}>{option}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="vehicleType">Vehicle Type</Label>
-                  <Select value={vehicleType} onValueChange={setVehicleType} disabled={!wheelCategory}>
-                    <SelectTrigger>
-                      <SelectValue placeholder={wheelCategory ? "Select vehicle type" : "Select category first"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sortVehicleTypesWithPriority(vehicleTypes).map(type => (
-                        <SelectItem key={type} value={type}>{type}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            )}
+{entryType === 'workshop' && (
+  <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
+    <Label className="text-base font-semibold">Workshop Details</Label>
+    <div className="space-y-2">
+      <Label htmlFor="workshop">Workshop</Label>
+      <Select value={workshop} onValueChange={setWorkshop}>
+        <SelectTrigger>
+          <SelectValue placeholder="Select workshop" />
+        </SelectTrigger>
+        <SelectContent>
+          {workshopOptions.map(option => (
+            <SelectItem key={option} value={option}>{option}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+
+    {/* Show textbox when "OTHER WORKSHOPS" is selected */}
+    {workshop === "OTHER WORKSHOPS" && (
+      <div className="space-y-2">
+        <Label htmlFor="customWorkshop">Enter Workshop Name</Label>
+        <input
+          type="text"
+          id="customWorkshop"
+          className="w-full p-2 border rounded-lg"
+          placeholder="Type workshop name"
+          value={customWorkshopName}
+          onChange={(e) => setCustomWorkshopName(e.target.value)}
+        />
+      </div>
+    )}
+
+    <div className="space-y-2">
+      <Label htmlFor="vehicleType">Vehicle Type</Label>
+      <Select 
+        value={vehicleType} 
+        onValueChange={setVehicleType} 
+        disabled={!wheelCategory && workshop !== "OTHER WORKSHOPS"}
+      >
+        <SelectTrigger>
+          <SelectValue placeholder={
+            (!wheelCategory && workshop !== "OTHER WORKSHOPS") 
+              ? "Select category first" 
+              : "Select vehicle type"
+          } />
+        </SelectTrigger>
+        <SelectContent>
+          {sortVehicleTypesWithPriority(vehicleTypes).map(type => (
+            <SelectItem key={type} value={type}>{type}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  </div>
+)}
+
+
 
             {/* Amount and Payment */}
             <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
