@@ -1468,7 +1468,7 @@ const getDisplayDate = () => {
         
         {isDateDropdownOpen && (
           <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-background border rounded-md shadow-lg">
-            <button
+            {/* <button
               type="button"
               onClick={() => {
                 setSelectedDateOption('today');
@@ -1478,20 +1478,20 @@ const getDisplayDate = () => {
               className="w-full px-3 py-2 text-left hover:bg-muted transition-colors"
             >
               Today
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedDateOption('yesterday');
-                const yesterday = new Date();
-                yesterday.setDate(yesterday.getDate() - 1);
-                setCustomEntryDate(yesterday.toISOString().split('T')[0]);
-                setIsDateDropdownOpen(false);
-              }}
-              className="w-full px-3 py-2 text-left hover:bg-muted transition-colors"
-            >
-              Yesterday
-            </button>
+            </button> */}
+              {/* <button
+                type="button"
+                onClick={() => {
+                  setSelectedDateOption('yesterday');
+                  const yesterday = new Date();
+                  yesterday.setDate(yesterday.getDate() - 1);
+                  setCustomEntryDate(yesterday.toISOString().split('T')[0]);
+                  setIsDateDropdownOpen(false);
+                }}
+                className="w-full px-3 py-2 text-left hover:bg-muted transition-colors"
+              >
+                Yesterday
+              </button> */}
             <div className="p-2 border-t">
               <Label className="text-sm text-muted-foreground mb-2 block">Custom Day</Label>
               <Input
