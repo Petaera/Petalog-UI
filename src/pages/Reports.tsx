@@ -14,7 +14,7 @@ import { format } from "date-fns";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 import { useAuth } from '@/contexts/AuthContext';
-
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 // Types for our data
 interface Vehicle {
   id: string;
@@ -1113,22 +1113,85 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
       </Card>
 
       {/* Vehicle Type Distribution */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Vehicle Type Distribution</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {filteredData.vehicleDistribution.map((item: any, index: number) => (
-              <div key={`vehicle-distribution-${item.type || 'unknown'}-${index}`} className="text-center p-4 bg-accent/30 rounded-lg">
-                <p className="text-2xl font-bold text-primary">{item.count || 0}</p>
-                <p className="font-medium">{item.type || 'Unknown Type'}</p>
-                <p className="text-sm text-muted-foreground">{(item.percentage || 0).toFixed(1)}%</p>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      
+
+
+
+<Card>
+  <CardHeader>
+    <CardTitle>Vehicle Type Distribution</CardTitle>
+  </CardHeader>
+  <CardContent>
+    {filteredData.vehicleDistribution.length === 0 ? (
+      <div className="text-center p-4 text-muted-foreground">
+        No vehicle type data available
+      </div>
+    ) : (
+      <div className="w-full flex flex-col md:flex-row items-center justify-center gap-8">
+        <div className="w-full md:w-1/2 min-w-[220px] h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={filteredData.vehicleDistribution}
+                dataKey="count"
+                nameKey="type"
+                cx="50%"
+                cy="50%"
+                outerRadius="80%"
+                innerRadius="45%"
+                label={({ type, percentage }) =>
+                  `${type?.length > 12 ? type.slice(0, 12) + '…' : type || 'Unknown'} (${percentage.toFixed(1)}%)`
+                }
+                labelLine={false}
+                minAngle={10}
+              >
+                {filteredData.vehicleDistribution.map((entry: any, idx: number) => {
+                  const COLORS = [
+                    "#6366f1", "#22d3ee", "#f59e42", "#10b981",
+                    "#f43f5e", "#a21caf", "#fbbf24", "#64748b"
+                  ];
+                  return (
+                    <Cell key={`cell-${idx}`} fill={COLORS[idx % COLORS.length]} />
+                  );
+                })}
+              </Pie>
+              <Tooltip
+                formatter={(value: number, name: string, props: any) =>
+                  [`${value} vehicles`, props.payload.type || 'Unknown']
+                }
+              />
+              {/* Legend removed as per request */}
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="w-full md:w-1/2 space-y-2">
+          {filteredData.vehicleDistribution.map((item: any, idx: number) => (
+            <div
+              key={`vehicle-distribution-legend-${item.type || 'unknown'}-${idx}`}
+              className="flex items-center gap-3"
+            >
+              <span
+                className="inline-block w-4 h-4 rounded"
+                style={{
+                  backgroundColor: [
+                    "#6366f1", "#22d3ee", "#f59e42", "#10b981",
+                    "#f43f5e", "#a21caf", "#fbbf24", "#64748b"
+                  ][idx % 8]
+                }}
+              />
+              <span className="font-medium truncate max-w-[100px] md:max-w-[160px]">
+                {item.type || 'Unknown Type'}
+              </span>
+              <span className="ml-auto text-primary font-bold">{item.count}</span>
+              <span className="ml-2 text-muted-foreground text-sm">{item.percentage.toFixed(1)}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+  </CardContent>
+</Card>
+
 
       {/* Records Table */}
       <Card>

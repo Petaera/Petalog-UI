@@ -1392,7 +1392,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                 </div>
               </div>
 
-              {/* Custom Entry Date and Time */}
+              Custom Entry Date and Time
               <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
                 <div className="flex items-center gap-2">
                   <Checkbox
