@@ -811,7 +811,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle Model</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Customer Name</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden xl:table-cell">Phone</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Amount</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Service</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Entry Time</th>
                          <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Exit Time</th>
@@ -844,7 +844,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                                   return currentAmount > 0 ? formatCurrency(currentAmount) : "-";
                                 })()}
                               </td> */}
-                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 hidden md:table-cell">
+                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600">
                                 {/* Amount */}
                                 {(() => {
                                   const currentAmount = log.Amount || 0;
