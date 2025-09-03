@@ -200,17 +200,27 @@ useEffect(() => {
     const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString();
     const endOfDay = new Date(today.setHours(23, 59, 59, 999)).toISOString();
 
-    const { data, error } = await supabase
+    // Determine current location context similar to other cards
+    const currentLocation = user?.role === 'manager' ? user?.assigned_location : (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
+
+    let query = supabase
       .from("logs-man")
       .select("*")
       .in("approval_status", ["pending", null])
       .gte("entry_time", startOfDay)
       .lte("entry_time", endOfDay);
 
+    if (currentLocation) {
+      query = query.eq('location_id', currentLocation);
+    }
+
+    const { data, error } = await query;
     if (!error) setPendingLogs(data || []);
   };
-  fetchTodayPendingLogs();
-}, []);
+  if (!authLoading) {
+    fetchTodayPendingLogs();
+  }
+}, [authLoading, selectedLocation, user?.assigned_location, user?.role]);
   // Filter data based on current selections
   const getFilteredData = () => {
     let filteredLogs = [...logs];
