@@ -32,7 +32,7 @@ export const useAuth = () => {
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(undefined);
   const [loading, setLoading] = useState(false);
 
   // Restore user from Supabase session on mount

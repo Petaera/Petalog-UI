@@ -98,6 +98,9 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
   const [servicePrices, setServicePrices] = useState<ServicePrice[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Pagination state
+  const [page, setPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState("");
 
 
@@ -221,6 +224,12 @@ useEffect(() => {
     fetchTodayPendingLogs();
   }
 }, [authLoading, selectedLocation, user?.assigned_location, user?.role]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [dateRange, vehicleType, service, entryType, manager, customFromDate, customToDate]);
+
   // Filter data based on current selections
   const getFilteredData = () => {
     let filteredLogs = [...logs];
@@ -559,7 +568,7 @@ useEffect(() => {
       'Service Type': escapeCSV(log.service),
       'Price': escapeCSV(log.Amount),
       'Payment Mode': escapeCSV(log.payment_mode),
-      'UPI Account': escapeCSV(log.workshop),
+      'UPI Account': escapeCSV(log.upi_account_name),
       'Entry Type': escapeCSV(log.entry_type),
       'Date': escapeCSV(format(new Date(log.created_at), 'dd/MM/yyyy HH:mm')),
       'Location': escapeCSV(locations.find(loc => loc.id === log.location_id)?.name || 'Unknown')
@@ -606,28 +615,70 @@ useEffect(() => {
   };
 
   const exportPaymentBreakdown = () => {
+    // Helper function to escape CSV values
+    const escapeCSV = (value: any) => {
+      if (value === null || value === undefined) return '';
+      const stringValue = String(value).trim();
+      
+      // If the value contains comma, quote, or newline, wrap it in quotes and escape internal quotes
+      if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n') || stringValue.includes('\r')) {
+        // Remove any existing newlines and carriage returns, then escape quotes
+        const cleanValue = stringValue.replace(/[\r\n]/g, ' ').replace(/"/g, '""');
+        return `"${cleanValue}"`;
+      }
+      return stringValue;
+    };
+
     const breakdownData = filteredData.paymentModeBreakdown.map(item => ({
-      'Payment Mode': item.mode,
-      'Total Revenue': item.revenue,
-      'Vehicle Count': item.count,
-      'Percentage of Total': `${item.percentage.toFixed(1)}%`,
-      'UPI Accounts': item.mode?.toLowerCase() === 'upi' && Object.keys(item.upiAccounts || {}).length > 0
-        ? Object.entries(item.upiAccounts).map(([accountName, accountData]: [string, any]) =>
-          `${accountName}: ₹${accountData.revenue} (${accountData.count} vehicles)`
-        ).join('; ')
-        : 'N/A'
+      'Payment Mode': escapeCSV(item.mode),
+      'Total Revenue': escapeCSV(item.revenue),
+      'Vehicle Count': escapeCSV(item.count),
+      'Percentage of Total': escapeCSV(`${item.percentage.toFixed(1)}%`),
+      'UPI Accounts': escapeCSV(
+        item.mode?.toLowerCase() === 'upi' && Object.keys(item.upiAccounts || {}).length > 0
+          ? Object.entries(item.upiAccounts).map(([accountName, accountData]: [string, any]) =>
+            `${accountName}: ₹${accountData.revenue} (${accountData.count} vehicles)`
+          ).join('; ')
+          : 'N/A'
+      )
     }));
 
+    // Generate CSV string with proper row handling
+    const headers = Object.keys(breakdownData[0] || {});
+    const csvRows = breakdownData.map(row => 
+      headers.map(header => row[header as keyof typeof row])
+    );
+    
     const csvString = [
-      Object.keys(breakdownData[0] || {}).join(','),
-      ...breakdownData.map(row => Object.values(row).join(','))
+      headers.join(','),
+      ...csvRows.map(row => row.join(','))
     ].join('\n');
 
-    const blob = new Blob([csvString], { type: 'text/csv' });
+    // Generate filename based on the actual date range being exported
+    let filename = 'payment-breakdown';
+    
+    if (dateRange === "today") {
+      filename += `-${format(new Date(), 'dd-MM-yyyy')}`;
+    } else if (dateRange === "yesterday") {
+      const yesterday = new Date(new Date().getTime() - 24 * 60 * 60 * 1000);
+      filename += `-${format(yesterday, 'dd-MM-yyyy')}`;
+    } else if (dateRange === "last7days") {
+      const weekAgo = new Date(new Date().getTime() - 7 * 24 * 60 * 60 * 1000);
+      filename += `-${format(weekAgo, 'dd-MM-yyyy')}-to-${format(new Date(), 'dd-MM-yyyy')}`;
+    } else if (dateRange === "last30days") {
+      const monthAgo = new Date(new Date().getTime() - 30 * 24 * 60 * 60 * 1000);
+      filename += `-${format(monthAgo, 'dd-MM-yyyy')}-to-${format(new Date(), 'dd-MM-yyyy')}`;
+    } else if (dateRange === "custom" && customFromDate && customToDate) {
+      filename += `-${format(customFromDate, 'dd-MM-yyyy')}-to-${format(customToDate, 'dd-MM-yyyy')}`;
+    } else {
+      filename += `-${format(new Date(), 'dd-MM-yyyy')}`;
+    }
+
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `payment-breakdown-${format(new Date(), 'dd-MM-yyyy')}.csv`;
+    a.download = `${filename}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
@@ -2206,17 +2257,15 @@ useEffect(() => {
         <CardContent>
           {/* Pagination State */}
           {(() => {
-            // Pagination state hooks
-            const [page, setPage] = useState(1);
             const rowsPerPage = 25;
             const total = filteredData.filteredVehicles.length;
             const totalPages = Math.ceil(total / rowsPerPage);
             const pagedVehicles = filteredData.filteredVehicles.slice((page - 1) * rowsPerPage, page * rowsPerPage);
 
-            // Reset page if filter changes and page is out of range
-            useEffect(() => {
-              if (page > totalPages) setPage(1);
-            }, [totalPages]);
+            // Reset page if it's out of range
+            if (page > totalPages && totalPages > 0) {
+              setPage(1);
+            }
 
             if (loading) {
               return (

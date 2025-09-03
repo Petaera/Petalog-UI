@@ -10,7 +10,8 @@ interface ProtectedRouteProps {
 export const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
   const { user, loading } = useAuth();
 
-  if (loading) {
+  // Keep loading until user is fully resolved (either authenticated or confirmed as null)
+  if (loading || user === undefined) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
