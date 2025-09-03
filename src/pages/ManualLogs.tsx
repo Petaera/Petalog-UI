@@ -836,13 +836,33 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                               <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_model || "-"}</td>
                               <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{log.Name || "-"}</td>
                               <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden xl:table-cell">{log.Phone_no || "-"}</td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 hidden md:table-cell">
+                              {/* <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 hidden md:table-cell">
                                  {(() => {
                                   const currentAmount = log.Amount || 0;
                                   const discountAmount = log.discount || 0;
                                   const originalAmount = currentAmount - discountAmount;
                                   return currentAmount > 0 ? formatCurrency(currentAmount) : "-";
                                 })()}
+                              </td> */}
+                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 hidden md:table-cell">
+                                {/* Amount */}
+                                {(() => {
+                                  const currentAmount = log.Amount || 0;
+                                  const discountAmount = log.discount || 0;
+                                  const originalAmount = currentAmount - discountAmount;
+                                  return currentAmount > 0 ? formatCurrency(currentAmount) : "-";
+                                })()}
+                                {/* Payment Method & UPI Account */}
+                                <div className="mt-1 text-xs text-muted-foreground font-normal">
+                                  Payment: {log.payment_mode ? log.payment_mode.toUpperCase() : "-"}
+                                  {log.payment_mode === "upi" && log.upi_account_name && (
+                                    <>
+                                      {" "}
+                                      | UPI: {log.upi_account_name}
+                                      {/* {log.upi_id ? ` (${log.upi_id})` : ""} */}
+                                    </>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
                               <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
