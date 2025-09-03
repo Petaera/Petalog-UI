@@ -572,373 +572,391 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
 
         {/* Pending Approvals Section */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex flex-col sm:flex-row sm:items-center gap-2">
-              <div className="flex items-center gap-2">
-                <Clock className="h-5 w-5 text-orange-500" />
-                <span>Pending Tickets</span>
-                <Badge variant="secondary">{pendingLogs.length}</Badge>
-              </div>
-              {/* Date filter intentionally not shown for Pay Later */}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto -mx-4 sm:mx-0">
-              <div className="min-w-full inline-block align-middle">
-                <div className="overflow-hidden">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-muted/50">
-                      <tr>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle No</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle Model</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Customer Name</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Phone</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Amount</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Service</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Entry Time</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {loading ? (
-                        <tr><td colSpan={8} className="text-center py-4">Loading...</td></tr>
-                      ) : pendingLogs.length === 0 ? (
-                        <tr><td colSpan={8} className="text-center py-4 text-muted-foreground">
-                          {selectedDate ? `No pending tickets found for ${new Date(selectedDate).toLocaleDateString()}` : 'No pending tickets'}
-                        </td></tr>
-                      ) : (
-                        pendingLogs.map((log, idx) => {
-                          return (
-                            <tr key={log.id || idx} className="hover:bg-muted/30">
-                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_model || "-"}</td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{log.Name || "-"}</td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.Phone_no || "-"}</td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 hidden md:table-cell">
-                                {log.Amount ? formatCurrency(log.Amount) : "-"}
-                              </td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
-                                {log.entry_time ? new Date(log.entry_time).toLocaleString() : 
-                                 log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
-                              </td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
-                                <div className="flex flex-col sm:flex-row gap-1">
-                                  <Button
-                                    size="sm"
-                                    variant="default"
-                                    className="bg-green-600 hover:bg-green-700 text-xs"
-                                    onClick={() => openCheckout(log)}
-                                  >
-                                    <Check className="h-3 w-3 mr-1" />
-                                    Checkout
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="text-xs"
-                                    onClick={() => handleEdit(log)}
-                                  >
-                                    <Edit className="h-3 w-3 mr-1" />
-                                    Edit
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="destructive"
-                                    className="text-xs"
-                                    onClick={() => {
-                                      console.log('🚨 DELETE BUTTON CLICKED!');
-                                      console.log('Log object:', log);
-                                      console.log('Log ID:', log.id);
-                                      console.log('Log ID type:', typeof log.id);
-                                      console.log('Log ID length:', log.id?.length);
-                                      
-                                      if (!log.id) {
-                                        console.error('❌ Log ID is missing or undefined!');
-                                        toast.error('Cannot delete: Log ID is missing');
-                                        return;
-                                      }
-                                      
-                                      handleDelete(log.id);
-                                    }}
-                                    title="Delete log"
-                                    disabled={isDeleting.has(log.id)}
-                                  >
-                                    {isDeleting.has(log.id) ? (
-                                      <X className="h-3 w-3 animate-spin" />
-                                    ) : (
-                                      <Trash2 className="h-3 w-3" />
-                                    )}
-                                  </Button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+        <CardHeader>
+          <CardTitle className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <div className="flex items-center gap-2">
+              <Clock className="h-5 w-5 text-orange-500" />
+              <span>Pending Tickets</span>
+              <Badge variant="secondary">{pendingLogs.length}</Badge>
+            </div>
+            {/* Date filter intentionally not shown for Pay Later */}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <div className="min-w-full inline-block align-middle">
+              <div className="overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle No</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle Type</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Name</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Amount</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Service</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Entry Time</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {loading ? (
+                      <tr><td colSpan={7} className="text-center py-4">Loading...</td></tr>
+                    ) : pendingLogs.length === 0 ? (
+                      <tr><td colSpan={7} className="text-center py-4 text-muted-foreground">
+                        {selectedDate ? `No pending tickets found for ${new Date(selectedDate).toLocaleDateString()}` : 'No pending tickets'}
+                      </td></tr>
+                    ) : (
+                      pendingLogs.map((log, idx) => (
+                        <tr key={log.id || idx} className="hover:bg-muted/30">
+                          <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_type || "-"}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.Name || "-"}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {log.Phone_no ? (
+                              <a
+                                href={`tel:${log.Phone_no}`}
+                                className="text-blue-600 hover:underline"
+                                title={`Call ${log.Phone_no}`}
+                              >
+                                {log.Phone_no}
+                              </a>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 hidden md:table-cell">
+                            {log.Amount ? formatCurrency(log.Amount) : "-"}
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
+                            {log.entry_time ? new Date(log.entry_time).toLocaleString() :
+                              log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                            <div className="flex flex-col sm:flex-row gap-1">
+                              <Button
+                                size="sm"
+                                variant="default"
+                                className="bg-green-600 hover:bg-green-700 text-xs"
+                                onClick={() => openCheckout(log)}
+                              >
+                                <Check className="h-3 w-3 mr-1" />
+                                Checkout
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-xs"
+                                onClick={() => handleEdit(log)}
+                              >
+                                <Edit className="h-3 w-3 mr-1" />
+                                Edit
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                className="text-xs"
+                                onClick={() => {
+                                  console.log('🚨 MANAGER DELETE BUTTON CLICKED!');
+                                  console.log('Log object:', log);
+                                  console.log('Log ID:', log.id);
+                                  console.log('Log ID type:', typeof log.id);
+                                  console.log('Log ID length:', log.id?.length);
+
+                                  if (!log.id) {
+                                    console.error('❌ Log ID is missing or undefined!');
+                                    toast.error('Cannot delete: Log ID is missing');
+                                    return;
+                                  }
+
+                                  handleDelete(log.id);
+                                }}
+                                title="Delete log"
+                                disabled={isDeleting.has(log.id)}
+                              >
+                                {isDeleting.has(log.id) ? (
+                                  <X className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-3 w-3" />
+                                )}
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </CardContent>
+      </Card>
 
         {/* Pay Later Section */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex flex-col sm:flex-row sm:items-center gap-2">
-              <div className="flex items-center gap-2">
-                <Clock className="h-5 w-5 text-purple-500" />
-                <span>Pay Later</span>
-                <Badge variant="secondary">{payLaterLogs.length}</Badge>
-              </div>
-              {selectedDate && (
-                <Badge variant="outline" className="sm:ml-2">
-                  {new Date(selectedDate).toLocaleDateString()}
-                </Badge>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto -mx-4 sm:mx-0">
-              <div className="min-w-full inline-block align-middle">
-                <div className="overflow-hidden">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-muted/50">
-                      <tr>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle No</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle Model</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Customer Name</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden xl:table-cell">Phone</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Amount</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Service</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Entry Time</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Exit Time</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Date</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {loading ? (
-                        <tr><td colSpan={11} className="text-center py-4">Loading...</td></tr>
-                      ) : payLaterLogs.length === 0 ? (
-                        <tr><td colSpan={11} className="text-center py-4 text-muted-foreground">
-                          {selectedDate ? `No pay later tickets for ${new Date(selectedDate).toLocaleDateString()}` : 'No pay later tickets'}
-                        </td></tr>
-                      ) : (
-                        payLaterLogs.map((log: any, idx: number) => {
-                          return (
-                            <tr key={log.id || idx} className="hover:bg-muted/30">
-                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_model || "-"}</td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{log.Name || "-"}</td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden xl:table-cell">{log.Phone_no || "-"}</td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 hidden md:table-cell">
-                                {(() => {
-                                  const currentAmount = log.Amount || 0;
-                                  const discountAmount = log.discount || 0;
-                                  const originalAmount = currentAmount - discountAmount;
-                                  return originalAmount > 0 ? formatCurrency(originalAmount) : "-";
-                                })()}
-                              </td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
-                                {log.entry_time ? new Date(log.entry_time).toLocaleString() : 
-                               log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
-                              </td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">
-                                {log.exit_time ? new Date(log.exit_time).toLocaleString() : 
-                               log.approved_at ? new Date(log.approved_at).toLocaleString() : "-"}
-                              </td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {log.payment_date ? new Date(log.payment_date).toLocaleString() : '-'}
-                              </td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
-                                <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100 text-xs">Pay Later</Badge>
-                              </td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
-                                <div className="flex flex-col sm:flex-row gap-1">
-                                  <Button size="sm" variant="default" className="text-xs" onClick={() => openSettle(log)}>Settle</Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="text-xs"
-                                    onClick={() => handleEdit(log)}
-                                  >
-                                    <Edit className="h-3 w-3 mr-1" />
-                                    Edit
-                                  </Button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+        <CardHeader>
+          <CardTitle className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <div className="flex items-center gap-2">
+              <Clock className="h-5 w-5 text-purple-500" />
+              <span>Pay Later</span>
+              <Badge variant="secondary">{payLaterLogs.length}</Badge>
+            </div>
+            {selectedDate && (
+              <Badge variant="outline" className="sm:ml-2">
+                {new Date(selectedDate).toLocaleDateString()}
+              </Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <div className="min-w-full inline-block align-middle">
+              <div className="overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle No</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle Type</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Name</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ">Amount</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Service</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Entry Time</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Exit Time</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Date</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {loading ? (
+                      <tr><td colSpan={11} className="text-center py-4">Loading...</td></tr>
+                    ) : payLaterLogs.length === 0 ? (
+                      <tr><td colSpan={11} className="text-center py-4 text-muted-foreground">
+                        {selectedDate ? `No pay later tickets for ${new Date(selectedDate).toLocaleDateString()}` : 'No pay later tickets'}
+                      </td></tr>
+                    ) : (
+                      payLaterLogs.map((log: any, idx: number) => (
+                        <tr key={log.id || idx} className="hover:bg-muted/30">
+                          <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_type || "-"}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.Name || "-"}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {log.Phone_no ? (
+                              <a
+                                href={`tel:${log.Phone_no}`}
+                                className="text-blue-600 hover:underline"
+                                title={`Call ${log.Phone_no}`}
+                              >
+                                {log.Phone_no}
+                              </a>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 ">
+                            {(() => {
+                              const currentAmount = log.Amount || 0;
+                              const discountAmount = log.discount || 0;
+                              const originalAmount = currentAmount - discountAmount;
+                              return originalAmount > 0 ? formatCurrency(originalAmount) : "-";
+                            })()}
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
+                            {log.entry_time ? new Date(log.entry_time).toLocaleString() :
+                              log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">
+                            {log.exit_time ? new Date(log.exit_time).toLocaleString() :
+                              log.approved_at ? new Date(log.approved_at).toLocaleString() : "-"}
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {log.payment_date ? new Date(log.payment_date).toLocaleString() : '-'}
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                            <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100 text-xs">Pay Later</Badge>
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                            <div className="flex flex-col sm:flex-row gap-1">
+                              <Button size="sm" variant="default" className="text-xs" onClick={() => openSettle(log)}>Settle</Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-xs"
+                                onClick={() => handleEdit(log)}
+                              >
+                                <Edit className="h-3 w-3 mr-1" />
+                                Edit
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
-          </CardContent>
-        </Card>
-
+          </div>
+        </CardContent>
+      </Card>
         {/* Approved Logs Section */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex flex-col sm:flex-row sm:items-center gap-2">
-              <div className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-green-500" />
-                <span>Ticket Closed</span>
-                <Badge variant="default">{approvedLogs.length}</Badge>
-              </div>
-              {selectedDate && (
-                <Badge variant="outline" className="sm:ml-2">
-                  {new Date(selectedDate).toLocaleDateString()}
-                </Badge>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto -mx-4 sm:mx-0">
-              <div className="min-w-full inline-block align-middle">
-                <div className="overflow-hidden">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-muted/50">
-                      <tr>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle No</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle Model</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Customer Name</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden xl:table-cell">Phone</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Service</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Entry Time</th>
-                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Exit Time</th>
-                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Date</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Duration</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {loading ? (
-                        <tr><td colSpan={11} className="text-center py-4">Loading...</td></tr>
-                      ) : approvedLogs.length === 0 ? (
-                        <tr><td colSpan={11} className="text-center py-4 text-muted-foreground">
-                          {selectedDate ? `No approved tickets found for ${new Date(selectedDate).toLocaleDateString()}` : 'No approved tickets'}
-                        </td></tr>
-                      ) : (
-                        approvedLogs.map((log, idx) => {
-                          return (
-                            <tr key={log.id || idx} className="hover:bg-muted/30">
-                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_model || "-"}</td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{log.Name || "-"}</td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden xl:table-cell">{log.Phone_no || "-"}</td>
-                              {/* <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 hidden md:table-cell">
-                                 {(() => {
-                                  const currentAmount = log.Amount || 0;
-                                  const discountAmount = log.discount || 0;
-                                  const originalAmount = currentAmount - discountAmount;
-                                  return currentAmount > 0 ? formatCurrency(currentAmount) : "-";
-                                })()}
-                              </td> */}
-                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600">
-                                {/* Amount */}
-                                {(() => {
-                                  const currentAmount = log.Amount || 0;
-                                  const discountAmount = log.discount || 0;
-                                  const originalAmount = currentAmount - discountAmount;
-                                  return currentAmount > 0 ? formatCurrency(currentAmount) : "-";
-                                })()}
-                                {/* Payment Method & UPI Account */}
-                                <div className="mt-1 text-xs text-muted-foreground font-normal">
-                                  Payment: {log.payment_mode ? log.payment_mode.toUpperCase() : "-"}
-                                  {log.payment_mode === "upi" && log.upi_account_name && (
-                                    <>
-                                      {" "}
-                                       {log.upi_account_name}
-                                      {/* {log.upi_id ? ` (${log.upi_id})` : ""} */}
-                                    </>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
-                                {log.entry_time ? new Date(log.entry_time).toLocaleString() : 
-                                 log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
-                              </td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">
-                                {log.exit_time ? new Date(log.exit_time).toLocaleString() : 
-                                 log.approved_at ? new Date(log.approved_at).toLocaleString() : "-"}
-                              </td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {log.payment_date ? new Date(log.payment_date).toLocaleString() : '-'}
-                              </td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
-                                {(() => {
-                                  const entryTime = log.entry_time || log.created_at;
-                                  const exitTime = log.exit_time || log.approved_at;
-                                  return getDuration(entryTime, exitTime);
-                                })()}
-                              </td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
-                                <Badge className="bg-green-100 text-green-800 hover:bg-green-100 text-xs">
-                                  Approved
-                                </Badge>
-                              </td>
-                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
-                                <div className="flex flex-col sm:flex-row gap-1">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleEdit(log)}
-                                  >
-                                    <Edit className="h-3 w-3 mr-1" />
-                                    Edit
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="destructive"
-                                    onClick={() => {
-                                      console.log('🚨 APPROVED LOG DELETE BUTTON CLICKED!');
-                                      console.log('Log object:', log);
-                                      console.log('Log ID:', log.id);
-                                      console.log('Log ID type:', typeof log.id);
-                                      console.log('Log ID length:', log.id?.length);
-                                      
-                                      if (!log.id) {
-                                        console.error('❌ Log ID is missing or undefined!');
-                                        toast.error('Cannot delete: Log ID is missing');
-                                        return;
-                                      }
-                                      
-                                      handleDelete(log.id);
-                                    }}
-                                    className="text-xs"
-                                    title="Delete log"
-                                    disabled={isDeleting.has(log.id)}
-                                  >
-                                    {isDeleting.has(log.id) ? (
-                                      <X className="h-3 w-3 animate-spin" />
-                                    ) : (
-                                      <Trash2 className="h-3 w-3" />
-                                    )}
-                                  </Button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+        <CardHeader>
+          <CardTitle className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-500" />
+              <span>Ticket Closed</span>
+              <Badge variant="default">{approvedLogs.length}</Badge>
+            </div>
+            {selectedDate && (
+              <Badge variant="outline" className="sm:ml-2">
+                {new Date(selectedDate).toLocaleDateString()}
+              </Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <div className="min-w-full inline-block align-middle">
+              <div className="overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle No</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle Type</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Name</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ">Amount</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Service</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Entry Time</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Exit Time</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Date</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Duration</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {loading ? (
+                      <tr><td colSpan={11} className="text-center py-4">Loading...</td></tr>
+                    ) : approvedLogs.length === 0 ? (
+                      <tr><td colSpan={11} className="text-center py-4 text-muted-foreground">
+                        {selectedDate ? `No approved logs found for ${new Date(selectedDate).toLocaleDateString()}` : 'No approved logs found'}
+                      </td></tr>
+                    ) : (
+                      approvedLogs.map((log, idx) => (
+                        <tr key={log.id || idx} className="hover:bg-muted/30">
+                          <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_type || "-"}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.Name || "-"}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {log.Phone_no ? (
+                              <a
+                                href={`tel:${log.Phone_no}`}
+                                className="text-blue-600 hover:underline"
+                                title={`Call ${log.Phone_no}`}
+                              >
+                                {log.Phone_no}
+                              </a>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 ">
+                            {(() => {
+                              const currentAmount = log.Amount || 0;
+                              const discountAmount = log.discount || 0;
+                              const originalAmount = currentAmount - discountAmount;
+                              return originalAmount > 0 ? formatCurrency(originalAmount) : "-";
+                            })()}
+                            {/* Payment Method & UPI Account */}
+                            <div className="mt-1 text-xs text-muted-foreground font-normal">
+                              Payment: {log.payment_mode ? log.payment_mode.toUpperCase() : "-"}
+                              {log.payment_mode === "upi" && log.upi_account_name && (
+                                <>
+                                  {" "}
+                                  {log.upi_account_name}
+                                  {/* {log.upi_id ? ` (${log.upi_id})` : ""} */}
+                                </>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
+                            {log.entry_time ? new Date(log.entry_time).toLocaleString() :
+                              log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">
+                            {log.exit_time ? new Date(log.exit_time).toLocaleString() :
+                              log.approved_at ? new Date(log.approved_at).toLocaleString() : "-"}
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {log.payment_date ? new Date(log.payment_date).toLocaleString() : '-'}
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
+                            {(() => {
+                              const entryTime = log.entry_time || log.created_at;
+                              const exitTime = log.exit_time || log.approved_at;
+                              return getDuration(entryTime, exitTime);
+                            })()}
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                            <Badge className="bg-green-100 text-green-800 hover:bg-green-100 text-xs">
+                              Approved
+                            </Badge>
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleEdit(log)}
+                            >
+                              <Edit className="h-3 w-3 mr-1" />
+                              Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => {
+                                console.log('🚨 MANAGER APPROVED LOG DELETE BUTTON CLICKED!');
+                                console.log('Log object:', log);
+                                console.log('Log ID:', log.id);
+                                console.log('Log ID type:', typeof log.id);
+                                console.log('Log ID length:', log.id?.length);
+
+                                if (!log.id) {
+                                  console.error('❌ Log ID is missing or undefined!');
+                                  toast.error('Cannot delete: Log ID is missing');
+                                  return;
+                                }
+
+                                handleDelete(log.id);
+                              }}
+                              className="text-xs"
+                              title="Delete log"
+                              disabled={isDeleting.has(log.id)}
+                            >
+                              {isDeleting.has(log.id) ? (
+                                <X className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-3 w-3" />
+                              )}
+                            </Button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </CardContent>
+      </Card>
 
         {/* Checkout Dialog */}
         <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
