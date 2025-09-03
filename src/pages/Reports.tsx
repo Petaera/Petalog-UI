@@ -187,6 +187,13 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
 
   const [pendingLogs, setPendingLogs] = useState([]);
 
+  // Auto-fetch data on mount and when location/auth becomes ready
+  useEffect(() => {
+    if (!authLoading) {
+      fetchAllData();
+    }
+  }, [authLoading, selectedLocation]);
+
 useEffect(() => {
   const fetchTodayPendingLogs = async () => {
     const today = new Date();

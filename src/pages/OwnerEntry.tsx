@@ -132,6 +132,28 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
 const [selectedDateOption, setSelectedDateOption] = useState('today');
 const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
 
+// ---- Date helpers to avoid invalid Date/toISOString issues ----
+const isValidDate = (d: Date) => d instanceof Date && !isNaN(d.getTime());
+const parseYMD = (value: string): Date | null => {
+  if (!value || typeof value !== 'string') return null;
+  const [y, m, d] = value.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  const dt = new Date(y, m - 1, d);
+  return isValidDate(dt) ? dt : null;
+};
+const toYMD = (d: Date): string => {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+const todayYMD = () => toYMD(new Date());
+const yesterdayYMD = () => {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return toYMD(d);
+};
+
 const getDisplayDate = () => {
   switch (selectedDateOption) {
     case 'today':
@@ -139,7 +161,10 @@ const getDisplayDate = () => {
     case 'yesterday':
       return 'Yesterday';
     case 'custom':
-      return new Date(customEntryDate).toLocaleDateString();
+      {
+        const parsed = parseYMD(customEntryDate);
+        return parsed ? parsed.toLocaleDateString() : 'Select date';
+      }
     default:
       return 'Today';
   }
@@ -1395,26 +1420,17 @@ return (
                       <button
                         type="button"
                         onClick={() => {
-                          const currentDate = new Date(customEntryDate);
+                          const currentDate = parseYMD(customEntryDate) ?? new Date();
                           currentDate.setDate(currentDate.getDate() - 1);
-                          setCustomEntryDate(currentDate.toISOString().split('T')[0]);
-                          
-                          // Update the selected option based on the new date
-                          const today = new Date();
-                          const yesterday = new Date();
-                          yesterday.setDate(yesterday.getDate() - 1);
-                          
-                          const currentDateStr = currentDate.toISOString().split('T')[0];
-                          const todayStr = today.toISOString().split('T')[0];
-                          const yesterdayStr = yesterday.toISOString().split('T')[0];
-                          
-                          if (currentDateStr === todayStr) {
-                            setSelectedDateOption('today');
-                          } else if (currentDateStr === yesterdayStr) {
-                            setSelectedDateOption('yesterday');
-                          } else {
-                            setSelectedDateOption('custom');
-                          }
+                          const newYmd = toYMD(currentDate);
+                          setCustomEntryDate(newYmd);
+
+                          const todayStr = todayYMD();
+                          const yestStr = yesterdayYMD();
+
+                          if (newYmd === todayStr) setSelectedDateOption('today');
+                          else if (newYmd === yestStr) setSelectedDateOption('yesterday');
+                          else setSelectedDateOption('custom');
                         }}
                         className="flex items-center justify-center w-9 h-9 border rounded-md bg-background hover:bg-muted/50 transition-colors shadow-sm"
                       >
@@ -1444,7 +1460,7 @@ return (
                                   setSelectedDateOption('custom');
                                   setIsDateDropdownOpen(false);
                                 }}
-                                max={new Date().toISOString().split('T')[0]}
+                                max={todayYMD()}
                                 className="w-full text-sm"
                               />
                             </div>
@@ -1456,38 +1472,27 @@ return (
                       <button
                         type="button"
                         onClick={() => {
-                          const currentDate = new Date(customEntryDate);
-                          const today = new Date();
-                          
+                          const currentDate = parseYMD(customEntryDate) ?? new Date();
+                          const todayStr = todayYMD();
                           const currentDateStr = customEntryDate;
-                          const todayStr = today.toISOString().split('T')[0];
-                          
-                          // Only allow moving forward if not already at today's date
+
                           if (currentDateStr < todayStr) {
                             currentDate.setDate(currentDate.getDate() + 1);
-                            const newDateStr = currentDate.toISOString().split('T')[0];
+                            const newDateStr = toYMD(currentDate);
                             setCustomEntryDate(newDateStr);
-                            
-                            // Update the selected option based on the new date
-                            const yesterday = new Date();
-                            yesterday.setDate(yesterday.getDate() - 1);
-                            const yesterdayStr = yesterday.toISOString().split('T')[0];
-                            
-                            if (newDateStr === todayStr) {
-                              setSelectedDateOption('today');
-                            } else if (newDateStr === yesterdayStr) {
-                              setSelectedDateOption('yesterday');
-                            } else {
-                              setSelectedDateOption('custom');
-                            }
+
+                            const yestStr = yesterdayYMD();
+                            if (newDateStr === todayStr) setSelectedDateOption('today');
+                            else if (newDateStr === yestStr) setSelectedDateOption('yesterday');
+                            else setSelectedDateOption('custom');
                           }
                         }}
                         className={`flex items-center justify-center w-9 h-9 border rounded-md transition-colors shadow-sm ${
-                          customEntryDate === new Date().toISOString().split('T')[0]
+                          customEntryDate === todayYMD()
                             ? 'bg-muted/30 cursor-not-allowed opacity-50' 
                             : 'bg-background hover:bg-muted/50 cursor-pointer'
                         }`}
-                        disabled={customEntryDate === new Date().toISOString().split('T')[0]}
+                        disabled={customEntryDate === todayYMD()}
                       >
                         <ChevronDown className="h-4 w-4 -rotate-90" />
                       </button>
