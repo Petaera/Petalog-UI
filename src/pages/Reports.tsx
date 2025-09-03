@@ -910,7 +910,7 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
 
       {/* Revenue Statistics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className="metric-card-financial">
+        {/* <Card className="metric-card-financial">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
             <Badge variant="outline" className="text-financial border-financial">
@@ -921,7 +921,350 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
             <div className="text-2xl font-bold text-financial">₹{filteredData.totalRevenue.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">+12.5% from previous period</p>
           </CardContent>
-        </Card>
+        </Card> */}
+        <Card className="metric-card-financial">
+  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+    <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+    <Badge variant="outline" className="text-financial border-financial">
+      {dateRange === "today"
+        ? "Today"
+        : dateRange === "yesterday"
+        ? "Yesterday"
+        : dateRange === "singleday"
+        ? customFromDate
+          ? format(customFromDate, "PPP")
+          : "Single Day"
+        : dateRange === "last7days"
+        ? "Last 7 Days"
+        : dateRange === "last30days"
+        ? "Last 30 Days"
+        : dateRange === "custom" && customFromDate && customToDate
+        ? `${format(customFromDate, "dd MMM yyyy")} - ${format(customToDate, "dd MMM yyyy")}`
+        : "Filtered Period"}
+    </Badge>
+  </CardHeader>
+  <CardContent>
+    <div className="text-2xl font-bold text-financial">
+      ₹{filteredData.totalRevenue.toLocaleString()}
+    </div>
+    {/* --- Revenue Comparison Section --- */}
+    {(() => {
+      // Use the same filters as getFilteredData, except for date
+      let baseFilteredLogs = [...logs];
+      // Location filter
+      const currentLocation = user?.role === 'manager'
+        ? user?.assigned_location
+        : (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
+      if (currentLocation) {
+        baseFilteredLogs = baseFilteredLogs.filter(log => log.location_id === currentLocation);
+      }
+      // Approval status
+      baseFilteredLogs = baseFilteredLogs.filter(log => log.approval_status === 'approved');
+      // Vehicle type
+      if (vehicleType !== "all") {
+        baseFilteredLogs = baseFilteredLogs.filter(log =>
+          (log.vehicle_type || '').toString().trim().toLowerCase() === vehicleType.trim().toLowerCase()
+        );
+      }
+      // Service
+      if (service !== "all") {
+        baseFilteredLogs = baseFilteredLogs.filter(log =>
+          (log.service || '').toString().trim().toLowerCase() === service.trim().toLowerCase()
+        );
+      }
+      // Entry type
+      if (entryType !== "all") {
+        baseFilteredLogs = baseFilteredLogs.filter(log =>
+          (log.entry_type || '').toString().trim().toLowerCase() === entryType.trim().toLowerCase()
+        );
+      }
+      // Manager
+      if (manager !== "all") {
+        baseFilteredLogs = baseFilteredLogs.filter(log => log.created_by === manager);
+      }
+
+      // Helper to get revenue for a specific date (full day)
+      const getRevenueForDate = (date: Date) => {
+        const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+        return baseFilteredLogs
+          .filter(
+            log =>
+              new Date(log.created_at) >= start &&
+              new Date(log.created_at) < end
+          )
+          .reduce((sum, log) => sum + (log.Amount || 0), 0);
+      };
+
+      // Helper to get revenue for a range (inclusive of start, exclusive of end)
+      const getRevenueForRange = (start: Date, end: Date) => {
+        return baseFilteredLogs
+          .filter(
+            log =>
+              new Date(log.created_at) >= start &&
+              new Date(log.created_at) < end
+          )
+          .reduce((sum, log) => sum + (log.Amount || 0), 0);
+      };
+
+      // Arrow and color helpers
+      const Arrow = ({ change }: { change: number }) =>
+        change > 0 ? (
+          <span className="text-green-600 ml-1">&#8593;</span>
+        ) : change < 0 ? (
+          <span className="text-red-600 ml-1">&#8595;</span>
+        ) : (
+          <span className="text-muted-foreground ml-1">&#8596;</span>
+        );
+
+      // Percentage change helpers
+      const getChange = (current: number, prev: number) => {
+        if (prev === 0) return current === 0 ? 0 : 100;
+        return ((current - prev) / prev) * 100;
+      };
+
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+      // TODAY
+      if (dateRange === "today") {
+        const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+        const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const todayRevenue = getRevenueForDate(today);
+        const yesterdayRevenue = getRevenueForDate(yesterday);
+        const lastWeekRevenue = getRevenueForDate(lastWeek);
+        const yChange = getChange(todayRevenue, yesterdayRevenue);
+        const lwChange = getChange(todayRevenue, lastWeekRevenue);
+
+        return (
+          <div className="space-y-1 mt-2">
+            <div className="flex items-center text-xs">
+              <span className="text-muted-foreground mr-1">Yesterday:</span>
+              <span className="font-semibold">
+                ₹{yesterdayRevenue.toLocaleString()}
+              </span>
+              <Arrow change={yChange} />
+              <span
+                className={
+                  "ml-1 font-medium " +
+                  (yChange > 0
+                    ? "text-green-600"
+                    : yChange < 0
+                    ? "text-red-600"
+                    : "text-muted-foreground")
+                }
+              >
+                {Math.abs(yChange).toFixed(1)}%
+              </span>
+            </div>
+            <div className="flex items-center text-xs">
+              <span className="text-muted-foreground mr-1">
+                Last {today.toLocaleString("en-US", { weekday: "long" })}:
+              </span>
+              <span className="font-semibold">
+                ₹{lastWeekRevenue.toLocaleString()}
+              </span>
+              <Arrow change={lwChange} />
+              <span
+                className={
+                  "ml-1 font-medium " +
+                  (lwChange > 0
+                    ? "text-green-600"
+                    : lwChange < 0
+                    ? "text-red-600"
+                    : "text-muted-foreground")
+                }
+              >
+                {Math.abs(lwChange).toFixed(1)}%
+              </span>
+            </div>
+          </div>
+        );
+      }
+
+      // YESTERDAY
+      if (dateRange === "yesterday") {
+        const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+        const dayBefore = new Date(yesterday.getTime() - 24 * 60 * 60 * 1000);
+        const lastWeek = new Date(yesterday.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const yesterdayRevenue = getRevenueForDate(yesterday);
+        const dayBeforeRevenue = getRevenueForDate(dayBefore);
+        const lastWeekRevenue = getRevenueForDate(lastWeek);
+        const yChange = getChange(yesterdayRevenue, dayBeforeRevenue);
+        const lwChange = getChange(yesterdayRevenue, lastWeekRevenue);
+
+        return (
+          <div className="space-y-1 mt-2">
+            <div className="flex items-center text-xs">
+              <span className="text-muted-foreground mr-1">Day Before:</span>
+              <span className="font-semibold">
+                ₹{dayBeforeRevenue.toLocaleString()}
+              </span>
+              <Arrow change={yChange} />
+              <span
+                className={
+                  "ml-1 font-medium " +
+                  (yChange > 0
+                    ? "text-green-600"
+                    : yChange < 0
+                    ? "text-red-600"
+                    : "text-muted-foreground")
+                }
+              >
+                {Math.abs(yChange).toFixed(1)}%
+              </span>
+            </div>
+            <div className="flex items-center text-xs">
+              <span className="text-muted-foreground mr-1">
+                Last {yesterday.toLocaleString("en-US", { weekday: "long" })}:
+              </span>
+              <span className="font-semibold">
+                ₹{lastWeekRevenue.toLocaleString()}
+              </span>
+              <Arrow change={lwChange} />
+              <span
+                className={
+                  "ml-1 font-medium " +
+                  (lwChange > 0
+                    ? "text-green-600"
+                    : lwChange < 0
+                    ? "text-red-600"
+                    : "text-muted-foreground")
+                }
+              >
+                {Math.abs(lwChange).toFixed(1)}%
+              </span>
+            </div>
+          </div>
+        );
+      }
+
+      // SINGLEDAY
+      if (dateRange === "singleday" && customFromDate) {
+        const singleDay = new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate());
+        const prevDay = new Date(singleDay.getTime() - 24 * 60 * 60 * 1000);
+        const lastWeek = new Date(singleDay.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const singleDayRevenue = getRevenueForDate(singleDay);
+        const prevDayRevenue = getRevenueForDate(prevDay);
+        const lastWeekRevenue = getRevenueForDate(lastWeek);
+        const yChange = getChange(singleDayRevenue, prevDayRevenue);
+        const lwChange = getChange(singleDayRevenue, lastWeekRevenue);
+
+        return (
+          <div className="space-y-1 mt-2">
+            <div className="flex items-center text-xs">
+              <span className="text-muted-foreground mr-1">Previous Day:</span>
+              <span className="font-semibold">
+                ₹{prevDayRevenue.toLocaleString()}
+              </span>
+              <Arrow change={yChange} />
+              <span
+                className={
+                  "ml-1 font-medium " +
+                  (yChange > 0
+                    ? "text-green-600"
+                    : yChange < 0
+                    ? "text-red-600"
+                    : "text-muted-foreground")
+                }
+              >
+                {Math.abs(yChange).toFixed(1)}%
+              </span>
+            </div>
+            <div className="flex items-center text-xs">
+              <span className="text-muted-foreground mr-1">
+                Last {singleDay.toLocaleString("en-US", { weekday: "long" })}:
+              </span>
+              <span className="font-semibold">
+                ₹{lastWeekRevenue.toLocaleString()}
+              </span>
+              <Arrow change={lwChange} />
+              <span
+                className={
+                  "ml-1 font-medium " +
+                  (lwChange > 0
+                    ? "text-green-600"
+                    : lwChange < 0
+                    ? "text-red-600"
+                    : "text-muted-foreground")
+                }
+              >
+                {Math.abs(lwChange).toFixed(1)}%
+              </span>
+            </div>
+          </div>
+        );
+      }
+
+      // LAST 7/30 DAYS & CUSTOM
+      if (
+        dateRange === "last7days" ||
+        dateRange === "last30days" ||
+        (dateRange === "custom" && customFromDate && customToDate)
+      ) {
+        let rangeDays = 7;
+        if (dateRange === "last30days") rangeDays = 30;
+        if (dateRange === "custom" && customFromDate && customToDate) {
+          rangeDays =
+            Math.ceil(
+              (customToDate.getTime() -
+                customFromDate.getTime()) /
+                (24 * 60 * 60 * 1000)
+            ) + 1;
+        }
+
+        // Current period
+        let periodStart: Date, periodEnd: Date;
+        if (dateRange === "custom" && customFromDate && customToDate) {
+          periodStart = new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate());
+          periodEnd = new Date(customToDate.getFullYear(), customToDate.getMonth(), customToDate.getDate() + 1);
+        } else {
+          periodEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000); // tomorrow 00:00
+          periodStart = new Date(periodEnd.getTime() - rangeDays * 24 * 60 * 60 * 1000);
+        }
+
+        // Previous period: strictly before current period, same length
+        const prevPeriodEnd = new Date(periodStart.getTime());
+        const prevPeriodStart = new Date(
+          prevPeriodEnd.getTime() - rangeDays * 24 * 60 * 60 * 1000
+        );
+
+        const currentRevenue = getRevenueForRange(periodStart, periodEnd);
+        const prevRevenue = getRevenueForRange(prevPeriodStart, prevPeriodEnd);
+        const change = getChange(currentRevenue, prevRevenue);
+
+        return (
+          <div className="space-y-1 mt-2">
+            <div className="flex items-center text-xs">
+              <span className="text-muted-foreground mr-1">
+                Previous {rangeDays} days:
+              </span>
+              <span className="font-semibold">
+                ₹{prevRevenue.toLocaleString()}
+              </span>
+              <Arrow change={change} />
+              <span
+                className={
+                  "ml-1 font-medium " +
+                  (change > 0
+                    ? "text-green-600"
+                    : change < 0
+                    ? "text-red-600"
+                    : "text-muted-foreground")
+                }
+              >
+                {Math.abs(change).toFixed(1)}%
+              </span>
+            </div>
+          </div>
+        );
+      }
+
+      // Default: nothing
+      return null;
+    })()}
+  </CardContent>
+</Card>
 
         <Card className="metric-card-success">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
