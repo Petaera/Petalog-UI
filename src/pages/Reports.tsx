@@ -407,28 +407,78 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
   };
 
   const exportToCSV = () => {
-    const csvData = filteredData.filteredVehicles.map(vehicle => ({
-      'Vehicle Number': vehicle.vehicle_number,
-      'Owner Name': vehicle.owner_name,
-      'Phone': vehicle.phone_number,
-      'Vehicle Type': vehicle.vehicle_type,
-      'Service Type': vehicle.service_type,
-      'Price': vehicle.price,
-      'Entry Type': vehicle.entry_type,
-      'Date': format(new Date(vehicle.created_at), 'dd/MM/yyyy HH:mm'),
-      'Location': locations.find(loc => loc.id === vehicle.location_id)?.name || 'Unknown'
+    // Use the already filtered data from getFilteredData() but get the original logs
+    // We need to map back from filtered vehicles to their original log entries
+    const filteredVehicleIds = filteredData.filteredVehicles.map(v => v.id);
+    
+    // Get the original log entries for these filtered vehicles
+    const filteredLogs = logs.filter(log => filteredVehicleIds.includes(log.id));
+
+    // Helper function to escape CSV values
+    const escapeCSV = (value: any) => {
+      if (value === null || value === undefined) return '';
+      const stringValue = String(value).trim();
+      
+      // If the value contains comma, quote, or newline, wrap it in quotes and escape internal quotes
+      if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n') || stringValue.includes('\r')) {
+        // Remove any existing newlines and carriage returns, then escape quotes
+        const cleanValue = stringValue.replace(/[\r\n]/g, ' ').replace(/"/g, '""');
+        return `"${cleanValue}"`;
+      }
+      return stringValue;
+    };
+
+    // Create CSV data with all required fields
+    const csvData = filteredLogs.map(log => ({
+      'Vehicle Number': escapeCSV(log.vehicle_number),
+      'Owner Name': escapeCSV(log.Name),
+      'Phone': escapeCSV(log.Phone_no),
+      'Vehicle Model': escapeCSV(log.vehicle_model),
+      'Service Type': escapeCSV(log.service),
+      'Price': escapeCSV(log.Amount),
+      'Payment Mode': escapeCSV(log.payment_mode),
+      'UPI Account': escapeCSV(log.workshop),
+      'Entry Type': escapeCSV(log.entry_type),
+      'Date': escapeCSV(format(new Date(log.created_at), 'dd/MM/yyyy HH:mm')),
+      'Location': escapeCSV(locations.find(loc => loc.id === log.location_id)?.name || 'Unknown')
     }));
     
+    // Generate CSV string with proper row handling
+    const headers = Object.keys(csvData[0] || {});
+    const csvRows = csvData.map(row => 
+      headers.map(header => row[header as keyof typeof row])
+    );
+    
     const csvString = [
-      Object.keys(csvData[0] || {}).join(','),
-      ...csvData.map(row => Object.values(row).join(','))
+      headers.join(','),
+      ...csvRows.map(row => row.join(','))
     ].join('\n');
     
-    const blob = new Blob([csvString], { type: 'text/csv' });
+    // Generate filename based on the actual date range being exported
+    let filename = 'car-wash-report';
+    
+    if (dateRange === "today") {
+      filename += `-${format(new Date(), 'dd-MM-yyyy')}`;
+    } else if (dateRange === "yesterday") {
+      const yesterday = new Date(new Date().getTime() - 24 * 60 * 60 * 1000);
+      filename += `-${format(yesterday, 'dd-MM-yyyy')}`;
+    } else if (dateRange === "last7days") {
+      const weekAgo = new Date(new Date().getTime() - 7 * 24 * 60 * 60 * 1000);
+      filename += `-${format(weekAgo, 'dd-MM-yyyy')}-to-${format(new Date(), 'dd-MM-yyyy')}`;
+    } else if (dateRange === "last30days") {
+      const monthAgo = new Date(new Date().getTime() - 30 * 24 * 60 * 60 * 1000);
+      filename += `-${format(monthAgo, 'dd-MM-yyyy')}-to-${format(new Date(), 'dd-MM-yyyy')}`;
+    } else if (dateRange === "custom" && customFromDate && customToDate) {
+      filename += `-${format(customFromDate, 'dd-MM-yyyy')}-to-${format(customToDate, 'dd-MM-yyyy')}`;
+    } else {
+      filename += `-${format(new Date(), 'dd-MM-yyyy')}`;
+    }
+    
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `car-wash-report-${format(new Date(), 'dd-MM-yyyy')}.csv`;
+    a.download = `${filename}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
@@ -826,7 +876,9 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
                       <td className="p-2">
                         <div>
                           <p className="font-medium">{vehicle.owner_name}</p>
-                          <p className="text-xs text-muted-foreground">{vehicle.phone_number}</p>
+                          <a href={`tel:${vehicle.phone_number}`} className="text-xs text-muted-foreground hover:text-primary">
+                            {vehicle.phone_number}
+                          </a>
                         </div>
                       </td>
                       <td className="p-2">
