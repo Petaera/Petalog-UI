@@ -2149,98 +2149,139 @@ useEffect(() => {
         </Card>
       )}
 
-      {/* Records Table */}
+      {/* Records Table with Pagination */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Vehicle Records ({filteredData.filteredVehicles.length} records)</CardTitle>
             <Badge variant="secondary">
-              {loading ? "Loading..." : `${filteredData.filteredVehicles.length} of ${vehicles.length} records`}
+              {loading ? "Loading..." : `${filteredData.filteredVehicles.length} filtered records`}
             </Badge>
           </div>
         </CardHeader>
         <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center p-8">
-              <Loader2 className="h-8 w-8 animate-spin" />
-              <span className="ml-2">Loading records...</span>
-            </div>
-          ) : filteredData.filteredVehicles.length === 0 ? (
-            <div className="text-center p-8 text-muted-foreground">
-              <Car className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No records found matching your filters</p>
-              <Button variant="outline" onClick={clearFilters} className="mt-4">
-                Clear Filters
-              </Button>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left p-2 font-medium">Vehicle No.</th>
-                    <th className="text-left p-2 font-medium">Model</th>
-                    <th className="text-left p-2 font-medium">Service</th>
-                    <th className="text-left p-2 font-medium">Amount</th>
-                    <th className="text-left p-2 font-medium">Owner</th>
-                    {/* <th className="text-left p-2 font-medium">Entry Type</th> */}
-                    <th className="text-left p-2 font-medium">Date</th>
-                    <th className="text-left p-2 font-medium">Location</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredData.filteredVehicles.slice(0, 50).map((vehicle) => (
-                    <tr key={vehicle.id} className="border-b hover:bg-accent/50">
-                      <td className="p-2 font-mono text-sm">{vehicle.vehicle_number}</td>
+          {/* Pagination State */}
+          {(() => {
+            // Pagination state hooks
+            const [page, setPage] = useState(1);
+            const rowsPerPage = 25;
+            const total = filteredData.filteredVehicles.length;
+            const totalPages = Math.ceil(total / rowsPerPage);
+            const pagedVehicles = filteredData.filteredVehicles.slice((page - 1) * rowsPerPage, page * rowsPerPage);
 
-                      <td className="p-2">
-                        <Badge variant="outline">{vehicle.vehicle_model || 'N/A'}</Badge>
-                      </td>
-                      <td className="p-2">{vehicle.service_type}</td>
-                      <td className="p-2 font-semibold text-financial">
-                        {/* Amount */}
-                        {vehicle.price && vehicle.price > 0 ? `₹${vehicle.price.toLocaleString()}` : "-"}
-                        {/* Payment Method & UPI Account */}
-                        <div className="mt-1 text-xs text-muted-foreground font-normal">
-                          Payment: {(() => {
-                            // Find the corresponding log entry for payment info
-                            const logEntry = logs.find(log => log.id === vehicle.id);
-                            if (!logEntry) return "-";
-                            const mode = logEntry.payment_mode ? logEntry.payment_mode.toUpperCase() : "-";
-                            if (logEntry.payment_mode === "upi" && logEntry.upi_account_name) {
-                              return (
-                                <>
-                                  {mode} <span className="font-medium">{logEntry.upi_account_name}</span>
-                                </>
-                              );
-                            }
-                            return mode;
-                          })()}
-                        </div>
-                      </td>
-                      <td className="p-2">
-                        <div>
-                          <p className="font-medium">{vehicle.owner_name}</p>
-                          <p className="text-xs text-muted-foreground">{vehicle.phone_number}</p>
-                        </div>
-                      </td>
-                      <td className="p-2 text-sm">
-                        {format(new Date(vehicle.created_at), 'dd/MM/yy hh:mm a')}
-                      </td>
-                      <td className="p-2 text-sm">
-                        {locations.find(loc => loc.id === vehicle.location_id)?.name || 'Unknown'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {filteredData.filteredVehicles.length > 50 && (
-                <div className="text-center p-4 text-muted-foreground">
-                  Showing first 50 records of {filteredData.filteredVehicles.length} total
+            // Reset page if filter changes and page is out of range
+            useEffect(() => {
+              if (page > totalPages) setPage(1);
+            }, [totalPages]);
+
+            if (loading) {
+              return (
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                  <span className="ml-2">Loading records...</span>
                 </div>
-              )}
-            </div>
-          )}
+              );
+            }
+            if (total === 0) {
+              return (
+                <div className="text-center p-8 text-muted-foreground">
+                  <Car className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No records found matching your filters</p>
+                  <Button variant="outline" onClick={clearFilters} className="mt-4">
+                    Clear Filters
+                  </Button>
+                </div>
+              );
+            }
+            return (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left p-2 font-medium">Vehicle No.</th>
+                        <th className="text-left p-2 font-medium">Model</th>
+                        <th className="text-left p-2 font-medium">Service</th>
+                        <th className="text-left p-2 font-medium">Amount</th>
+                        <th className="text-left p-2 font-medium">Owner</th>
+                        {/* <th className="text-left p-2 font-medium">Entry Type</th> */}
+                        <th className="text-left p-2 font-medium">Date</th>
+                        <th className="text-left p-2 font-medium">Location</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pagedVehicles.map((vehicle) => (
+                        <tr key={vehicle.id} className="border-b hover:bg-accent/50">
+                          <td className="p-2 font-mono text-sm">{vehicle.vehicle_number}</td>
+                          <td className="p-2">
+                            <Badge variant="outline">{vehicle.vehicle_model || 'N/A'}</Badge>
+                          </td>
+                          <td className="p-2">{vehicle.service_type}</td>
+                          <td className="p-2 font-semibold text-financial">
+                            {/* Amount */}
+                            {vehicle.price && vehicle.price > 0 ? `₹${vehicle.price.toLocaleString()}` : "-"}
+                            {/* Payment Method & UPI Account */}
+                            <div className="mt-1 text-xs text-muted-foreground font-normal">
+                              Payment: {(() => {
+                                // Find the corresponding log entry for payment info
+                                const logEntry = logs.find(log => log.id === vehicle.id);
+                                if (!logEntry) return "-";
+                                const mode = logEntry.payment_mode ? logEntry.payment_mode.toUpperCase() : "-";
+                                if (logEntry.payment_mode === "upi" && logEntry.upi_account_name) {
+                                  return (
+                                    <>
+                                      {mode} <span className="font-medium">{logEntry.upi_account_name}</span>
+                                    </>
+                                  );
+                                }
+                                return mode;
+                              })()}
+                            </div>
+                          </td>
+                          <td className="p-2">
+                            <div>
+                              <p className="font-medium">{vehicle.owner_name}</p>
+                              <p className="text-xs text-muted-foreground">{vehicle.phone_number}</p>
+                            </div>
+                          </td>
+                          <td className="p-2 text-sm">
+                            {format(new Date(vehicle.created_at), 'dd/MM/yy hh:mm a')}
+                          </td>
+                          <td className="p-2 text-sm">
+                            {locations.find(loc => loc.id === vehicle.location_id)?.name || 'Unknown'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Pagination Controls */}
+                <div className="flex items-center justify-between mt-4">
+                  <div className="text-sm text-muted-foreground">
+                    Page {page} of {totalPages} ({pagedVehicles.length} shown)
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage(page - 1)}
+                      disabled={page === 1}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage(page + 1)}
+                      disabled={page === totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
         </CardContent>
       </Card>
     </div>

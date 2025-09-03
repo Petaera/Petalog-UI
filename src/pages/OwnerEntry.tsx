@@ -1796,16 +1796,18 @@ return (
                 <div className="space-y-2">
                 <Label htmlFor="customerName">Customer Name (Optional)</Label>
                 <Input
-                  id="customerName"
-                  placeholder="Enter customer name"
-                  value={customerName}
-                  onChange={(e) => {
-                    const formattedName = e.target.value
-                      .split(" ")
-                      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-                      .join(" ");
-                    setCustomerName(formattedName);
-                  }}
+  id="customerName"
+  placeholder="Enter customer name"
+  value={customerName}
+  onChange={(e) => {
+    const formattedName = e.target.value
+      .replace(/\s+/g, ' ') // Remove extra spaces
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+    setCustomerName(formattedName);
+  }}
+
                 />
               </div>
                 <div>
