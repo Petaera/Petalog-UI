@@ -14,7 +14,7 @@ import { format } from "date-fns";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 import { useAuth } from '@/contexts/AuthContext';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, XAxis, YAxis,LabelList} from 'recharts';
 import { Switch } from "@/components/ui/switch";
 // Types for our data
 interface Vehicle {
@@ -90,7 +90,7 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
   const [manager, setManager] = useState("all");
   const [customFromDate, setCustomFromDate] = useState<Date>();
   const [customToDate, setCustomToDate] = useState<Date>();
-  
+
   // Data states
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -107,7 +107,7 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
     try {
       console.log('🔄 Starting data fetch from Supabase...');
       setLoading(true);
-      
+
       // Fetch all tables in parallel
       console.log('📡 Fetching from tables: vehicles, logs-man, locations, Service_prices, users');
       const [vehiclesRes, logsRes, locationsRes, servicePricesRes, usersRes] = await Promise.all([
@@ -182,8 +182,8 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
       console.log('🏁 Data fetch process completed');
     }
   };
-// Switch between list and pie chart view for service breakdown
-const [serviceBreakdownView, setServiceBreakdownView] = useState<"list" | "pie">("list");
+  // Switch between list and pie chart view for service breakdown
+  const [serviceBreakdownView, setServiceBreakdownView] = useState<"list" | "pie">("list");
   useEffect(() => {
     fetchAllData();
   }, []);
@@ -191,12 +191,12 @@ const [serviceBreakdownView, setServiceBreakdownView] = useState<"list" | "pie">
   // Filter data based on current selections
   const getFilteredData = () => {
     let filteredLogs = [...logs];
-    
+
     console.log('🔍 Starting data filtering with logs:', filteredLogs.length, 'records');
 
     // Apply search filter
     if (searchTerm) {
-      filteredLogs = filteredLogs.filter(log => 
+      filteredLogs = filteredLogs.filter(log =>
         log.vehicle_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         log.Name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         String(log.Phone_no || '').includes(searchTerm)
@@ -204,91 +204,91 @@ const [serviceBreakdownView, setServiceBreakdownView] = useState<"list" | "pie">
       console.log('🔍 After search filter:', filteredLogs.length, 'records');
     }
 
-// Apply date range filter
-const now = new Date();
-const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    // Apply date range filter
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-if (dateRange === "today") {
-  filteredLogs = filteredLogs.filter(log => {
-    const logDate = new Date(log.created_at);
-    const logDateOnly = new Date(logDate.getFullYear(), logDate.getMonth(), logDate.getDate());
-    return logDateOnly.getTime() === today.getTime();
-  });
+    if (dateRange === "today") {
+      filteredLogs = filteredLogs.filter(log => {
+        const logDate = new Date(log.created_at);
+        const logDateOnly = new Date(logDate.getFullYear(), logDate.getMonth(), logDate.getDate());
+        return logDateOnly.getTime() === today.getTime();
+      });
 
-} else if (dateRange === "yesterday") {
-  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-  filteredLogs = filteredLogs.filter(log => {
-    const logDate = new Date(log.created_at);
-    return logDate >= yesterday && logDate < today;
-  });
+    } else if (dateRange === "yesterday") {
+      const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+      filteredLogs = filteredLogs.filter(log => {
+        const logDate = new Date(log.created_at);
+        return logDate >= yesterday && logDate < today;
+      });
 
-} else if (dateRange === "last7days") {
-  const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-  filteredLogs = filteredLogs.filter(log => {
-    const logDate = new Date(log.created_at);
-    return logDate >= weekAgo;
-  });
+    } else if (dateRange === "last7days") {
+      const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+      filteredLogs = filteredLogs.filter(log => {
+        const logDate = new Date(log.created_at);
+        return logDate >= weekAgo;
+      });
 
-} else if (dateRange === "last30days") {
-  const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-  filteredLogs = filteredLogs.filter(log => {
-    const logDate = new Date(log.created_at);
-    return logDate >= monthAgo;
-  });
+    } else if (dateRange === "last30days") {
+      const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+      filteredLogs = filteredLogs.filter(log => {
+        const logDate = new Date(log.created_at);
+        return logDate >= monthAgo;
+      });
 
-} else if (dateRange === "singleday" && customFromDate) {
-  // ✅ Single day (from = to = selected date)
-  const singleDay = new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate());
-  const nextDay = new Date(singleDay.getTime() + 24 * 60 * 60 * 1000);
+    } else if (dateRange === "singleday" && customFromDate) {
+      // ✅ Single day (from = to = selected date)
+      const singleDay = new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate());
+      const nextDay = new Date(singleDay.getTime() + 24 * 60 * 60 * 1000);
 
-  filteredLogs = filteredLogs.filter(log => {
-    const logDate = new Date(log.created_at);
-    return logDate >= singleDay && logDate < nextDay;
-  });
+      filteredLogs = filteredLogs.filter(log => {
+        const logDate = new Date(log.created_at);
+        return logDate >= singleDay && logDate < nextDay;
+      });
 
-} else if (dateRange === "custom" && (customFromDate || customToDate)) {
-  // ✅ Custom range (support partial selection too)
-  const from = customFromDate 
-    ? new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate()) 
-    : null;
-  const to = customToDate 
-    ? new Date(customToDate.getFullYear(), customToDate.getMonth(), customToDate.getDate()) 
-    : null;
+    } else if (dateRange === "custom" && (customFromDate || customToDate)) {
+      // ✅ Custom range (support partial selection too)
+      const from = customFromDate
+        ? new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate())
+        : null;
+      const to = customToDate
+        ? new Date(customToDate.getFullYear(), customToDate.getMonth(), customToDate.getDate())
+        : null;
 
-  filteredLogs = filteredLogs.filter(log => {
-    const logDate = new Date(log.created_at);
+      filteredLogs = filteredLogs.filter(log => {
+        const logDate = new Date(log.created_at);
 
-    if (from && to) {
-      // Fix: Make 'to' exclusive by adding 1 day
-      const nextDayAfterTo = new Date(to.getTime() + 24 * 60 * 60 * 1000);
-      return logDate >= from && logDate < nextDayAfterTo;
-    } else if (from) {
-      const nextDay = new Date(from.getTime() + 24 * 60 * 60 * 1000);
-      return logDate >= from && logDate < nextDay;
-    } else if (to) {
-      const nextDayAfterTo = new Date(to.getTime() + 24 * 60 * 60 * 1000);
-      return logDate < nextDayAfterTo;
+        if (from && to) {
+          // Fix: Make 'to' exclusive by adding 1 day
+          const nextDayAfterTo = new Date(to.getTime() + 24 * 60 * 60 * 1000);
+          return logDate >= from && logDate < nextDayAfterTo;
+        } else if (from) {
+          const nextDay = new Date(from.getTime() + 24 * 60 * 60 * 1000);
+          return logDate >= from && logDate < nextDay;
+        } else if (to) {
+          const nextDayAfterTo = new Date(to.getTime() + 24 * 60 * 60 * 1000);
+          return logDate < nextDayAfterTo;
+        }
+        return true;
+      });
     }
-    return true;
-  });
-}
 
-console.log("🔍 After date filter:", filteredLogs.length, "records");
+    console.log("🔍 After date filter:", filteredLogs.length, "records");
     // Apply other filters
     // Get the current location from the toolbar context
-    const currentLocation = user?.role === 'manager' ? user?.assigned_location : 
-                          (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
-    
+    const currentLocation = user?.role === 'manager' ? user?.assigned_location :
+      (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
+
     if (currentLocation) {
       filteredLogs = filteredLogs.filter(log => log.location_id === currentLocation);
       console.log('🔍 After location filter:', filteredLogs.length, 'records');
     }
 
-         // Only count approved/closed tickets for revenue calculations (including Pay Later/credit for display)
-     filteredLogs = filteredLogs.filter(log => 
-       log.approval_status === 'approved'
-     );
-     console.log('🔍 After approval status filter (only approved/closed tickets):', filteredLogs.length, 'records');
+    // Only count approved/closed tickets for revenue calculations (including Pay Later/credit for display)
+    filteredLogs = filteredLogs.filter(log =>
+      log.approval_status === 'approved'
+    );
+    console.log('🔍 After approval status filter (only approved/closed tickets):', filteredLogs.length, 'records');
 
     if (vehicleType !== "all") {
       filteredLogs = filteredLogs.filter(log => {
@@ -322,57 +322,57 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
       console.log('🔍 After manager filter:', filteredLogs.length, 'records');
     }
 
-         console.log('📊 Final filtered data:', filteredLogs.length, 'records');
-     
-     // Debug: Log all unique payment modes found
-     const uniquePaymentModes = [...new Set(filteredLogs.map(log => log.payment_mode))];
-     console.log('🔍 Unique payment modes found:', uniquePaymentModes);
+    console.log('📊 Final filtered data:', filteredLogs.length, 'records');
+
+    // Debug: Log all unique payment modes found
+    const uniquePaymentModes = [...new Set(filteredLogs.map(log => log.payment_mode))];
+    console.log('🔍 Unique payment modes found:', uniquePaymentModes);
 
     // Calculate statistics
     const totalRevenue = filteredLogs.reduce((sum, log) => sum + (log.Amount || 0), 0);
     const totalVehicles = filteredLogs.length;
     const avgService = totalVehicles > 0 ? totalRevenue / totalVehicles : 0;
 
-         // Payment mode breakdown
-     const paymentModeBreakdown = filteredLogs.reduce((acc, log) => {
-       const paymentMode = log.payment_mode || 'Cash';
-       const normalizedMode = paymentMode.toLowerCase();
-       
-       // Debug logging for payment modes
-       console.log('🔍 Processing payment mode:', {
-         original: paymentMode,
-         normalized: normalizedMode,
-         amount: log.Amount,
-         vehicleNumber: log.vehicle_number
-       });
-       
-       if (!acc[normalizedMode]) {
-         acc[normalizedMode] = { 
-           mode: paymentMode, // Keep original case for display
-           count: 0, 
-           revenue: 0,
-           upiAccounts: {} // For UPI breakdown by account
-         };
-       }
-       
-       acc[normalizedMode].count++;
-       acc[normalizedMode].revenue += log.Amount || 0;
-       
-       // If it's UPI, track by account
-       if (normalizedMode === 'upi' && log.upi_account_name) {
-         const accountName = log.upi_account_name;
-         if (!acc[normalizedMode].upiAccounts[accountName]) {
-           acc[normalizedMode].upiAccounts[accountName] = { count: 0, revenue: 0 };
-         }
-         acc[normalizedMode].upiAccounts[accountName].count++;
-         acc[normalizedMode].upiAccounts[accountName].revenue += log.Amount || 0;
-       }
-       
-       return acc;
-     }, {} as Record<string, any>);
-     
-     // Debug logging for final breakdown
-     console.log('📊 Final payment mode breakdown:', paymentModeBreakdown);
+    // Payment mode breakdown
+    const paymentModeBreakdown = filteredLogs.reduce((acc, log) => {
+      const paymentMode = log.payment_mode || 'Cash';
+      const normalizedMode = paymentMode.toLowerCase();
+
+      // Debug logging for payment modes
+      console.log('🔍 Processing payment mode:', {
+        original: paymentMode,
+        normalized: normalizedMode,
+        amount: log.Amount,
+        vehicleNumber: log.vehicle_number
+      });
+
+      if (!acc[normalizedMode]) {
+        acc[normalizedMode] = {
+          mode: paymentMode, // Keep original case for display
+          count: 0,
+          revenue: 0,
+          upiAccounts: {} // For UPI breakdown by account
+        };
+      }
+
+      acc[normalizedMode].count++;
+      acc[normalizedMode].revenue += log.Amount || 0;
+
+      // If it's UPI, track by account
+      if (normalizedMode === 'upi' && log.upi_account_name) {
+        const accountName = log.upi_account_name;
+        if (!acc[normalizedMode].upiAccounts[accountName]) {
+          acc[normalizedMode].upiAccounts[accountName] = { count: 0, revenue: 0 };
+        }
+        acc[normalizedMode].upiAccounts[accountName].count++;
+        acc[normalizedMode].upiAccounts[accountName].revenue += log.Amount || 0;
+      }
+
+      return acc;
+    }, {} as Record<string, any>);
+
+    // Debug logging for final breakdown
+    console.log('📊 Final payment mode breakdown:', paymentModeBreakdown);
 
     // Service breakdown
     const serviceBreakdown = filteredLogs.reduce((acc, log) => {
@@ -413,7 +413,7 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
       // Find the corresponding service price for this vehicle type and service
       const servicePrice = servicePrices.find(sp => sp.service_name === log.service);
       let calculatedPrice = log.Amount || 0; // Use the actual amount from the log
-      
+
       console.log('🔍 Processing vehicle:', {
         vehicleNumber: log.vehicle_number,
         service: log.service,
@@ -421,12 +421,12 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
         originalAmount: log.Amount,
         servicePriceFound: !!servicePrice
       });
-      
+
       // If we have service price data, use it to validate/calculate the price
       if (servicePrice) {
         const vehicleType = log.vehicle_type?.toLowerCase();
         let expectedPrice = 0;
-        
+
         if (vehicleType === 'car') {
           expectedPrice = servicePrice.car_price;
         } else if (vehicleType === 'bike') {
@@ -436,14 +436,14 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
         } else if (vehicleType === 'truck') {
           expectedPrice = servicePrice.truck_price;
         }
-        
+
         console.log('💰 Price calculation:', {
           vehicleType,
           expectedPrice,
           originalAmount: log.Amount,
           finalPrice: calculatedPrice
         });
-        
+
         // Use the expected price if the log amount seems incorrect (0 or null)
         if (!calculatedPrice || calculatedPrice === 0) {
           calculatedPrice = expectedPrice;
@@ -513,12 +513,12 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
         'Location': locations.find(loc => loc.id === vehicle.location_id)?.name || 'Unknown'
       };
     });
-    
+
     const csvString = [
       Object.keys(csvData[0] || {}).join(','),
       ...csvData.map(row => Object.values(row).join(','))
     ].join('\n');
-    
+
     const blob = new Blob([csvString], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -534,18 +534,18 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
       'Total Revenue': item.revenue,
       'Vehicle Count': item.count,
       'Percentage of Total': `${item.percentage.toFixed(1)}%`,
-      'UPI Accounts': item.mode?.toLowerCase() === 'upi' && Object.keys(item.upiAccounts || {}).length > 0 
-        ? Object.entries(item.upiAccounts).map(([accountName, accountData]: [string, any]) => 
-            `${accountName}: ₹${accountData.revenue} (${accountData.count} vehicles)`
-          ).join('; ')
+      'UPI Accounts': item.mode?.toLowerCase() === 'upi' && Object.keys(item.upiAccounts || {}).length > 0
+        ? Object.entries(item.upiAccounts).map(([accountName, accountData]: [string, any]) =>
+          `${accountName}: ₹${accountData.revenue} (${accountData.count} vehicles)`
+        ).join('; ')
         : 'N/A'
     }));
-    
+
     const csvString = [
       Object.keys(breakdownData[0] || {}).join(','),
       ...breakdownData.map(row => Object.values(row).join(','))
     ].join('\n');
-    
+
     const blob = new Blob([csvString], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -570,7 +570,7 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
             </div>
           </div>
         </div>
-        
+
         <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
           <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mb-4">
             <BarChart3 className="w-8 h-8 text-yellow-600" />
@@ -598,7 +598,7 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
             <h1 className="text-2xl font-bold">Reports & Statistics</h1>
           </div>
         </div>
-        
+
         <div className="flex flex-col sm:flex-row items-center gap-2">
           <Button variant="outline" size="sm" onClick={exportToCSV} disabled={loading}>
             <FileSpreadsheet className="h-4 w-4 mr-2" />
@@ -640,155 +640,155 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            
-             {/* Date Range Filter */}
-       <div className="space-y-3">
-         <Label className="flex items-center gap-2 text-sm font-medium">
-           <Calendar className="h-4 w-4" />
-           Date Range
-         </Label>
-         
-         {/* Date Range Selector */}
-         <Select value={dateRange} onValueChange={setDateRange}>
-           <SelectTrigger className="w-full">
-             <SelectValue placeholder="Select date range" />
-           </SelectTrigger>
-           <SelectContent>
-             <SelectItem value="today">Today</SelectItem>
-             <SelectItem value="yesterday">Yesterday</SelectItem>
-             <SelectItem value="singleday">Single Day</SelectItem>
-             <SelectItem value="last7days">Last 7 Days</SelectItem>
-             <SelectItem value="last30days">Last 30 Days</SelectItem>
-             <SelectItem value="custom">Custom Range</SelectItem>
-           </SelectContent>
-         </Select>
 
-        {/* Single Day Selection */}
-        {dateRange === "singleday" && (
-          <div className="space-y-2 pt-2 p-3 bg-muted/30 rounded-lg border">
-            <Label className="text-xs font-medium text-muted-foreground">Select a specific date</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="w-full justify-start">
-                  {customFromDate ? (
-                    <span className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4" />
-                      {format(customFromDate, "PPP")}
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4" />
-                      Pick a Date
-                    </span>
+            {/* Date Range Filter */}
+            <div className="space-y-3">
+              <Label className="flex items-center gap-2 text-sm font-medium">
+                <Calendar className="h-4 w-4" />
+                Date Range
+              </Label>
+
+              {/* Date Range Selector */}
+              <Select value={dateRange} onValueChange={setDateRange}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select date range" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="yesterday">Yesterday</SelectItem>
+                  <SelectItem value="singleday">Single Day</SelectItem>
+                  <SelectItem value="last7days">Last 7 Days</SelectItem>
+                  <SelectItem value="last30days">Last 30 Days</SelectItem>
+                  <SelectItem value="custom">Custom Range</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Single Day Selection */}
+              {dateRange === "singleday" && (
+                <div className="space-y-2 pt-2 p-3 bg-muted/30 rounded-lg border">
+                  <Label className="text-xs font-medium text-muted-foreground">Select a specific date</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="w-full justify-start">
+                        {customFromDate ? (
+                          <span className="flex items-center gap-2">
+                            <Calendar className="h-4 w-4" />
+                            {format(customFromDate, "PPP")}
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-2">
+                            <Calendar className="h-4 w-4" />
+                            Pick a Date
+                          </span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <CalendarComponent
+                        mode="single"
+                        selected={customFromDate}
+                        onSelect={(date) => {
+                          setCustomFromDate(date);
+                          setCustomToDate(date); // ✅ treat as single-day (from = to)
+                        }}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  {customFromDate && (
+                    <div className="text-xs text-muted-foreground">
+                      Showing data for: <span className="font-medium">{format(customFromDate, "PPP")}</span>
+                    </div>
                   )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <CalendarComponent
-                  mode="single"
-                  selected={customFromDate}
-                  onSelect={(date) => {
-                    setCustomFromDate(date);
-                    setCustomToDate(date); // ✅ treat as single-day (from = to)
+                </div>
+              )}
+
+              {/* Custom Range Selection */}
+              {dateRange === "custom" && (
+                <div className="space-y-2 pt-2 p-3 bg-muted/30 rounded-lg border">
+                  <Label className="text-xs font-medium text-muted-foreground">Select date range</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm" className="w-full justify-start">
+                          {customFromDate ? (
+                            <span className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4" />
+                              {format(customFromDate, "PPP")}
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4" />
+                              From Date
+                            </span>
+                          )}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <CalendarComponent
+                          mode="single"
+                          selected={customFromDate}
+                          onSelect={setCustomFromDate}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm" className="w-full justify-start">
+                          {customToDate ? (
+                            <span className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4" />
+                              {format(customToDate, "PPP")}
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4" />
+                              To Date
+                            </span>
+                          )}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <CalendarComponent
+                          mode="single"
+                          selected={customToDate}
+                          onSelect={setCustomToDate}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  {(customFromDate || customToDate) && (
+                    <div className="text-xs text-muted-foreground">
+                      {customFromDate && customToDate ? (
+                        <>Showing data from <span className="font-medium">{format(customFromDate, "PPP")}</span> to <span className="font-medium">{format(customToDate, "PPP")}</span></>
+                      ) : customFromDate ? (
+                        <>Showing data from <span className="font-medium">{format(customFromDate, "PPP")}</span></>
+                      ) : (
+                        <>Showing data until <span className="font-medium">{format(customToDate, "PPP")}</span></>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Clear Filters Button */}
+              {(dateRange !== "today" || customFromDate || customToDate) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setDateRange("today");
+                    setCustomFromDate(undefined);
+                    setCustomToDate(undefined);
                   }}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
-            {customFromDate && (
-              <div className="text-xs text-muted-foreground">
-                Showing data for: <span className="font-medium">{format(customFromDate, "PPP")}</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Custom Range Selection */}
-        {dateRange === "custom" && (
-          <div className="space-y-2 pt-2 p-3 bg-muted/30 rounded-lg border">
-            <Label className="text-xs font-medium text-muted-foreground">Select date range</Label>
-            <div className="grid grid-cols-2 gap-2">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="w-full justify-start">
-                    {customFromDate ? (
-                      <span className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4" />
-                        {format(customFromDate, "PPP")}
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4" />
-                        From Date
-                      </span>
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <CalendarComponent
-                    mode="single"
-                    selected={customFromDate}
-                    onSelect={setCustomFromDate}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="w-full justify-start">
-                    {customToDate ? (
-                      <span className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4" />
-                        {format(customToDate, "PPP")}
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4" />
-                        To Date
-                      </span>
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <CalendarComponent
-                    mode="single"
-                    selected={customToDate}
-                    onSelect={setCustomToDate}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+                  className="w-full text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Reset to Today
+                </Button>
+              )}
             </div>
-            {(customFromDate || customToDate) && (
-              <div className="text-xs text-muted-foreground">
-                {customFromDate && customToDate ? (
-                  <>Showing data from <span className="font-medium">{format(customFromDate, "PPP")}</span> to <span className="font-medium">{format(customToDate, "PPP")}</span></>
-                ) : customFromDate ? (
-                  <>Showing data from <span className="font-medium">{format(customFromDate, "PPP")}</span></>
-                ) : (
-                  <>Showing data until <span className="font-medium">{format(customToDate, "PPP")}</span></>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Clear Filters Button */}
-        {(dateRange !== "today" || customFromDate || customToDate) && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setDateRange("today");
-              setCustomFromDate(undefined);
-              setCustomToDate(undefined);
-            }}
-            className="w-full text-xs text-muted-foreground hover:text-foreground"
-          >
-            Reset to Today
-          </Button>
-        )}
-      </div>
 
             {/* Vehicle Type Filter */}
             <div className="space-y-2">
@@ -815,7 +815,7 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
                     )]
                       .filter(type => !standardTypes.some(std => std.toLowerCase() === type.toLowerCase()))
                       .sort(); // Sort alphabetically
-                    
+
                     return uniqueTypes.map((type, index) => (
                       <SelectItem key={`vehicle-type-${type}-${index}`} value={type}>{type}</SelectItem>
                     ));
@@ -850,7 +850,7 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
                     )]
                       .filter(service => !standardServices.some(std => std.toLowerCase() === service.toLowerCase()))
                       .sort(); // Sort alphabetically
-                    
+
                     return uniqueServices.map((service, index) => (
                       <SelectItem key={`service-type-${service}-${index}`} value={service}>{service}</SelectItem>
                     ));
@@ -882,7 +882,7 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
                     )]
                       .filter(type => !standardTypes.some(std => std.toLowerCase() === type.toLowerCase()))
                       .sort(); // Sort alphabetically
-                    
+
                     return uniqueTypes.map((type, index) => (
                       <SelectItem key={`entry-type-${type}-${index}`} value={type}>{type}</SelectItem>
                     ));
@@ -925,348 +925,348 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
           </CardContent>
         </Card> */}
         <Card className="metric-card-financial">
-  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-    <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-    <Badge variant="outline" className="text-financial border-financial">
-      {dateRange === "today"
-        ? "Today"
-        : dateRange === "yesterday"
-        ? "Yesterday"
-        : dateRange === "singleday"
-        ? customFromDate
-          ? format(customFromDate, "PPP")
-          : "Single Day"
-        : dateRange === "last7days"
-        ? "Last 7 Days"
-        : dateRange === "last30days"
-        ? "Last 30 Days"
-        : dateRange === "custom" && customFromDate && customToDate
-        ? `${format(customFromDate, "dd MMM yyyy")} - ${format(customToDate, "dd MMM yyyy")}`
-        : "Filtered Period"}
-    </Badge>
-  </CardHeader>
-  <CardContent>
-    <div className="text-2xl font-bold text-financial">
-      ₹{filteredData.totalRevenue.toLocaleString()}
-    </div>
-    {/* --- Revenue Comparison Section --- */}
-    {(() => {
-      // Use the same filters as getFilteredData, except for date
-      let baseFilteredLogs = [...logs];
-      // Location filter
-      const currentLocation = user?.role === 'manager'
-        ? user?.assigned_location
-        : (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
-      if (currentLocation) {
-        baseFilteredLogs = baseFilteredLogs.filter(log => log.location_id === currentLocation);
-      }
-      // Approval status
-      baseFilteredLogs = baseFilteredLogs.filter(log => log.approval_status === 'approved');
-      // Vehicle type
-      if (vehicleType !== "all") {
-        baseFilteredLogs = baseFilteredLogs.filter(log =>
-          (log.vehicle_type || '').toString().trim().toLowerCase() === vehicleType.trim().toLowerCase()
-        );
-      }
-      // Service
-      if (service !== "all") {
-        baseFilteredLogs = baseFilteredLogs.filter(log =>
-          (log.service || '').toString().trim().toLowerCase() === service.trim().toLowerCase()
-        );
-      }
-      // Entry type
-      if (entryType !== "all") {
-        baseFilteredLogs = baseFilteredLogs.filter(log =>
-          (log.entry_type || '').toString().trim().toLowerCase() === entryType.trim().toLowerCase()
-        );
-      }
-      // Manager
-      if (manager !== "all") {
-        baseFilteredLogs = baseFilteredLogs.filter(log => log.created_by === manager);
-      }
-
-      // Helper to get revenue for a specific date (full day)
-      const getRevenueForDate = (date: Date) => {
-        const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-        const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
-        return baseFilteredLogs
-          .filter(
-            log =>
-              new Date(log.created_at) >= start &&
-              new Date(log.created_at) < end
-          )
-          .reduce((sum, log) => sum + (log.Amount || 0), 0);
-      };
-
-      // Helper to get revenue for a range (inclusive of start, exclusive of end)
-      const getRevenueForRange = (start: Date, end: Date) => {
-        return baseFilteredLogs
-          .filter(
-            log =>
-              new Date(log.created_at) >= start &&
-              new Date(log.created_at) < end
-          )
-          .reduce((sum, log) => sum + (log.Amount || 0), 0);
-      };
-
-      // Arrow and color helpers
-      const Arrow = ({ change }: { change: number }) =>
-        change > 0 ? (
-          <span className="text-green-600 ml-1">&#8593;</span>
-        ) : change < 0 ? (
-          <span className="text-red-600 ml-1">&#8595;</span>
-        ) : (
-          <span className="text-muted-foreground ml-1">&#8596;</span>
-        );
-
-      // Percentage change helpers
-      const getChange = (current: number, prev: number) => {
-        if (prev === 0) return current === 0 ? 0 : 100;
-        return ((current - prev) / prev) * 100;
-      };
-
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-      // TODAY
-      if (dateRange === "today") {
-        const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-        const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-        const todayRevenue = getRevenueForDate(today);
-        const yesterdayRevenue = getRevenueForDate(yesterday);
-        const lastWeekRevenue = getRevenueForDate(lastWeek);
-        const yChange = getChange(todayRevenue, yesterdayRevenue);
-        const lwChange = getChange(todayRevenue, lastWeekRevenue);
-
-        return (
-          <div className="space-y-1 mt-2">
-            <div className="flex items-center text-xs">
-              <span className="text-muted-foreground mr-1">Yesterday:</span>
-              <span className="font-semibold">
-                ₹{yesterdayRevenue.toLocaleString()}
-              </span>
-              <Arrow change={yChange} />
-              <span
-                className={
-                  "ml-1 font-medium " +
-                  (yChange > 0
-                    ? "text-green-600"
-                    : yChange < 0
-                    ? "text-red-600"
-                    : "text-muted-foreground")
-                }
-              >
-                {Math.abs(yChange).toFixed(1)}%
-              </span>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+            <Badge variant="outline" className="text-financial border-financial">
+              {dateRange === "today"
+                ? "Today"
+                : dateRange === "yesterday"
+                  ? "Yesterday"
+                  : dateRange === "singleday"
+                    ? customFromDate
+                      ? format(customFromDate, "PPP")
+                      : "Single Day"
+                    : dateRange === "last7days"
+                      ? "Last 7 Days"
+                      : dateRange === "last30days"
+                        ? "Last 30 Days"
+                        : dateRange === "custom" && customFromDate && customToDate
+                          ? `${format(customFromDate, "dd MMM yyyy")} - ${format(customToDate, "dd MMM yyyy")}`
+                          : "Filtered Period"}
+            </Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-financial">
+              ₹{filteredData.totalRevenue.toLocaleString()}
             </div>
-            <div className="flex items-center text-xs">
-              <span className="text-muted-foreground mr-1">
-                Last {today.toLocaleString("en-US", { weekday: "long" })}:
-              </span>
-              <span className="font-semibold">
-                ₹{lastWeekRevenue.toLocaleString()}
-              </span>
-              <Arrow change={lwChange} />
-              <span
-                className={
-                  "ml-1 font-medium " +
-                  (lwChange > 0
-                    ? "text-green-600"
-                    : lwChange < 0
-                    ? "text-red-600"
-                    : "text-muted-foreground")
+            {/* --- Revenue Comparison Section --- */}
+            {(() => {
+              // Use the same filters as getFilteredData, except for date
+              let baseFilteredLogs = [...logs];
+              // Location filter
+              const currentLocation = user?.role === 'manager'
+                ? user?.assigned_location
+                : (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
+              if (currentLocation) {
+                baseFilteredLogs = baseFilteredLogs.filter(log => log.location_id === currentLocation);
+              }
+              // Approval status
+              baseFilteredLogs = baseFilteredLogs.filter(log => log.approval_status === 'approved');
+              // Vehicle type
+              if (vehicleType !== "all") {
+                baseFilteredLogs = baseFilteredLogs.filter(log =>
+                  (log.vehicle_type || '').toString().trim().toLowerCase() === vehicleType.trim().toLowerCase()
+                );
+              }
+              // Service
+              if (service !== "all") {
+                baseFilteredLogs = baseFilteredLogs.filter(log =>
+                  (log.service || '').toString().trim().toLowerCase() === service.trim().toLowerCase()
+                );
+              }
+              // Entry type
+              if (entryType !== "all") {
+                baseFilteredLogs = baseFilteredLogs.filter(log =>
+                  (log.entry_type || '').toString().trim().toLowerCase() === entryType.trim().toLowerCase()
+                );
+              }
+              // Manager
+              if (manager !== "all") {
+                baseFilteredLogs = baseFilteredLogs.filter(log => log.created_by === manager);
+              }
+
+              // Helper to get revenue for a specific date (full day)
+              const getRevenueForDate = (date: Date) => {
+                const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+                const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+                return baseFilteredLogs
+                  .filter(
+                    log =>
+                      new Date(log.created_at) >= start &&
+                      new Date(log.created_at) < end
+                  )
+                  .reduce((sum, log) => sum + (log.Amount || 0), 0);
+              };
+
+              // Helper to get revenue for a range (inclusive of start, exclusive of end)
+              const getRevenueForRange = (start: Date, end: Date) => {
+                return baseFilteredLogs
+                  .filter(
+                    log =>
+                      new Date(log.created_at) >= start &&
+                      new Date(log.created_at) < end
+                  )
+                  .reduce((sum, log) => sum + (log.Amount || 0), 0);
+              };
+
+              // Arrow and color helpers
+              const Arrow = ({ change }: { change: number }) =>
+                change > 0 ? (
+                  <span className="text-green-600 ml-1">&#8593;</span>
+                ) : change < 0 ? (
+                  <span className="text-red-600 ml-1">&#8595;</span>
+                ) : (
+                  <span className="text-muted-foreground ml-1">&#8596;</span>
+                );
+
+              // Percentage change helpers
+              const getChange = (current: number, prev: number) => {
+                if (prev === 0) return current === 0 ? 0 : 100;
+                return ((current - prev) / prev) * 100;
+              };
+
+              const now = new Date();
+              const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+              // TODAY
+              if (dateRange === "today") {
+                const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+                const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+                const todayRevenue = getRevenueForDate(today);
+                const yesterdayRevenue = getRevenueForDate(yesterday);
+                const lastWeekRevenue = getRevenueForDate(lastWeek);
+                const yChange = getChange(todayRevenue, yesterdayRevenue);
+                const lwChange = getChange(todayRevenue, lastWeekRevenue);
+
+                return (
+                  <div className="space-y-1 mt-2">
+                    <div className="flex items-center text-xs">
+                      <span className="text-muted-foreground mr-1">Yesterday:</span>
+                      <span className="font-semibold">
+                        ₹{yesterdayRevenue.toLocaleString()}
+                      </span>
+                      <Arrow change={yChange} />
+                      <span
+                        className={
+                          "ml-1 font-medium " +
+                          (yChange > 0
+                            ? "text-green-600"
+                            : yChange < 0
+                              ? "text-red-600"
+                              : "text-muted-foreground")
+                        }
+                      >
+                        {Math.abs(yChange).toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="flex items-center text-xs">
+                      <span className="text-muted-foreground mr-1">
+                        Last {today.toLocaleString("en-US", { weekday: "long" })}:
+                      </span>
+                      <span className="font-semibold">
+                        ₹{lastWeekRevenue.toLocaleString()}
+                      </span>
+                      <Arrow change={lwChange} />
+                      <span
+                        className={
+                          "ml-1 font-medium " +
+                          (lwChange > 0
+                            ? "text-green-600"
+                            : lwChange < 0
+                              ? "text-red-600"
+                              : "text-muted-foreground")
+                        }
+                      >
+                        {Math.abs(lwChange).toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
+              // YESTERDAY
+              if (dateRange === "yesterday") {
+                const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+                const dayBefore = new Date(yesterday.getTime() - 24 * 60 * 60 * 1000);
+                const lastWeek = new Date(yesterday.getTime() - 7 * 24 * 60 * 60 * 1000);
+                const yesterdayRevenue = getRevenueForDate(yesterday);
+                const dayBeforeRevenue = getRevenueForDate(dayBefore);
+                const lastWeekRevenue = getRevenueForDate(lastWeek);
+                const yChange = getChange(yesterdayRevenue, dayBeforeRevenue);
+                const lwChange = getChange(yesterdayRevenue, lastWeekRevenue);
+
+                return (
+                  <div className="space-y-1 mt-2">
+                    <div className="flex items-center text-xs">
+                      <span className="text-muted-foreground mr-1">Day Before:</span>
+                      <span className="font-semibold">
+                        ₹{dayBeforeRevenue.toLocaleString()}
+                      </span>
+                      <Arrow change={yChange} />
+                      <span
+                        className={
+                          "ml-1 font-medium " +
+                          (yChange > 0
+                            ? "text-green-600"
+                            : yChange < 0
+                              ? "text-red-600"
+                              : "text-muted-foreground")
+                        }
+                      >
+                        {Math.abs(yChange).toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="flex items-center text-xs">
+                      <span className="text-muted-foreground mr-1">
+                        Last {yesterday.toLocaleString("en-US", { weekday: "long" })}:
+                      </span>
+                      <span className="font-semibold">
+                        ₹{lastWeekRevenue.toLocaleString()}
+                      </span>
+                      <Arrow change={lwChange} />
+                      <span
+                        className={
+                          "ml-1 font-medium " +
+                          (lwChange > 0
+                            ? "text-green-600"
+                            : lwChange < 0
+                              ? "text-red-600"
+                              : "text-muted-foreground")
+                        }
+                      >
+                        {Math.abs(lwChange).toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
+              // SINGLEDAY
+              if (dateRange === "singleday" && customFromDate) {
+                const singleDay = new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate());
+                const prevDay = new Date(singleDay.getTime() - 24 * 60 * 60 * 1000);
+                const lastWeek = new Date(singleDay.getTime() - 7 * 24 * 60 * 60 * 1000);
+                const singleDayRevenue = getRevenueForDate(singleDay);
+                const prevDayRevenue = getRevenueForDate(prevDay);
+                const lastWeekRevenue = getRevenueForDate(lastWeek);
+                const yChange = getChange(singleDayRevenue, prevDayRevenue);
+                const lwChange = getChange(singleDayRevenue, lastWeekRevenue);
+
+                return (
+                  <div className="space-y-1 mt-2">
+                    <div className="flex items-center text-xs">
+                      <span className="text-muted-foreground mr-1">Previous Day:</span>
+                      <span className="font-semibold">
+                        ₹{prevDayRevenue.toLocaleString()}
+                      </span>
+                      <Arrow change={yChange} />
+                      <span
+                        className={
+                          "ml-1 font-medium " +
+                          (yChange > 0
+                            ? "text-green-600"
+                            : yChange < 0
+                              ? "text-red-600"
+                              : "text-muted-foreground")
+                        }
+                      >
+                        {Math.abs(yChange).toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="flex items-center text-xs">
+                      <span className="text-muted-foreground mr-1">
+                        Last {singleDay.toLocaleString("en-US", { weekday: "long" })}:
+                      </span>
+                      <span className="font-semibold">
+                        ₹{lastWeekRevenue.toLocaleString()}
+                      </span>
+                      <Arrow change={lwChange} />
+                      <span
+                        className={
+                          "ml-1 font-medium " +
+                          (lwChange > 0
+                            ? "text-green-600"
+                            : lwChange < 0
+                              ? "text-red-600"
+                              : "text-muted-foreground")
+                        }
+                      >
+                        {Math.abs(lwChange).toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
+              // LAST 7/30 DAYS & CUSTOM
+              if (
+                dateRange === "last7days" ||
+                dateRange === "last30days" ||
+                (dateRange === "custom" && customFromDate && customToDate)
+              ) {
+                let rangeDays = 7;
+                if (dateRange === "last30days") rangeDays = 30;
+                if (dateRange === "custom" && customFromDate && customToDate) {
+                  rangeDays =
+                    Math.ceil(
+                      (customToDate.getTime() -
+                        customFromDate.getTime()) /
+                      (24 * 60 * 60 * 1000)
+                    ) + 1;
                 }
-              >
-                {Math.abs(lwChange).toFixed(1)}%
-              </span>
-            </div>
-          </div>
-        );
-      }
 
-      // YESTERDAY
-      if (dateRange === "yesterday") {
-        const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-        const dayBefore = new Date(yesterday.getTime() - 24 * 60 * 60 * 1000);
-        const lastWeek = new Date(yesterday.getTime() - 7 * 24 * 60 * 60 * 1000);
-        const yesterdayRevenue = getRevenueForDate(yesterday);
-        const dayBeforeRevenue = getRevenueForDate(dayBefore);
-        const lastWeekRevenue = getRevenueForDate(lastWeek);
-        const yChange = getChange(yesterdayRevenue, dayBeforeRevenue);
-        const lwChange = getChange(yesterdayRevenue, lastWeekRevenue);
-
-        return (
-          <div className="space-y-1 mt-2">
-            <div className="flex items-center text-xs">
-              <span className="text-muted-foreground mr-1">Day Before:</span>
-              <span className="font-semibold">
-                ₹{dayBeforeRevenue.toLocaleString()}
-              </span>
-              <Arrow change={yChange} />
-              <span
-                className={
-                  "ml-1 font-medium " +
-                  (yChange > 0
-                    ? "text-green-600"
-                    : yChange < 0
-                    ? "text-red-600"
-                    : "text-muted-foreground")
+                // Current period
+                let periodStart: Date, periodEnd: Date;
+                if (dateRange === "custom" && customFromDate && customToDate) {
+                  periodStart = new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate());
+                  periodEnd = new Date(customToDate.getFullYear(), customToDate.getMonth(), customToDate.getDate() + 1);
+                } else {
+                  periodEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000); // tomorrow 00:00
+                  periodStart = new Date(periodEnd.getTime() - rangeDays * 24 * 60 * 60 * 1000);
                 }
-              >
-                {Math.abs(yChange).toFixed(1)}%
-              </span>
-            </div>
-            <div className="flex items-center text-xs">
-              <span className="text-muted-foreground mr-1">
-                Last {yesterday.toLocaleString("en-US", { weekday: "long" })}:
-              </span>
-              <span className="font-semibold">
-                ₹{lastWeekRevenue.toLocaleString()}
-              </span>
-              <Arrow change={lwChange} />
-              <span
-                className={
-                  "ml-1 font-medium " +
-                  (lwChange > 0
-                    ? "text-green-600"
-                    : lwChange < 0
-                    ? "text-red-600"
-                    : "text-muted-foreground")
-                }
-              >
-                {Math.abs(lwChange).toFixed(1)}%
-              </span>
-            </div>
-          </div>
-        );
-      }
 
-      // SINGLEDAY
-      if (dateRange === "singleday" && customFromDate) {
-        const singleDay = new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate());
-        const prevDay = new Date(singleDay.getTime() - 24 * 60 * 60 * 1000);
-        const lastWeek = new Date(singleDay.getTime() - 7 * 24 * 60 * 60 * 1000);
-        const singleDayRevenue = getRevenueForDate(singleDay);
-        const prevDayRevenue = getRevenueForDate(prevDay);
-        const lastWeekRevenue = getRevenueForDate(lastWeek);
-        const yChange = getChange(singleDayRevenue, prevDayRevenue);
-        const lwChange = getChange(singleDayRevenue, lastWeekRevenue);
+                // Previous period: strictly before current period, same length
+                const prevPeriodEnd = new Date(periodStart.getTime());
+                const prevPeriodStart = new Date(
+                  prevPeriodEnd.getTime() - rangeDays * 24 * 60 * 60 * 1000
+                );
 
-        return (
-          <div className="space-y-1 mt-2">
-            <div className="flex items-center text-xs">
-              <span className="text-muted-foreground mr-1">Previous Day:</span>
-              <span className="font-semibold">
-                ₹{prevDayRevenue.toLocaleString()}
-              </span>
-              <Arrow change={yChange} />
-              <span
-                className={
-                  "ml-1 font-medium " +
-                  (yChange > 0
-                    ? "text-green-600"
-                    : yChange < 0
-                    ? "text-red-600"
-                    : "text-muted-foreground")
-                }
-              >
-                {Math.abs(yChange).toFixed(1)}%
-              </span>
-            </div>
-            <div className="flex items-center text-xs">
-              <span className="text-muted-foreground mr-1">
-                Last {singleDay.toLocaleString("en-US", { weekday: "long" })}:
-              </span>
-              <span className="font-semibold">
-                ₹{lastWeekRevenue.toLocaleString()}
-              </span>
-              <Arrow change={lwChange} />
-              <span
-                className={
-                  "ml-1 font-medium " +
-                  (lwChange > 0
-                    ? "text-green-600"
-                    : lwChange < 0
-                    ? "text-red-600"
-                    : "text-muted-foreground")
-                }
-              >
-                {Math.abs(lwChange).toFixed(1)}%
-              </span>
-            </div>
-          </div>
-        );
-      }
+                const currentRevenue = getRevenueForRange(periodStart, periodEnd);
+                const prevRevenue = getRevenueForRange(prevPeriodStart, prevPeriodEnd);
+                const change = getChange(currentRevenue, prevRevenue);
 
-      // LAST 7/30 DAYS & CUSTOM
-      if (
-        dateRange === "last7days" ||
-        dateRange === "last30days" ||
-        (dateRange === "custom" && customFromDate && customToDate)
-      ) {
-        let rangeDays = 7;
-        if (dateRange === "last30days") rangeDays = 30;
-        if (dateRange === "custom" && customFromDate && customToDate) {
-          rangeDays =
-            Math.ceil(
-              (customToDate.getTime() -
-                customFromDate.getTime()) /
-                (24 * 60 * 60 * 1000)
-            ) +1;
-        }
+                return (
+                  <div className="space-y-1 mt-2">
+                    <div className="flex items-center text-xs">
+                      <span className="text-muted-foreground mr-1">
+                        Previous {rangeDays} days:
+                      </span>
+                      <span className="font-semibold">
+                        ₹{prevRevenue.toLocaleString()}
+                      </span>
+                      <Arrow change={change} />
+                      <span
+                        className={
+                          "ml-1 font-medium " +
+                          (change > 0
+                            ? "text-green-600"
+                            : change < 0
+                              ? "text-red-600"
+                              : "text-muted-foreground")
+                        }
+                      >
+                        {Math.abs(change).toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
 
-        // Current period
-        let periodStart: Date, periodEnd: Date;
-        if (dateRange === "custom" && customFromDate && customToDate) {
-          periodStart = new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate());
-          periodEnd = new Date(customToDate.getFullYear(), customToDate.getMonth(), customToDate.getDate() + 1);
-        } else {
-          periodEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000); // tomorrow 00:00
-          periodStart = new Date(periodEnd.getTime() - rangeDays * 24 * 60 * 60 * 1000);
-        }
-
-        // Previous period: strictly before current period, same length
-        const prevPeriodEnd = new Date(periodStart.getTime());
-        const prevPeriodStart = new Date(
-          prevPeriodEnd.getTime() - rangeDays * 24 * 60 * 60 * 1000
-        );
-
-        const currentRevenue = getRevenueForRange(periodStart, periodEnd);
-        const prevRevenue = getRevenueForRange(prevPeriodStart, prevPeriodEnd);
-        const change = getChange(currentRevenue, prevRevenue);
-
-        return (
-          <div className="space-y-1 mt-2">
-            <div className="flex items-center text-xs">
-              <span className="text-muted-foreground mr-1">
-                Previous {rangeDays} days:
-              </span>
-              <span className="font-semibold">
-                ₹{prevRevenue.toLocaleString()}
-              </span>
-              <Arrow change={change} />
-              <span
-                className={
-                  "ml-1 font-medium " +
-                  (change > 0
-                    ? "text-green-600"
-                    : change < 0
-                    ? "text-red-600"
-                    : "text-muted-foreground")
-                }
-              >
-                {Math.abs(change).toFixed(1)}%
-              </span>
-            </div>
-          </div>
-        );
-      }
-
-      // Default: nothing
-      return null;
-    })()}
-  </CardContent>
-</Card>
+              // Default: nothing
+              return null;
+            })()}
+          </CardContent>
+        </Card>
 
         {/* <Card className="metric-card-success">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -1281,331 +1281,331 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
           </CardContent>
         </Card> */}
         {/* These 2 cards updated on 03/09/25 by vishnu */}
-       <Card className="metric-card-success">
-  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-    <CardTitle className="text-sm font-medium">Total Vehicles</CardTitle>
-    <Badge variant="outline" className="text-success border-success">
-      {dateRange === "today"
-        ? "Today"
-        : dateRange === "yesterday"
-        ? "Yesterday"
-        : dateRange === "singleday"
-        ? customFromDate
-          ? format(customFromDate, "PPP")
-          : "Single Day"
-        : dateRange === "last7days"
-        ? "Last 7 Days"
-        : dateRange === "last30days"
-        ? "Last 30 Days"
-        : dateRange === "custom" && customFromDate && customToDate
-        ? `${format(customFromDate, "dd MMM yyyy")} - ${format(customToDate, "dd MMM yyyy")}`
-        : "Filtered Period"}
-    </Badge>
-  </CardHeader>
-  <CardContent>
-    <div className="text-2xl font-bold text-success">{filteredData.totalVehicles}</div>
-    {/* --- Vehicle Count Comparison Section --- */}
-    {(() => {
-      // Use the same filters as getFilteredData, except for date
-      let baseFilteredLogs = [...logs];
-      // Location filter
-      const currentLocation = user?.role === 'manager'
-        ? user?.assigned_location
-        : (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
-      if (currentLocation) {
-        baseFilteredLogs = baseFilteredLogs.filter(log => log.location_id === currentLocation);
-      }
-      // Approval status
-      baseFilteredLogs = baseFilteredLogs.filter(log => log.approval_status === 'approved');
-      // Vehicle type
-      if (vehicleType !== "all") {
-        baseFilteredLogs = baseFilteredLogs.filter(log =>
-          (log.vehicle_type || '').toString().trim().toLowerCase() === vehicleType.trim().toLowerCase()
-        );
-      }
-      // Service
-      if (service !== "all") {
-        baseFilteredLogs = baseFilteredLogs.filter(log =>
-          (log.service || '').toString().trim().toLowerCase() === service.trim().toLowerCase()
-        );
-      }
-      // Entry type
-      if (entryType !== "all") {
-        baseFilteredLogs = baseFilteredLogs.filter(log =>
-          (log.entry_type || '').toString().trim().toLowerCase() === entryType.trim().toLowerCase()
-        );
-      }
-      // Manager
-      if (manager !== "all") {
-        baseFilteredLogs = baseFilteredLogs.filter(log => log.created_by === manager);
-      }
+        <Card className="metric-card-success">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Vehicles</CardTitle>
+            <Badge variant="outline" className="text-success border-success">
+              {dateRange === "today"
+                ? "Today"
+                : dateRange === "yesterday"
+                  ? "Yesterday"
+                  : dateRange === "singleday"
+                    ? customFromDate
+                      ? format(customFromDate, "PPP")
+                      : "Single Day"
+                    : dateRange === "last7days"
+                      ? "Last 7 Days"
+                      : dateRange === "last30days"
+                        ? "Last 30 Days"
+                        : dateRange === "custom" && customFromDate && customToDate
+                          ? `${format(customFromDate, "dd MMM yyyy")} - ${format(customToDate, "dd MMM yyyy")}`
+                          : "Filtered Period"}
+            </Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-success">{filteredData.totalVehicles}</div>
+            {/* --- Vehicle Count Comparison Section --- */}
+            {(() => {
+              // Use the same filters as getFilteredData, except for date
+              let baseFilteredLogs = [...logs];
+              // Location filter
+              const currentLocation = user?.role === 'manager'
+                ? user?.assigned_location
+                : (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
+              if (currentLocation) {
+                baseFilteredLogs = baseFilteredLogs.filter(log => log.location_id === currentLocation);
+              }
+              // Approval status
+              baseFilteredLogs = baseFilteredLogs.filter(log => log.approval_status === 'approved');
+              // Vehicle type
+              if (vehicleType !== "all") {
+                baseFilteredLogs = baseFilteredLogs.filter(log =>
+                  (log.vehicle_type || '').toString().trim().toLowerCase() === vehicleType.trim().toLowerCase()
+                );
+              }
+              // Service
+              if (service !== "all") {
+                baseFilteredLogs = baseFilteredLogs.filter(log =>
+                  (log.service || '').toString().trim().toLowerCase() === service.trim().toLowerCase()
+                );
+              }
+              // Entry type
+              if (entryType !== "all") {
+                baseFilteredLogs = baseFilteredLogs.filter(log =>
+                  (log.entry_type || '').toString().trim().toLowerCase() === entryType.trim().toLowerCase()
+                );
+              }
+              // Manager
+              if (manager !== "all") {
+                baseFilteredLogs = baseFilteredLogs.filter(log => log.created_by === manager);
+              }
 
-      // Helper to get vehicle count for a specific date (full day)
-      const getCountForDate = (date: Date) => {
-        const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-        const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
-        return baseFilteredLogs
-          .filter(
-            log =>
-              new Date(log.created_at) >= start &&
-              new Date(log.created_at) < end
-          ).length;
-      };
+              // Helper to get vehicle count for a specific date (full day)
+              const getCountForDate = (date: Date) => {
+                const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+                const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+                return baseFilteredLogs
+                  .filter(
+                    log =>
+                      new Date(log.created_at) >= start &&
+                      new Date(log.created_at) < end
+                  ).length;
+              };
 
-      // Helper to get vehicle count for a range (inclusive of start, exclusive of end)
-      const getCountForRange = (start: Date, end: Date) => {
-        return baseFilteredLogs
-          .filter(
-            log =>
-              new Date(log.created_at) >= start &&
-              new Date(log.created_at) < end
-          ).length;
-      };
+              // Helper to get vehicle count for a range (inclusive of start, exclusive of end)
+              const getCountForRange = (start: Date, end: Date) => {
+                return baseFilteredLogs
+                  .filter(
+                    log =>
+                      new Date(log.created_at) >= start &&
+                      new Date(log.created_at) < end
+                  ).length;
+              };
 
-      // Arrow and color helpers
-      const Arrow = ({ change }: { change: number }) =>
-        change > 0 ? (
-          <span className="text-green-600 ml-1">&#8593;</span>
-        ) : change < 0 ? (
-          <span className="text-red-600 ml-1">&#8595;</span>
-        ) : (
-          <span className="text-muted-foreground ml-1">&#8596;</span>
-        );
+              // Arrow and color helpers
+              const Arrow = ({ change }: { change: number }) =>
+                change > 0 ? (
+                  <span className="text-green-600 ml-1">&#8593;</span>
+                ) : change < 0 ? (
+                  <span className="text-red-600 ml-1">&#8595;</span>
+                ) : (
+                  <span className="text-muted-foreground ml-1">&#8596;</span>
+                );
 
-      // Percentage change helpers
-      const getChange = (current: number, prev: number) => {
-        if (prev === 0) return current === 0 ? 0 : 100;
-        return ((current - prev) / prev) * 100;
-      };
+              // Percentage change helpers
+              const getChange = (current: number, prev: number) => {
+                if (prev === 0) return current === 0 ? 0 : 100;
+                return ((current - prev) / prev) * 100;
+              };
 
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+              const now = new Date();
+              const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-      // TODAY
-      if (dateRange === "today") {
-        const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-        const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-        const todayCount = getCountForDate(today);
-        const yesterdayCount = getCountForDate(yesterday);
-        const lastWeekCount = getCountForDate(lastWeek);
-        const yChange = getChange(todayCount, yesterdayCount);
-        const lwChange = getChange(todayCount, lastWeekCount);
+              // TODAY
+              if (dateRange === "today") {
+                const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+                const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+                const todayCount = getCountForDate(today);
+                const yesterdayCount = getCountForDate(yesterday);
+                const lastWeekCount = getCountForDate(lastWeek);
+                const yChange = getChange(todayCount, yesterdayCount);
+                const lwChange = getChange(todayCount, lastWeekCount);
 
-        return (
-          <div className="space-y-1 mt-2">
-            <div className="flex items-center text-xs">
-              <span className="text-muted-foreground mr-1">Yesterday:</span>
-              <span className="font-semibold">{yesterdayCount}</span>
-              <Arrow change={yChange} />
-              <span
-                className={
-                  "ml-1 font-medium " +
-                  (yChange > 0
-                    ? "text-green-600"
-                    : yChange < 0
-                    ? "text-red-600"
-                    : "text-muted-foreground")
+                return (
+                  <div className="space-y-1 mt-2">
+                    <div className="flex items-center text-xs">
+                      <span className="text-muted-foreground mr-1">Yesterday:</span>
+                      <span className="font-semibold">{yesterdayCount}</span>
+                      <Arrow change={yChange} />
+                      <span
+                        className={
+                          "ml-1 font-medium " +
+                          (yChange > 0
+                            ? "text-green-600"
+                            : yChange < 0
+                              ? "text-red-600"
+                              : "text-muted-foreground")
+                        }
+                      >
+                        {Math.abs(yChange).toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="flex items-center text-xs">
+                      <span className="text-muted-foreground mr-1">
+                        Last {today.toLocaleString("en-US", { weekday: "long" })}:
+                      </span>
+                      <span className="font-semibold">{lastWeekCount}</span>
+                      <Arrow change={lwChange} />
+                      <span
+                        className={
+                          "ml-1 font-medium " +
+                          (lwChange > 0
+                            ? "text-green-600"
+                            : lwChange < 0
+                              ? "text-red-600"
+                              : "text-muted-foreground")
+                        }
+                      >
+                        {Math.abs(lwChange).toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
+              // YESTERDAY
+              if (dateRange === "yesterday") {
+                const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+                const dayBefore = new Date(yesterday.getTime() - 24 * 60 * 60 * 1000);
+                const lastWeek = new Date(yesterday.getTime() - 7 * 24 * 60 * 60 * 1000);
+                const yesterdayCount = getCountForDate(yesterday);
+                const dayBeforeCount = getCountForDate(dayBefore);
+                const lastWeekCount = getCountForDate(lastWeek);
+                const yChange = getChange(yesterdayCount, dayBeforeCount);
+                const lwChange = getChange(yesterdayCount, lastWeekCount);
+
+                return (
+                  <div className="space-y-1 mt-2">
+                    <div className="flex items-center text-xs">
+                      <span className="text-muted-foreground mr-1">Day Before:</span>
+                      <span className="font-semibold">{dayBeforeCount}</span>
+                      <Arrow change={yChange} />
+                      <span
+                        className={
+                          "ml-1 font-medium " +
+                          (yChange > 0
+                            ? "text-green-600"
+                            : yChange < 0
+                              ? "text-red-600"
+                              : "text-muted-foreground")
+                        }
+                      >
+                        {Math.abs(yChange).toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="flex items-center text-xs">
+                      <span className="text-muted-foreground mr-1">
+                        Last {yesterday.toLocaleString("en-US", { weekday: "long" })}:
+                      </span>
+                      <span className="font-semibold">{lastWeekCount}</span>
+                      <Arrow change={lwChange} />
+                      <span
+                        className={
+                          "ml-1 font-medium " +
+                          (lwChange > 0
+                            ? "text-green-600"
+                            : lwChange < 0
+                              ? "text-red-600"
+                              : "text-muted-foreground")
+                        }
+                      >
+                        {Math.abs(lwChange).toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
+              // SINGLEDAY
+              if (dateRange === "singleday" && customFromDate) {
+                const singleDay = new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate());
+                const prevDay = new Date(singleDay.getTime() - 24 * 60 * 60 * 1000);
+                const lastWeek = new Date(singleDay.getTime() - 7 * 24 * 60 * 60 * 1000);
+                const singleDayCount = getCountForDate(singleDay);
+                const prevDayCount = getCountForDate(prevDay);
+                const lastWeekCount = getCountForDate(lastWeek);
+                const yChange = getChange(singleDayCount, prevDayCount);
+                const lwChange = getChange(singleDayCount, lastWeekCount);
+
+                return (
+                  <div className="space-y-1 mt-2">
+                    <div className="flex items-center text-xs">
+                      <span className="text-muted-foreground mr-1">Previous Day:</span>
+                      <span className="font-semibold">{prevDayCount}</span>
+                      <Arrow change={yChange} />
+                      <span
+                        className={
+                          "ml-1 font-medium " +
+                          (yChange > 0
+                            ? "text-green-600"
+                            : yChange < 0
+                              ? "text-red-600"
+                              : "text-muted-foreground")
+                        }
+                      >
+                        {Math.abs(yChange).toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="flex items-center text-xs">
+                      <span className="text-muted-foreground mr-1">
+                        Last {singleDay.toLocaleString("en-US", { weekday: "long" })}:
+                      </span>
+                      <span className="font-semibold">{lastWeekCount}</span>
+                      <Arrow change={lwChange} />
+                      <span
+                        className={
+                          "ml-1 font-medium " +
+                          (lwChange > 0
+                            ? "text-green-600"
+                            : lwChange < 0
+                              ? "text-red-600"
+                              : "text-muted-foreground")
+                        }
+                      >
+                        {Math.abs(lwChange).toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
+              // LAST 7/30 DAYS & CUSTOM
+              if (
+                dateRange === "last7days" ||
+                dateRange === "last30days" ||
+                (dateRange === "custom" && customFromDate && customToDate)
+              ) {
+                let rangeDays = 7;
+                if (dateRange === "last30days") rangeDays = 30;
+                if (dateRange === "custom" && customFromDate && customToDate) {
+                  rangeDays =
+                    Math.ceil(
+                      (customToDate.getTime() -
+                        customFromDate.getTime()) /
+                      (24 * 60 * 60 * 1000)
+                    ) + 1;
                 }
-              >
-                {Math.abs(yChange).toFixed(1)}%
-              </span>
-            </div>
-            <div className="flex items-center text-xs">
-              <span className="text-muted-foreground mr-1">
-                Last {today.toLocaleString("en-US", { weekday: "long" })}:
-              </span>
-              <span className="font-semibold">{lastWeekCount}</span>
-              <Arrow change={lwChange} />
-              <span
-                className={
-                  "ml-1 font-medium " +
-                  (lwChange > 0
-                    ? "text-green-600"
-                    : lwChange < 0
-                    ? "text-red-600"
-                    : "text-muted-foreground")
+
+                // Current period
+                let periodStart: Date, periodEnd: Date;
+                if (dateRange === "custom" && customFromDate && customToDate) {
+                  periodStart = new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate());
+                  periodEnd = new Date(customToDate.getFullYear(), customToDate.getMonth(), customToDate.getDate() + 1);
+                } else {
+                  periodEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000); // tomorrow 00:00
+                  periodStart = new Date(periodEnd.getTime() - rangeDays * 24 * 60 * 60 * 1000);
                 }
-              >
-                {Math.abs(lwChange).toFixed(1)}%
-              </span>
-            </div>
-          </div>
-        );
-      }
 
-      // YESTERDAY
-      if (dateRange === "yesterday") {
-        const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-        const dayBefore = new Date(yesterday.getTime() - 24 * 60 * 60 * 1000);
-        const lastWeek = new Date(yesterday.getTime() - 7 * 24 * 60 * 60 * 1000);
-        const yesterdayCount = getCountForDate(yesterday);
-        const dayBeforeCount = getCountForDate(dayBefore);
-        const lastWeekCount = getCountForDate(lastWeek);
-        const yChange = getChange(yesterdayCount, dayBeforeCount);
-        const lwChange = getChange(yesterdayCount, lastWeekCount);
+                // Previous period: strictly before current period, same length
+                const prevPeriodEnd = new Date(periodStart.getTime());
+                const prevPeriodStart = new Date(
+                  prevPeriodEnd.getTime() - rangeDays * 24 * 60 * 60 * 1000
+                );
 
-        return (
-          <div className="space-y-1 mt-2">
-            <div className="flex items-center text-xs">
-              <span className="text-muted-foreground mr-1">Day Before:</span>
-              <span className="font-semibold">{dayBeforeCount}</span>
-              <Arrow change={yChange} />
-              <span
-                className={
-                  "ml-1 font-medium " +
-                  (yChange > 0
-                    ? "text-green-600"
-                    : yChange < 0
-                    ? "text-red-600"
-                    : "text-muted-foreground")
-                }
-              >
-                {Math.abs(yChange).toFixed(1)}%
-              </span>
-            </div>
-            <div className="flex items-center text-xs">
-              <span className="text-muted-foreground mr-1">
-                Last {yesterday.toLocaleString("en-US", { weekday: "long" })}:
-              </span>
-              <span className="font-semibold">{lastWeekCount}</span>
-              <Arrow change={lwChange} />
-              <span
-                className={
-                  "ml-1 font-medium " +
-                  (lwChange > 0
-                    ? "text-green-600"
-                    : lwChange < 0
-                    ? "text-red-600"
-                    : "text-muted-foreground")
-                }
-              >
-                {Math.abs(lwChange).toFixed(1)}%
-              </span>
-            </div>
-          </div>
-        );
-      }
+                const currentCount = getCountForRange(periodStart, periodEnd);
+                const prevCount = getCountForRange(prevPeriodStart, prevPeriodEnd);
+                const change = getChange(currentCount, prevCount);
 
-      // SINGLEDAY
-      if (dateRange === "singleday" && customFromDate) {
-        const singleDay = new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate());
-        const prevDay = new Date(singleDay.getTime() - 24 * 60 * 60 * 1000);
-        const lastWeek = new Date(singleDay.getTime() - 7 * 24 * 60 * 60 * 1000);
-        const singleDayCount = getCountForDate(singleDay);
-        const prevDayCount = getCountForDate(prevDay);
-        const lastWeekCount = getCountForDate(lastWeek);
-        const yChange = getChange(singleDayCount, prevDayCount);
-        const lwChange = getChange(singleDayCount, lastWeekCount);
+                return (
+                  <div className="space-y-1 mt-2">
+                    <div className="flex items-center text-xs">
+                      <span className="text-muted-foreground mr-1">
+                        Previous {rangeDays} days:
+                      </span>
+                      <span className="font-semibold">{prevCount}</span>
+                      <Arrow change={change} />
+                      <span
+                        className={
+                          "ml-1 font-medium " +
+                          (change > 0
+                            ? "text-green-600"
+                            : change < 0
+                              ? "text-red-600"
+                              : "text-muted-foreground")
+                        }
+                      >
+                        {Math.abs(change).toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
 
-        return (
-          <div className="space-y-1 mt-2">
-            <div className="flex items-center text-xs">
-              <span className="text-muted-foreground mr-1">Previous Day:</span>
-              <span className="font-semibold">{prevDayCount}</span>
-              <Arrow change={yChange} />
-              <span
-                className={
-                  "ml-1 font-medium " +
-                  (yChange > 0
-                    ? "text-green-600"
-                    : yChange < 0
-                    ? "text-red-600"
-                    : "text-muted-foreground")
-                }
-              >
-                {Math.abs(yChange).toFixed(1)}%
-              </span>
-            </div>
-            <div className="flex items-center text-xs">
-              <span className="text-muted-foreground mr-1">
-                Last {singleDay.toLocaleString("en-US", { weekday: "long" })}:
-              </span>
-              <span className="font-semibold">{lastWeekCount}</span>
-              <Arrow change={lwChange} />
-              <span
-                className={
-                  "ml-1 font-medium " +
-                  (lwChange > 0
-                    ? "text-green-600"
-                    : lwChange < 0
-                    ? "text-red-600"
-                    : "text-muted-foreground")
-                }
-              >
-                {Math.abs(lwChange).toFixed(1)}%
-              </span>
-            </div>
-          </div>
-        );
-      }
-
-      // LAST 7/30 DAYS & CUSTOM
-      if (
-        dateRange === "last7days" ||
-        dateRange === "last30days" ||
-        (dateRange === "custom" && customFromDate && customToDate)
-      ) {
-        let rangeDays = 7;
-        if (dateRange === "last30days") rangeDays = 30;
-        if (dateRange === "custom" && customFromDate && customToDate) {
-          rangeDays =
-            Math.ceil(
-              (customToDate.getTime() -
-                customFromDate.getTime()) /
-                (24 * 60 * 60 * 1000)
-            ) + 1;
-        }
-
-        // Current period
-        let periodStart: Date, periodEnd: Date;
-        if (dateRange === "custom" && customFromDate && customToDate) {
-          periodStart = new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate());
-          periodEnd = new Date(customToDate.getFullYear(), customToDate.getMonth(), customToDate.getDate() + 1);
-        } else {
-          periodEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000); // tomorrow 00:00
-          periodStart = new Date(periodEnd.getTime() - rangeDays * 24 * 60 * 60 * 1000);
-        }
-
-        // Previous period: strictly before current period, same length
-        const prevPeriodEnd = new Date(periodStart.getTime());
-        const prevPeriodStart = new Date(
-          prevPeriodEnd.getTime() - rangeDays * 24 * 60 * 60 * 1000
-        );
-
-        const currentCount = getCountForRange(periodStart, periodEnd);
-        const prevCount = getCountForRange(prevPeriodStart, prevPeriodEnd);
-        const change = getChange(currentCount, prevCount);
-
-        return (
-          <div className="space-y-1 mt-2">
-            <div className="flex items-center text-xs">
-              <span className="text-muted-foreground mr-1">
-                Previous {rangeDays} days:
-              </span>
-              <span className="font-semibold">{prevCount}</span>
-              <Arrow change={change} />
-              <span
-                className={
-                  "ml-1 font-medium " +
-                  (change > 0
-                    ? "text-green-600"
-                    : change < 0
-                    ? "text-red-600"
-                    : "text-muted-foreground")
-                }
-              >
-                {Math.abs(change).toFixed(1)}%
-              </span>
-            </div>
-          </div>
-        );
-      }
-
-      // Default: nothing
-      return null;
-    })()}
-  </CardContent>
-</Card>
+              // Default: nothing
+              return null;
+            })()}
+          </CardContent>
+        </Card>
 
         <Card className="metric-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -1648,12 +1648,12 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
 
 
 
-             {/* Payment Mode Breakdown */}
-       <Card>
-         <CardHeader>
-           <CardTitle>Payment Mode Breakdown</CardTitle>
-         </CardHeader>
-                   <CardContent>
+      {/* Payment Mode Breakdown */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Payment Mode Breakdown</CardTitle>
+        </CardHeader>
+        <CardContent>
           <div className="space-y-4">
             {filteredData.paymentModeBreakdown.length === 0 ? (
               <div className="text-center p-4 text-muted-foreground">
@@ -1689,7 +1689,7 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
             <div className="space-y-4">
               {filteredData.paymentModeBreakdown
                 .filter((item: any) => item.mode?.toLowerCase() === 'upi')
-                .map((upiItem: any) => 
+                .map((upiItem: any) =>
                   Object.entries(upiItem.upiAccounts || {}).map(([accountName, accountData]: [string, any]) => (
                     <div key={`upi-account-${accountName}`} className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
                       <div>
@@ -1715,29 +1715,29 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
         {filteredData.paymentModeBreakdown.map((item: any) => (
           <Card key={`payment-summary-${item.mode}`} className="border-2 border-accent/20">
             <CardHeader className="pb-3">
-                                                                                       <CardTitle className="text-lg flex items-center gap-2">
-                   {(item.mode === 'Cash' || item.mode?.toLowerCase() === 'cash') && <span className="text-green-600">💵</span>}
-                   {(item.mode === 'UPI' || item.mode?.toLowerCase() === 'upi') && <span className="text-blue-600">📱</span>}
-                   {(item.mode === 'Credit' || item.mode?.toLowerCase() === 'credit') && <span className="text-orange-600">💳</span>}
-                   {item.mode}
-                 </CardTitle>
+              <CardTitle className="text-lg flex items-center gap-2">
+                {(item.mode === 'Cash' || item.mode?.toLowerCase() === 'cash') && <span className="text-green-600">💵</span>}
+                {(item.mode === 'UPI' || item.mode?.toLowerCase() === 'upi') && <span className="text-blue-600">📱</span>}
+                {(item.mode === 'Credit' || item.mode?.toLowerCase() === 'credit') && <span className="text-orange-600">💳</span>}
+                {item.mode}
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="text-center">
                 <div className="text-3xl font-bold text-primary">₹{item.revenue.toLocaleString()}</div>
                 <p className="text-sm text-muted-foreground">Total Revenue</p>
               </div>
-              
+
               <div className="flex items-center justify-between text-sm">
                 <span>Vehicles:</span>
                 <span className="font-semibold">{item.count}</span>
               </div>
-              
+
               <div className="flex items-center justify-between text-sm">
                 <span>Percentage:</span>
                 <span className="font-semibold text-primary">{item.percentage.toFixed(1)}%</span>
               </div>
-              
+
               {item.mode?.toLowerCase() === 'upi' && Object.keys(item.upiAccounts || {}).length > 0 && (
                 <div className="pt-2 border-t">
                   <p className="text-xs font-medium text-muted-foreground mb-2">UPI Accounts:</p>
@@ -1756,113 +1756,113 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
 
       {/* Service Breakdown */}
       <Card>
-  <CardHeader className="flex flex-row items-center justify-between">
-    <CardTitle>Service Breakdown - Filtered Results</CardTitle>
-    <div className="flex items-center gap-2">
-      <span className="text-xs font-medium text-muted-foreground">List</span>
-      <Switch
-        checked={serviceBreakdownView === "pie"}
-        onCheckedChange={(checked) => setServiceBreakdownView(checked ? "pie" : "list")}
-        aria-label="Toggle Service Breakdown View"
-      />
-      <span className="text-xs font-medium text-muted-foreground">Pie Chart</span>
-    </div>
-  </CardHeader>
-  <CardContent>
-    {filteredData.serviceBreakdown.length === 0 ? (
-      <div className="text-center p-4 text-muted-foreground">
-        No service data available
-      </div>
-    ) : serviceBreakdownView === "pie" ? (
-      <div className="w-full flex flex-col md:flex-row items-center justify-center gap-4">
-        <div className="w-full md:w-1/2 min-w-[220px] h-72">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={filteredData.serviceBreakdown}
-                dataKey="revenue"
-                nameKey="service"
-                cx="50%"
-                cy="50%"
-                outerRadius="80%"
-                innerRadius="45%"
-                label={({ service, revenue, percentage }) =>
-                  `${service?.length > 12 ? service.slice(0, 12) + '…' : service || 'Unknown'}`
-                }
-                labelLine={false}
-                minAngle={10}
-              >
-                {filteredData.serviceBreakdown.map((entry: any, idx: number) => {
-                  const COLORS = [
-                    "#6366f1", "#22d3ee", "#f59e42", "#10b981",
-                    "#f43f5e", "#a21caf", "#fbbf24", "#64748b"
-                  ];
-                  return (
-                    <Cell key={`cell-${idx}`} fill={COLORS[idx % COLORS.length]} />
-                  );
-                })}
-              </Pie>
-              <Tooltip
-                formatter={(value: number, name: string, props: any) =>
-                  [
-                    `₹${value.toLocaleString()} revenue`,
-                    props.payload.service || 'Unknown'
-                  ]
-                }
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-        {/* Legend/Breakdown: right on desktop, bottom on mobile */}
-        <div className="w-full md:w-1/2">
-          <div className="space-y-2 md:ml-6 flex flex-col md:block">
-            {/* On mobile, show below chart; on desktop, show on right */}
-            {filteredData.serviceBreakdown.map((item: any, idx: number) => (
-              <div
-                key={`service-pie-legend-${item.service || 'unknown'}-${idx}`}
-                className="flex items-center gap-3"
-              >
-                <span
-                  className="inline-block w-4 h-4 rounded"
-                  style={{
-                    backgroundColor: [
-                      "#6366f1", "#22d3ee", "#f59e42", "#10b981",
-                      "#f43f5e", "#a21caf", "#fbbf24", "#64748b"
-                    ][idx % 8]
-                  }}
-                />
-                <span className="font-medium truncate max-w-[100px] md:max-w-[160px]">
-                  {item.service || 'Unknown'}
-                </span>
-                <span className="ml-auto text-primary font-bold">{item.count}</span>
-                <span className="ml-2 text-muted-foreground text-sm">
-                  {filteredData.totalRevenue > 0 ? (((item.revenue || 0) / filteredData.totalRevenue) * 100).toFixed(1) : 0}%
-                </span>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Service Breakdown - Filtered Results</CardTitle>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">List</span>
+            <Switch
+              checked={serviceBreakdownView === "pie"}
+              onCheckedChange={(checked) => setServiceBreakdownView(checked ? "pie" : "list")}
+              aria-label="Toggle Service Breakdown View"
+            />
+            <span className="text-xs font-medium text-muted-foreground">Pie Chart</span>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {filteredData.serviceBreakdown.length === 0 ? (
+            <div className="text-center p-4 text-muted-foreground">
+              No service data available
+            </div>
+          ) : serviceBreakdownView === "pie" ? (
+            <div className="w-full flex flex-col md:flex-row items-center justify-center gap-4">
+              <div className="w-full md:w-1/2 min-w-[220px] h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={filteredData.serviceBreakdown}
+                      dataKey="revenue"
+                      nameKey="service"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius="80%"
+                      innerRadius="45%"
+                      label={({ service, revenue, percentage }) =>
+                        `${service?.length > 12 ? service.slice(0, 12) + '…' : service || 'Unknown'}`
+                      }
+                      labelLine={false}
+                      minAngle={10}
+                    >
+                      {filteredData.serviceBreakdown.map((entry: any, idx: number) => {
+                        const COLORS = [
+                          "#6366f1", "#22d3ee", "#f59e42", "#10b981",
+                          "#f43f5e", "#a21caf", "#fbbf24", "#64748b"
+                        ];
+                        return (
+                          <Cell key={`cell-${idx}`} fill={COLORS[idx % COLORS.length]} />
+                        );
+                      })}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: number, name: string, props: any) =>
+                        [
+                          `₹${value.toLocaleString()} revenue`,
+                          props.payload.service || 'Unknown'
+                        ]
+                      }
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
               </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    ) : (
-      <div className="space-y-4">
-        {filteredData.serviceBreakdown.map((item: any, index: number) => (
-          <div key={`service-breakdown-${item.service || 'unknown'}-${index}`} className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
-            <div>
-              <p className="font-medium">{item.service || 'Unknown Service'}</p>
-              <p className="text-sm text-muted-foreground">{item.count} vehicles • ₹{Math.round(item.price || 0).toLocaleString()} avg</p>
+              {/* Legend/Breakdown: right on desktop, bottom on mobile */}
+              <div className="w-full md:w-1/2">
+                <div className="space-y-2 md:ml-6 flex flex-col md:block">
+                  {/* On mobile, show below chart; on desktop, show on right */}
+                  {filteredData.serviceBreakdown.map((item: any, idx: number) => (
+                    <div
+                      key={`service-pie-legend-${item.service || 'unknown'}-${idx}`}
+                      className="flex items-center gap-3"
+                    >
+                      <span
+                        className="inline-block w-4 h-4 rounded"
+                        style={{
+                          backgroundColor: [
+                            "#6366f1", "#22d3ee", "#f59e42", "#10b981",
+                            "#f43f5e", "#a21caf", "#fbbf24", "#64748b"
+                          ][idx % 8]
+                        }}
+                      />
+                      <span className="font-medium truncate max-w-[100px] md:max-w-[160px]">
+                        {item.service || 'Unknown'}
+                      </span>
+                      <span className="ml-auto text-primary font-bold">{item.count}</span>
+                      <span className="ml-2 text-muted-foreground text-sm">
+                        {filteredData.totalRevenue > 0 ? (((item.revenue || 0) / filteredData.totalRevenue) * 100).toFixed(1) : 0}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-            <div className="text-right">
-              <p className="font-semibold text-financial">₹{(item.revenue || 0).toLocaleString()}</p>
-              <p className="text-xs text-muted-foreground">
-                {filteredData.totalRevenue > 0 ? (((item.revenue || 0) / filteredData.totalRevenue) * 100).toFixed(1) : 0}% of total
-              </p>
+          ) : (
+            <div className="space-y-4">
+              {filteredData.serviceBreakdown.map((item: any, index: number) => (
+                <div key={`service-breakdown-${item.service || 'unknown'}-${index}`} className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
+                  <div>
+                    <p className="font-medium">{item.service || 'Unknown Service'}</p>
+                    <p className="text-sm text-muted-foreground">{item.count} vehicles • ₹{Math.round(item.price || 0).toLocaleString()} avg</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-financial">₹{(item.revenue || 0).toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {filteredData.totalRevenue > 0 ? (((item.revenue || 0) / filteredData.totalRevenue) * 100).toFixed(1) : 0}% of total
+                    </p>
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
-        ))}
-      </div>
-    )}
-  </CardContent>
-</Card>
+          )}
+        </CardContent>
+      </Card>
       {/* Before the update on 03/09/2025 pushed by vishnu */}
       {/* <Card>
         <CardHeader>
@@ -1895,85 +1895,179 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
       </Card> */}
 
       {/* Vehicle Type Distribution */}
-      
 
 
 
-<Card>
-  <CardHeader>
-    <CardTitle>Vehicle Type Distribution</CardTitle>
-  </CardHeader>
-  <CardContent>
-    {filteredData.vehicleDistribution.length === 0 ? (
-      <div className="text-center p-4 text-muted-foreground">
-        No vehicle type data available
-      </div>
-    ) : (
-      <div className="w-full flex flex-col md:flex-row items-center justify-center gap-8">
-        <div className="w-full md:w-1/2 min-w-[220px] h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={filteredData.vehicleDistribution}
-                dataKey="count"
-                nameKey="type"
-                cx="50%"
-                cy="50%"
-                outerRadius="80%"
-                innerRadius="45%"
-                label={({ type, percentage }) =>
-                  `${type?.length > 12 ? type.slice(0, 12) + '…' : type || 'Unknown'} (${percentage.toFixed(1)}%)`
-                }
-                labelLine={false}
-                minAngle={10}
-              >
-                {filteredData.vehicleDistribution.map((entry: any, idx: number) => {
-                  const COLORS = [
-                    "#6366f1", "#22d3ee", "#f59e42", "#10b981",
-                    "#f43f5e", "#a21caf", "#fbbf24", "#64748b"
-                  ];
-                  return (
-                    <Cell key={`cell-${idx}`} fill={COLORS[idx % COLORS.length]} />
-                  );
-                })}
-              </Pie>
-              <Tooltip
-                formatter={(value: number, name: string, props: any) =>
-                  [`${value} vehicles`, props.payload.type || 'Unknown']
-                }
-              />
-              {/* Legend removed as per request */}
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="w-full md:w-1/2 space-y-2">
-          {filteredData.vehicleDistribution.map((item: any, idx: number) => (
-            <div
-              key={`vehicle-distribution-legend-${item.type || 'unknown'}-${idx}`}
-              className="flex items-center gap-3"
-            >
-              <span
-                className="inline-block w-4 h-4 rounded"
-                style={{
-                  backgroundColor: [
-                    "#6366f1", "#22d3ee", "#f59e42", "#10b981",
-                    "#f43f5e", "#a21caf", "#fbbf24", "#64748b"
-                  ][idx % 8]
-                }}
-              />
-              <span className="font-medium truncate max-w-[100px] md:max-w-[160px]">
-                {item.type || 'Unknown Type'}
-              </span>
-              <span className="ml-auto text-primary font-bold">{item.count}</span>
-              <span className="ml-2 text-muted-foreground text-sm">{item.percentage.toFixed(1)}%</span>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Vehicle Type Distribution</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {filteredData.vehicleDistribution.length === 0 ? (
+            <div className="text-center p-4 text-muted-foreground">
+              No vehicle type data available
             </div>
-          ))}
-        </div>
-      </div>
-    )}
-  </CardContent>
-</Card>
+          ) : (
+            <div className="w-full flex flex-col md:flex-row items-center justify-center gap-8">
+              <div className="w-full md:w-1/2 min-w-[220px] h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={filteredData.vehicleDistribution}
+                      dataKey="count"
+                      nameKey="type"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius="80%"
+                      innerRadius="45%"
+                      label={({ type, percentage }) =>
+                        `${type?.length > 12 ? type.slice(0, 12) + '…' : type || 'Unknown'} (${percentage.toFixed(1)}%)`
+                      }
+                      labelLine={false}
+                      minAngle={10}
+                    >
+                      {filteredData.vehicleDistribution.map((entry: any, idx: number) => {
+                        const COLORS = [
+                          "#6366f1", "#22d3ee", "#f59e42", "#10b981",
+                          "#f43f5e", "#a21caf", "#fbbf24", "#64748b"
+                        ];
+                        return (
+                          <Cell key={`cell-${idx}`} fill={COLORS[idx % COLORS.length]} />
+                        );
+                      })}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: number, name: string, props: any) =>
+                        [`${value} vehicles`, props.payload.type || 'Unknown']
+                      }
+                    />
+                    {/* Legend removed as per request */}
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="w-full md:w-1/2 space-y-2">
+                {filteredData.vehicleDistribution.map((item: any, idx: number) => (
+                  <div
+                    key={`vehicle-distribution-legend-${item.type || 'unknown'}-${idx}`}
+                    className="flex items-center gap-3"
+                  >
+                    <span
+                      className="inline-block w-4 h-4 rounded"
+                      style={{
+                        backgroundColor: [
+                          "#6366f1", "#22d3ee", "#f59e42", "#10b981",
+                          "#f43f5e", "#a21caf", "#fbbf24", "#64748b"
+                        ][idx % 8]
+                      }}
+                    />
+                    <span className="font-medium truncate max-w-[100px] md:max-w-[160px]">
+                      {item.type || 'Unknown Type'}
+                    </span>
+                    <span className="ml-auto text-primary font-bold">{item.count}</span>
+                    <span className="ml-2 text-muted-foreground text-sm">{item.percentage.toFixed(1)}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
+      {/* Hourly Sales Bar Chart - Only for today, yesterday, or single day */}
+      {["today", "yesterday", "singleday"].includes(dateRange) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Hourly Sales Breakdown</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {filteredData.filteredVehicles.length === 0 ? (
+              <div className="text-center p-4 text-muted-foreground">
+                No data available for selected day
+              </div>
+            ) : (
+              <div className="w-full h-64">
+                {/* Responsive X-axis label logic */}
+                {(() => {
+                  // Detect mobile (width < 640px)
+                  const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
+                  // Show every 3rd label on mobile, all on desktop
+                  const interval = isMobile ? 4 : 0;
+                  // Smaller font on mobile
+                  const fontSize = isMobile ? 10 : 12;
+
+                  return (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={(() => {
+                          const hours = Array.from({ length: 24 }, (_, i) => ({
+                            hour: i,
+                            label: `${((i % 12) === 0 ? 12 : i % 12).toString().padStart(2, "0")} ${i < 12 ? "AM" : "PM"}`,
+                            amount: 0,
+                            count: 0,
+                          }));
+                          let targetDate: Date | undefined;
+                          if (dateRange === "today") {
+                            targetDate = new Date();
+                          } else if (dateRange === "yesterday") {
+                            targetDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+                          } else if (dateRange === "singleday" && customFromDate) {
+                            targetDate = customFromDate;
+                          }
+                          if (targetDate) {
+                            const dayStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+                            const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+                            filteredData.filteredVehicles.forEach((vehicle) => {
+                              const created = new Date(vehicle.created_at);
+                              if (created >= dayStart && created < dayEnd) {
+                                const hour = created.getHours();
+                                hours[hour].amount += vehicle.price || 0;
+                                hours[hour].count += 1;
+                              }
+                            });
+                          }
+                          return hours;
+                        })()}
+                        margin={{ top: 10, right: 20, left: 0, bottom: 20 }}
+                      >
+                        <XAxis
+                          dataKey="label"
+                          tick={{ fontSize }}
+                          interval={interval}
+                          minTickGap={0}
+                          angle={-15}
+                          height={32}
+                        />
+                        <YAxis
+                          tick={{ fontSize }}
+                          width={isMobile ? 40 : 60}
+                          tickFormatter={(v) => `₹${v}`}
+                        />
+                        <Tooltip
+                          formatter={(value: number, name: string) =>
+                            [`₹${value.toLocaleString()}`, "Sales"]
+                          }
+                          labelFormatter={(label: string) => `Hour: ${label}`}
+                        />
+                        
+                       <Bar dataKey="amount" fill="#6366f1" radius={[4, 4, 0, 0]}>
+  <LabelList
+    dataKey="amount"
+    position="top"
+    formatter={(value: number) => value > 0 ? `₹${value}` : ""}
+    style={{ fontSize: isMobile ? 9 : 12, fill: "#222" }}
+  />
+</Bar>
+                        
+                      </BarChart>
+                    </ResponsiveContainer>
+                  );
+                })()}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Records Table */}
       <Card>
@@ -2018,7 +2112,7 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
                   {filteredData.filteredVehicles.slice(0, 50).map((vehicle) => (
                     <tr key={vehicle.id} className="border-b hover:bg-accent/50">
                       <td className="p-2 font-mono text-sm">{vehicle.vehicle_number}</td>
-                      
+
                       <td className="p-2">
                         <Badge variant="outline">{vehicle.vehicle_model || 'N/A'}</Badge>
                       </td>
