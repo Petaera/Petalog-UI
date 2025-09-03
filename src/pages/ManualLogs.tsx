@@ -858,7 +858,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                                   {log.payment_mode === "upi" && log.upi_account_name && (
                                     <>
                                       {" "}
-                                      | UPI: {log.upi_account_name}
+                                       {log.upi_account_name}
                                       {/* {log.upi_id ? ` (${log.upi_id})` : ""} */}
                                     </>
                                   )}
