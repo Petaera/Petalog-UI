@@ -110,7 +110,6 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
             // Request was cancelled, don't log as error
             return [];
           }
-          console.warn(`Search ${search.priority} failed:`, error);
           return [];
         }
       });
@@ -247,8 +246,6 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
       if (currentController.signal.aborted) {
         return;
       }
-      
-      console.error('Kerala location search error:', error);
       
       // Only update state if this is still the current search
       if (currentSearchId === searchCounterRef.current) {

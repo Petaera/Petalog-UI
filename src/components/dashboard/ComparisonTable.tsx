@@ -8,6 +8,7 @@ interface ComparisonTableProps {
   data: LogEntry[];
   selectedDate: string;
   selectedLogType: string;
+  selectedLocation?: string;
 }
 
 const getDuration = (entry: string, exit: string) => {
@@ -34,11 +35,75 @@ const LogTypeBadge: React.FC<{ logType: string }> = ({ logType }) => {
   );
 };
 
-const ComparisonTable: React.FC<ComparisonTableProps> = ({ loading, data, selectedDate, selectedLogType }) => {
-  // Debug logging to see what data is being rendered
-  console.log('ComparisonTable render - data:', data);
-  console.log('ComparisonTable render - selectedLogType:', selectedLogType);
-  console.log('ComparisonTable render - data length:', data?.length);
+import { useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { supabase } from "@/lib/supabaseClient";
+import { Button } from "@/components/ui/button";
+
+const ComparisonTable: React.FC<ComparisonTableProps> = ({ loading, data, selectedDate, selectedLogType, selectedLocation }) => {
+  const [imageOpen, setImageOpen] = useState(false);
+  const [entryImageUrl, setEntryImageUrl] = useState<string | null>(null);
+  const [exitImageUrl, setExitImageUrl] = useState<string | null>(null);
+  const [activeImage, setActiveImage] = useState<'entry' | 'exit'>('entry');
+  const [imageLoading, setImageLoading] = useState(false);
+
+  const handleAutomaticClick = async (vehicleNumber: string, entryTimeIso: string) => {
+    try {
+      setImageLoading(true);
+      // Query logs-auto for closest entry for this vehicle near entryTime
+      // We assume number_plate is linked via vehicles(number_plate)
+      const center = new Date(entryTimeIso);
+      const start15 = new Date(center.getTime() - 15 * 60 * 1000);
+      const end15 = new Date(center.getTime() + 15 * 60 * 1000);
+
+      const baseSelect = 'entry_url, exit_image, entry_time, vehicles(number_plate), location_id';
+
+      let query = supabase
+        .from('logs-auto')
+        .select(baseSelect)
+        .eq('location_id', selectedLocation)
+        .eq('vehicles.number_plate', vehicleNumber)
+        .gte('entry_time', start15.toISOString())
+        .lt('entry_time', end15.toISOString())
+        .order('entry_time', { ascending: true })
+        .limit(1);
+      let { data, error } = await query;
+      if (error) throw error;
+
+      // Fallback: widen to +/- 2 hours if nothing in +/-15 minutes
+      if (!data || data.length === 0) {
+        const start2h = new Date(center.getTime() - 2 * 60 * 60 * 1000);
+        const end2h = new Date(center.getTime() + 2 * 60 * 60 * 1000);
+        const { data: wideData, error: wideErr } = await supabase
+          .from('logs-auto')
+          .select(baseSelect)
+          .eq('location_id', selectedLocation)
+          .eq('vehicles.number_plate', vehicleNumber)
+          .gte('entry_time', start2h.toISOString())
+          .lt('entry_time', end2h.toISOString())
+          .order('entry_time', { ascending: true })
+          .limit(1);
+        if (wideErr) throw wideErr;
+        data = wideData || [];
+      }
+
+      const found = (data || [])[0];
+      const entryUrl = found?.entry_url || null;
+      const exitUrl = found?.exit_image || null;
+      setEntryImageUrl(entryUrl);
+      setExitImageUrl(exitUrl);
+      setActiveImage(entryUrl ? 'entry' : (exitUrl ? 'exit' : 'entry'));
+      setImageOpen(true);
+    } catch (e) {
+      setEntryImageUrl(null);
+      setExitImageUrl(null);
+      setImageOpen(true);
+    } finally {
+      setImageLoading(false);
+    }
+  };
+
+
   
   if (data && data.length > 0) {
     const logTypeCounts = data.reduce((acc: any, log: LogEntry) => {
@@ -120,8 +185,22 @@ const ComparisonTable: React.FC<ComparisonTableProps> = ({ loading, data, select
                   ) : (
                     data.map((log) => (
                       <tr key={log.id} className="hover:bg-muted/30">
-                        <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || "-"}</td>
-                        <td className="px-3 py-4 whitespace-nowrap text-sm font-medium"><LogTypeBadge logType={log.log_type} /></td>
+                        <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {log.log_type === 'automatic' ? (
+                            <button
+                              className="text-gray-900 cursor-pointer bg-transparent p-0 m-0 hover:opacity-80 focus:outline-none focus:ring-0"
+                              onClick={() => handleAutomaticClick(log.vehicle_number, log.entry_time)}
+                              title="View entry image"
+                            >
+                              {log.vehicle_number || "-"}
+                            </button>
+                          ) : (
+                            log.vehicle_number || "-"
+                          )}
+                        </td>
+                        <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                          <LogTypeBadge logType={log.log_type} />
+                        </td>
                         <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(log.entry_time).toLocaleString()}</td>
                         <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.exit_time ? new Date(log.exit_time).toLocaleString() : "-"}</td>
                         <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{getDuration(log.entry_time, log.exit_time)}</td>
@@ -134,6 +213,38 @@ const ComparisonTable: React.FC<ComparisonTableProps> = ({ loading, data, select
           </div>
         </div>
       </CardContent>
+      {/* Entry Image Dialog */}
+      <Dialog open={imageOpen} onOpenChange={setImageOpen}>
+        <DialogContent className="sm:max-w-[700px]">
+          <DialogHeader>
+            <DialogTitle>Entry Image</DialogTitle>
+          </DialogHeader>
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-sm text-muted-foreground">Vehicle image</div>
+            <div className="flex gap-2">
+              <Button size="sm" variant={activeImage === 'entry' ? 'default' : 'outline'} onClick={() => setActiveImage('entry')} disabled={!entryImageUrl}>Entry</Button>
+              <Button size="sm" variant={activeImage === 'exit' ? 'default' : 'outline'} onClick={() => setActiveImage('exit')} disabled={!exitImageUrl}>Exit</Button>
+            </div>
+          </div>
+          <div className="min-h-[300px] flex items-center justify-center">
+            {imageLoading ? (
+              <div className="text-sm text-muted-foreground">Loading image…</div>
+            ) : activeImage === 'entry' ? (
+              entryImageUrl ? (
+                <img src={entryImageUrl} alt="Entry" className="max-h-[70vh] object-contain" />
+              ) : (
+                <div className="text-sm text-muted-foreground">No entry image available</div>
+              )
+            ) : (
+              exitImageUrl ? (
+                <img src={exitImageUrl} alt="Exit" className="max-h-[70vh] object-contain" />
+              ) : (
+                <div className="text-sm text-muted-foreground">No exit image available</div>
+              )
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };

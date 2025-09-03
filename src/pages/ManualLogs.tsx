@@ -11,7 +11,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import ReactSelect from 'react-select';
+import { Textarea } from "@/components/ui/textarea";
+
+import { useUpiAccounts } from '@/hooks/useUpiAccounts';
 
 interface ManualLogsProps {
   selectedLocation?: string;
@@ -22,6 +24,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
   const navigate = useNavigate();
   const [pendingLogs, setPendingLogs] = useState([]);
   const [approvedLogs, setApprovedLogs] = useState([]);
+  const [payLaterLogs, setPayLaterLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState(() => {
     // Set default date to today
@@ -37,43 +40,78 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
   const [checkoutServices, setCheckoutServices] = useState<string[]>([]);
   const [checkoutAmount, setCheckoutAmount] = useState<string>('');
 
-  // Service price matrix for recomputing totals
-  const [priceMatrix, setPriceMatrix] = useState<any[]>([]);
-  const [serviceOptions, setServiceOptions] = useState<string[]>([]);
+  // Settle Pay Later modal state
+  const [settleOpen, setSettleOpen] = useState(false);
+  const [settleLog, setSettleLog] = useState<any | null>(null);
+  const [settlePaymentMode, setSettlePaymentMode] = useState<'cash' | 'upi'>('cash');
+
+
+
+  // State for tracking deleted logs
+  const [isDeleting, setIsDeleting] = useState<Set<string>>(new Set());
+
+  // UPI accounts state
+  const [selectedUpiAccount, setSelectedUpiAccount] = useState<string>('');
+  const { accounts: upiAccounts, loading: upiAccountsLoading } = useUpiAccounts(selectedLocation);
+
+  // Checkout remarks state
+  const [checkoutRemarks, setCheckoutRemarks] = useState<string>('');
+
+  // Reset UPI account selection when selectedLocation changes
+  useEffect(() => {
+    if (selectedLocation) {
+      setSelectedUpiAccount('');
+      console.log('📍 Location changed, resetting UPI account selection');
+    }
+  }, [selectedLocation]);
 
   useEffect(() => {
-    const fetchServicePrices = async () => {
-      const { data } = await supabase.from('Service_prices').select('*');
-      if (data && data.length > 0) {
-        setPriceMatrix(data);
-      }
-    };
-    fetchServicePrices();
-  }, []);
+    if (selectedLocation) {
+      fetchLogs();
+    }
+  }, [selectedLocation, selectedDate]);
+
+  useEffect(() => {
+    if (selectedLocation) {
+      fetchLogs();
+    }
+  }, [selectedLocation]);
 
   const openCheckout = (log: any) => {
     setCheckoutLog(log);
     setCheckoutPaymentMode((log?.payment_mode as any) || 'cash');
     setCheckoutDiscount(log?.discount != null ? String(log.discount) : '');
     setCheckoutServices(log?.service ? String(log.service).split(',').map((s:string)=>s.trim()).filter(Boolean) : []);
-    setCheckoutAmount(log?.Amount != null ? String(log.Amount) : '');
+    
+    // Calculate original amount by adding discount back to the current amount
+    const currentAmount = log?.Amount+log?.discount != null ? Number(log.Amount+log?.discount) : 0;
+    const discountAmount = log?.discount != null ? Number(log.discount) : 0;
+    const originalAmount = currentAmount - discountAmount;
+    setCheckoutAmount(currentAmount > 0 ? String(currentAmount) : '');
+    
+    setSelectedUpiAccount(''); // Reset UPI account selection
+    setCheckoutRemarks(''); // Reset remarks
 
-    // Build service options for the vehicle type
-    try {
-      const options = priceMatrix
-        .filter(row => (row.VEHICLE && row.VEHICLE.trim()) === String(log?.vehicle_type || '').trim())
-        .map(row => row.SERVICE)
-        .filter((v: string, i: number, arr: string[]) => v && arr.indexOf(v) === i);
-      setServiceOptions(options);
-    } catch {}
+
     setCheckoutOpen(true);
   };
 
   const confirmCheckout = async () => {
     if (!checkoutLog) return;
+    
+    // Validate UPI account selection if UPI is selected
+    if (checkoutPaymentMode === 'upi' && !selectedUpiAccount) {
+      toast.error('Please select a UPI account');
+      return;
+    }
+    
     try {
       const discountNum = checkoutDiscount === '' ? null : Number(checkoutDiscount) || 0;
       const amountNum = checkoutAmount === '' ? null : Number(checkoutAmount) || 0;
+      
+      // Find the selected UPI account details
+      const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
+      
       const updateData: any = {
         approval_status: 'approved',
         approved_at: new Date().toISOString(),
@@ -82,34 +120,85 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
         discount: discountNum,
         service: checkoutServices.join(','),
         Amount: amountNum,
+        remarks: checkoutRemarks || null,
       };
+      
+      // Add UPI account information if UPI is selected
+      if (checkoutPaymentMode === 'upi' && selectedAccount) {
+        updateData.upi_account_id = selectedUpiAccount;
+        updateData.upi_account_name = selectedAccount.account_name;
+        updateData.upi_id = selectedAccount.upi_id;
+      }
+      
+      if (String(checkoutPaymentMode).toLowerCase() !== 'credit') {
+        updateData.payment_date = new Date().toISOString();
+      }
+      
       const { error } = await supabase
         .from('logs-man')
         .update(updateData)
         .eq('id', checkoutLog.id);
       if (error) throw error;
+      
       toast.success('Checkout completed');
       setCheckoutOpen(false);
       setCheckoutLog(null);
+      setSelectedUpiAccount(''); // Reset UPI account selection
+      setCheckoutRemarks(''); // Reset remarks
       fetchLogs();
     } catch (err: any) {
       toast.error(`Checkout failed: ${err?.message || err}`);
     }
   };
 
-  console.log("ManualLogs component rendered. selectedLocation:", selectedLocation);
+  const openSettle = (log: any) => {
+    setSettleLog(log);
+    // default to cash when settling
+    setSettlePaymentMode('cash');
+    setSelectedUpiAccount(''); // Reset UPI account selection
+    setSettleOpen(true);
+  };
 
-  useEffect(() => {
-    console.log("ManualLogs useEffect running.", {
-      selectedLocation,
-      selectedDate,
-    });
-    // Wait until a valid location is available
-    if (!selectedLocation || selectedLocation.trim() === "") {
+  const confirmSettle = async () => {
+    if (!settleLog) return;
+    
+    // Validate UPI account selection if UPI is selected
+    if (settlePaymentMode === 'upi' && !selectedUpiAccount) {
+      toast.error('Please select a UPI account');
       return;
     }
-    fetchLogs();
-  }, [selectedLocation, selectedDate]);
+    
+    try {
+      // Find the selected UPI account details
+      const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
+      
+      const updateData: any = {
+        payment_mode: settlePaymentMode,
+        payment_date: new Date().toISOString(),
+      };
+      
+      // Add UPI account information if UPI is selected
+      if (settlePaymentMode === 'upi' && selectedAccount) {
+        updateData.upi_account_id = selectedUpiAccount;
+        updateData.upi_account_name = selectedAccount.account_name;
+        updateData.upi_id = selectedAccount.upi_id;
+      }
+      
+      const { error } = await supabase
+        .from('logs-man')
+        .update(updateData)
+        .eq('id', settleLog.id);
+      if (error) throw error;
+      
+      toast.success('Payment settled');
+      setSettleOpen(false);
+      setSettleLog(null);
+      setSelectedUpiAccount(''); // Reset UPI account selection
+      fetchLogs();
+    } catch (err: any) {
+      toast.error(`Settle failed: ${err?.message || err}`);
+    }
+  };
 
   const clearDateFilter = () => {
     // Reset to today's date instead of clearing
@@ -137,7 +226,8 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
       selectedModel: log.vehicle_model || '',
       selectedModelId: log.Brand_id || '',
       workshop: log.workshop || '',
-        wheel_type: log.wheel_type || '',
+      wheel_type: log.wheel_type || '',
+      entry_time: log.entry_time || log.created_at || null,
       isEditing: true
     };
     
@@ -153,9 +243,6 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
   const fetchLogs = async () => {
     setLoading(true);
     try {
-      console.log("Fetching logs for location:", selectedLocation);
-      console.log("Selected date:", selectedDate);
-      
       // Fetch pending logs (not approved yet)
       let pendingQuery = supabase
         .from("logs-man")
@@ -166,9 +253,10 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
 
       // Add date filter if selected
       if (selectedDate) {
-        const startOfDay = `${selectedDate}T00:00:00.000Z`;
-        const endOfDay = `${selectedDate}T23:59:59.999Z`;
-        console.log("Date filter - startOfDay:", startOfDay, "endOfDay:", endOfDay);
+        // Create proper date objects with timezone handling
+        const selectedDateObj = new Date(selectedDate);
+        const startOfDay = selectedDateObj.toISOString().split('T')[0] + 'T00:00:00.000Z';
+        const endOfDay = selectedDateObj.toISOString().split('T')[0] + 'T23:59:59.999Z';
         
         // Try filtering by entry_time first, then fallback to created_at
         pendingQuery = pendingQuery
@@ -177,13 +265,10 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
       }
 
       const { data: pendingData, error: pendingError } = await pendingQuery;
-
-      console.log("Pending query result:", { pendingData, pendingError });
-      console.log("Pending logs count:", pendingData?.length || 0);
       
+      let finalPending: any[] = [];
       // If no results with entry_time filter, try created_at
       if (selectedDate && pendingData?.length === 0) {
-        console.log("No results with entry_time filter, trying created_at...");
         let fallbackQuery = supabase
           .from("logs-man")
           .select("*, vehicles(number_plate)")
@@ -191,30 +276,24 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
           .in("approval_status", ["pending", null])
           .order("created_at", { ascending: false });
         
-        const startOfDay = `${selectedDate}T00:00:00.000Z`;
-        const endOfDay = `${selectedDate}T23:59:59.999Z`;
+        const selectedDateObj = new Date(selectedDate);
+        const startOfDay = selectedDateObj.toISOString().split('T')[0] + 'T00:00:00.000Z';
+        const endOfDay = selectedDateObj.toISOString().split('T')[0] + 'T23:59:59.999Z';
         
         const { data: fallbackData, error: fallbackError } = await fallbackQuery
           .gte("created_at", startOfDay)
           .lte("created_at", endOfDay);
         
-        console.log("Fallback query result:", { fallbackData, fallbackError });
-        
         if (fallbackData && fallbackData.length > 0) {
-          console.log("Found data with created_at filter");
-          setPendingLogs(fallbackData);
+          finalPending = fallbackData;
         } else {
-          setPendingLogs(pendingData || []);
+          finalPending = pendingData || [];
         }
       } else {
-        setPendingLogs(pendingData || []);
+        finalPending = pendingData || [];
       }
 
-      // Fetch approved logs - try different query approaches
-      let approvedData = [];
-      let approvedError = null;
-      
-      // First try: exact match for approved
+      // Fetch approved (closed) logs
       let approvedQuery = supabase
         .from("logs-man")
         .select("*, vehicles(number_plate)")
@@ -224,70 +303,99 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
 
       // Add date filter if selected
       if (selectedDate) {
-        const startOfDay = `${selectedDate}T00:00:00.000Z`;
-        const endOfDay = `${selectedDate}T23:59:59.999Z`;
-        console.log("Approved query - Date filter - startOfDay:", startOfDay, "endOfDay:", endOfDay);
+        const selectedDateObj = new Date(selectedDate);
+        const approvedStartOfDay = selectedDateObj.toISOString().split('T')[0] + 'T00:00:00.000Z';
+        const approvedEndOfDay = selectedDateObj.toISOString().split('T')[0] + 'T23:59:59.999Z';
         
-        // Try filtering by entry_time first, then fallback to created_at
         approvedQuery = approvedQuery
-          .gte("entry_time", startOfDay)
-          .lte("entry_time", endOfDay);
+          .gte("entry_time", approvedStartOfDay)
+          .lte("entry_time", approvedEndOfDay);
       }
 
-      const { data: approved1, error: error1 } = await approvedQuery;
-      
-      console.log("Approved query 1 result:", { approved1, error1 });
-      
-      if (error1) {
-        console.error("Approved query 1 failed:", error1);
-      } else {
-        approvedData = approved1 || [];
-        approvedError = error1;
-      }
-      
-      // If no results with entry_time filter, try created_at
-      if (selectedDate && approvedData.length === 0) {
-        console.log("No approved results with entry_time filter, trying created_at...");
+      const { data: approvedData, error: approvedError } = await approvedQuery;
+
+      let finalApproved: any[] = [];
+      if (selectedDate && approvedData?.length === 0) {
         let approvedFallbackQuery = supabase
           .from("logs-man")
           .select("*, vehicles(number_plate)")
           .eq("location_id", selectedLocation)
           .eq("approval_status", "approved")
           .order("created_at", { ascending: false });
-        
-        const startOfDay = `${selectedDate}T00:00:00.000Z`;
-        const endOfDay = `${selectedDate}T23:59:59.999Z`;
-        
+
+        const selectedDateObj = new Date(selectedDate);
+        const approvedFallbackStartOfDay = selectedDateObj.toISOString().split('T')[0] + 'T00:00:00.000Z';
+        const approvedFallbackEndOfDay = selectedDateObj.toISOString().split('T')[0] + 'T23:59:59.999Z';
+
         const { data: approvedFallbackData, error: approvedFallbackError } = await approvedFallbackQuery
-          .gte("created_at", startOfDay)
-          .lte("created_at", endOfDay);
-        
-        console.log("Approved fallback query result:", { approvedFallbackData, approvedFallbackError });
-        
-        if (approvedFallbackData && approvedFallbackData.length > 0) {
-          console.log("Found approved data with created_at filter");
-          setApprovedLogs(approvedFallbackData);
-        } else {
-          setApprovedLogs(approvedData || []);
-        }
+          .gte("created_at", approvedFallbackStartOfDay)
+          .lte("created_at", approvedFallbackEndOfDay);
+        finalApproved = approvedFallbackData && approvedFallbackData.length > 0 ? approvedFallbackData : (approvedData || []);
       } else {
-        setApprovedLogs(approvedData || []);
-      }
-      
-      // If no results, try a broader query to see what approval_status values exist
-      if (approvedData.length === 0 && !selectedDate) {
-        console.log("No approved logs found, checking all approval_status values...");
-        const { data: allStatuses, error: statusError } = await supabase
-          .from("logs-man")
-          .select("id, approval_status")
-          .eq("location_id", selectedLocation)
-          .limit(10);
-        
-        console.log("All approval statuses in database:", allStatuses);
+        finalApproved = approvedData || [];
       }
 
-      console.log("Approved query final result:", { approvedData, approvedError });
-      console.log("Approved logs count:", approvedData?.length || 0);
+      // Closed = approved but not Pay Later
+      const closed = (finalApproved || []).filter((log: any) => String(log.payment_mode).toLowerCase() !== 'credit');
+      setApprovedLogs(closed);
+      setPendingLogs(finalPending);
+
+      // Fetch Pay Later separately WITH date filter
+      let payLaterQuery = supabase
+        .from("logs-man")
+        .select("*, vehicles(number_plate)")
+        .eq("location_id", selectedLocation)
+        .eq("approval_status", "approved")
+        .eq("payment_mode", "credit")
+        .order("created_at", { ascending: false });
+
+      // Add date filter if selected
+      if (selectedDate) {
+        // Create proper date objects with timezone handling
+        const selectedDateObj = new Date(selectedDate);
+        const payLaterStartOfDay = selectedDateObj.toISOString().split('T')[0] + 'T00:00:00.000Z';
+        const payLaterEndOfDay = selectedDateObj.toISOString().split('T')[0] + 'T23:59:59.999Z';
+        
+        payLaterQuery = payLaterQuery
+          .gte("entry_time", payLaterStartOfDay)
+          .lte("entry_time", payLaterEndOfDay);
+      }
+
+      const { data: payLaterData, error: payLaterError } = await payLaterQuery;
+
+      let finalPayLater: any[] = [];
+      // If no results with entry_time filter, try created_at
+      if (selectedDate && payLaterData?.length === 0) {
+        let payLaterFallbackQuery = supabase
+          .from("logs-man")
+          .select("*, vehicles(number_plate)")
+          .eq("location_id", selectedLocation)
+          .eq("approval_status", "approved")
+          .eq("payment_mode", "credit")
+          .order("created_at", { ascending: false });
+        
+        const selectedDateObj = new Date(selectedDate);
+        const payLaterFallbackStartOfDay = selectedDateObj.toISOString().split('T')[0] + 'T00:00:00.000Z';
+        const payLaterFallbackEndOfDay = selectedDateObj.toISOString().split('T')[0] + 'T23:59:59.999Z';
+        
+        const { data: payLaterFallbackData, error: payLaterFallbackError } = await payLaterFallbackQuery
+          .gte("created_at", payLaterFallbackStartOfDay)
+          .lte("created_at", payLaterFallbackEndOfDay);
+        
+        if (payLaterFallbackData && payLaterFallbackData.length > 0) {
+          finalPayLater = payLaterFallbackData;
+        } else {
+          finalPayLater = payLaterData || [];
+        }
+      } else {
+        finalPayLater = payLaterData || [];
+      }
+
+      if (payLaterError) {
+        console.error('Error fetching pay later logs:', payLaterError);
+        toast.error('Error fetching pay later logs: ' + payLaterError.message);
+      }
+      setPayLaterLogs(finalPayLater);
 
       if (pendingError) {
         console.error('Error fetching pending logs:', pendingError);
@@ -352,29 +460,43 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
     }
   };
 
-  const handleDelete = async (logId: string, tableName: 'logs-man' | 'logs-man-approved') => {
-    if (!confirm('Are you sure you want to delete this log? This action cannot be undone.')) {
+  const handleDelete = async (logId: string) => {
+    if (!logId) {
+      toast.error('Invalid log ID');
       return;
     }
 
     try {
+      setIsDeleting(prev => { const newSet = new Set(prev); newSet.add(logId); return newSet; });
+
       const { error } = await supabase
-        .from(tableName)
+        .from('logs-man')
         .delete()
         .eq('id', logId);
 
       if (error) {
         console.error('Error deleting log:', error);
-        toast.error('Failed to delete log');
+        toast.error('Error deleting log: ' + error.message);
+        setIsDeleting(prev => { const newSet = new Set(prev); newSet.delete(logId); return newSet; });
         return;
       }
 
+      // Update local state immediately for instant UI feedback
+      setPendingLogs(prev => prev.filter(log => log.id !== logId));
+      setApprovedLogs(prev => prev.filter(log => log.id !== logId));
+      setPayLaterLogs(prev => prev.filter(log => log.id !== logId));
+
       toast.success('Log deleted successfully');
-      // Refresh the logs
-      fetchLogs();
+      
+      // Refresh from database after a short delay for consistency
+      setTimeout(() => {
+        fetchLogs();
+      }, 100);
+
     } catch (error) {
       console.error('Error deleting log:', error);
-      toast.error('Failed to delete log');
+      toast.error('Error deleting log: ' + error.message);
+      setIsDeleting(prev => { const newSet = new Set(prev); newSet.delete(logId); return newSet; });
     }
   };
 
@@ -435,6 +557,15 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                   Today
                 </Button>
             </div>
+            {/* Debug info */}
+            {selectedDate && (
+              <div className="text-xs text-muted-foreground">
+                Filtering: {new Date(selectedDate).toLocaleDateString()} | 
+                Pending: {pendingLogs.length} | 
+                Approved: {approvedLogs.length} | 
+                Pay Later: {payLaterLogs.length}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -448,11 +579,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                 <span>Pending Tickets</span>
                 <Badge variant="secondary">{pendingLogs.length}</Badge>
               </div>
-              {selectedDate && (
-                <Badge variant="outline" className="sm:ml-2">
-                  {new Date(selectedDate).toLocaleDateString()}
-                </Badge>
-              )}
+              {/* Date filter intentionally not shown for Pay Later */}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -480,52 +607,174 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                           {selectedDate ? `No pending tickets found for ${new Date(selectedDate).toLocaleDateString()}` : 'No pending tickets'}
                         </td></tr>
                       ) : (
-                        pendingLogs.map((log, idx) => (
-                          <tr key={log.id || idx} className="hover:bg-muted/30">
-                            <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_model || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{log.Name || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.Phone_no || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 hidden md:table-cell">
-                              {log.Amount ? formatCurrency(log.Amount) : "-"}
-                            </td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
-                              {log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
-                            </td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
-                              <div className="flex flex-col sm:flex-row gap-1">
-                                <Button
-                                  size="sm"
-                                  variant="default"
-                                  className="bg-green-600 hover:bg-green-700 text-xs"
-                                  onClick={() => openCheckout(log)}
-                                >
-                                  <Check className="h-3 w-3 mr-1" />
-                                  Checkout
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="text-xs"
-                                  onClick={() => handleEdit(log)}
-                                >
-                                  <Edit className="h-3 w-3 mr-1" />
-                                  Edit
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  className="text-xs"
-                                  onClick={() => handleDelete(log.id, 'logs-man')}
-                                  title="Delete log"
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
+                        pendingLogs.map((log, idx) => {
+                          return (
+                            <tr key={log.id || idx} className="hover:bg-muted/30">
+                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_model || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{log.Name || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.Phone_no || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 hidden md:table-cell">
+                                {log.Amount ? formatCurrency(log.Amount) : "-"}
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
+                                {log.entry_time ? new Date(log.entry_time).toLocaleString() : 
+                                 log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                                <div className="flex flex-col sm:flex-row gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="default"
+                                    className="bg-green-600 hover:bg-green-700 text-xs"
+                                    onClick={() => openCheckout(log)}
+                                  >
+                                    <Check className="h-3 w-3 mr-1" />
+                                    Checkout
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-xs"
+                                    onClick={() => handleEdit(log)}
+                                  >
+                                    <Edit className="h-3 w-3 mr-1" />
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    className="text-xs"
+                                    onClick={() => {
+                                      console.log('🚨 DELETE BUTTON CLICKED!');
+                                      console.log('Log object:', log);
+                                      console.log('Log ID:', log.id);
+                                      console.log('Log ID type:', typeof log.id);
+                                      console.log('Log ID length:', log.id?.length);
+                                      
+                                      if (!log.id) {
+                                        console.error('❌ Log ID is missing or undefined!');
+                                        toast.error('Cannot delete: Log ID is missing');
+                                        return;
+                                      }
+                                      
+                                      handleDelete(log.id);
+                                    }}
+                                    title="Delete log"
+                                    disabled={isDeleting.has(log.id)}
+                                  >
+                                    {isDeleting.has(log.id) ? (
+                                      <X className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="h-3 w-3" />
+                                    )}
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Pay Later Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <div className="flex items-center gap-2">
+                <Clock className="h-5 w-5 text-purple-500" />
+                <span>Pay Later</span>
+                <Badge variant="secondary">{payLaterLogs.length}</Badge>
+              </div>
+              {selectedDate && (
+                <Badge variant="outline" className="sm:ml-2">
+                  {new Date(selectedDate).toLocaleDateString()}
+                </Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto -mx-4 sm:mx-0">
+              <div className="min-w-full inline-block align-middle">
+                <div className="overflow-hidden">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle No</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle Model</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Customer Name</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden xl:table-cell">Phone</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Amount</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Service</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Entry Time</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Exit Time</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Date</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {loading ? (
+                        <tr><td colSpan={11} className="text-center py-4">Loading...</td></tr>
+                      ) : payLaterLogs.length === 0 ? (
+                        <tr><td colSpan={11} className="text-center py-4 text-muted-foreground">
+                          {selectedDate ? `No pay later tickets for ${new Date(selectedDate).toLocaleDateString()}` : 'No pay later tickets'}
+                        </td></tr>
+                      ) : (
+                        payLaterLogs.map((log: any, idx: number) => {
+                          return (
+                            <tr key={log.id || idx} className="hover:bg-muted/30">
+                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_model || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{log.Name || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden xl:table-cell">{log.Phone_no || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 hidden md:table-cell">
+                                {(() => {
+                                  const currentAmount = log.Amount || 0;
+                                  const discountAmount = log.discount || 0;
+                                  const originalAmount = currentAmount - discountAmount;
+                                  return originalAmount > 0 ? formatCurrency(originalAmount) : "-";
+                                })()}
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
+                                {log.entry_time ? new Date(log.entry_time).toLocaleString() : 
+                               log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">
+                                {log.exit_time ? new Date(log.exit_time).toLocaleString() : 
+                               log.approved_at ? new Date(log.approved_at).toLocaleString() : "-"}
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {log.payment_date ? new Date(log.payment_date).toLocaleString() : '-'}
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                                <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100 text-xs">Pay Later</Badge>
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                                <div className="flex flex-col sm:flex-row gap-1">
+                                  <Button size="sm" variant="default" className="text-xs" onClick={() => openSettle(log)}>Settle</Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-xs"
+                                    onClick={() => handleEdit(log)}
+                                  >
+                                    <Edit className="h-3 w-3 mr-1" />
+                                    Edit
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>
@@ -562,10 +811,11 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle Model</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Customer Name</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden xl:table-cell">Phone</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Amount</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Service</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Entry Time</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Exit Time</th>
+                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Exit Time</th>
+                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Date</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Duration</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -576,60 +826,111 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                         <tr><td colSpan={11} className="text-center py-4">Loading...</td></tr>
                       ) : approvedLogs.length === 0 ? (
                         <tr><td colSpan={11} className="text-center py-4 text-muted-foreground">
-                          {selectedDate ? `No approved logs found for ${new Date(selectedDate).toLocaleDateString()}` : 'No approved logs found'}
+                          {selectedDate ? `No approved tickets found for ${new Date(selectedDate).toLocaleDateString()}` : 'No approved tickets'}
                         </td></tr>
                       ) : (
-                        approvedLogs.map((log, idx) => (
-                          <tr key={log.id || idx} className="hover:bg-muted/30">
-                            <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_model || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{log.Name || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden xl:table-cell">{log.Phone_no || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 hidden md:table-cell">
-                              {log.Amount ? formatCurrency(log.Amount) : "-"}
-                            </td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
-                              {log.entry_time ? new Date(log.entry_time).toLocaleString() : 
-                               log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
-                            </td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">
-                              {log.exit_time ? new Date(log.exit_time).toLocaleString() : 
-                               log.approved_at ? new Date(log.approved_at).toLocaleString() : "-"}
-                            </td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
-                              {(() => {
-                                const entryTime = log.entry_time || log.created_at;
-                                const exitTime = log.exit_time || log.approved_at;
-                                console.log('Duration debug:', { 
-                                  entry: entryTime, 
-                                  exit: exitTime, 
-                                  entryTime: log.entry_time,
-                                  createdAt: log.created_at,
-                                  exitTime: log.exit_time, 
-                                  approvedAt: log.approved_at 
-                                });
-                                return getDuration(entryTime, exitTime);
-                              })()}
-                            </td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
-                              <Badge className="bg-green-100 text-green-800 hover:bg-green-100 text-xs">
-                                Approved
-                              </Badge>
-                            </td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => handleDelete(log.id, 'logs-man-approved')}
-                                className="text-xs"
-                                title="Delete log"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </td>
-                          </tr>
-                        ))
+                        approvedLogs.map((log, idx) => {
+                          return (
+                            <tr key={log.id || idx} className="hover:bg-muted/30">
+                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_model || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{log.Name || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden xl:table-cell">{log.Phone_no || "-"}</td>
+                              {/* <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 hidden md:table-cell">
+                                 {(() => {
+                                  const currentAmount = log.Amount || 0;
+                                  const discountAmount = log.discount || 0;
+                                  const originalAmount = currentAmount - discountAmount;
+                                  return currentAmount > 0 ? formatCurrency(currentAmount) : "-";
+                                })()}
+                              </td> */}
+                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600">
+                                {/* Amount */}
+                                {(() => {
+                                  const currentAmount = log.Amount || 0;
+                                  const discountAmount = log.discount || 0;
+                                  const originalAmount = currentAmount - discountAmount;
+                                  return currentAmount > 0 ? formatCurrency(currentAmount) : "-";
+                                })()}
+                                {/* Payment Method & UPI Account */}
+                                <div className="mt-1 text-xs text-muted-foreground font-normal">
+                                  Payment: {log.payment_mode ? log.payment_mode.toUpperCase() : "-"}
+                                  {log.payment_mode === "upi" && log.upi_account_name && (
+                                    <>
+                                      {" "}
+                                       {log.upi_account_name}
+                                      {/* {log.upi_id ? ` (${log.upi_id})` : ""} */}
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
+                                {log.entry_time ? new Date(log.entry_time).toLocaleString() : 
+                                 log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">
+                                {log.exit_time ? new Date(log.exit_time).toLocaleString() : 
+                                 log.approved_at ? new Date(log.approved_at).toLocaleString() : "-"}
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {log.payment_date ? new Date(log.payment_date).toLocaleString() : '-'}
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
+                                {(() => {
+                                  const entryTime = log.entry_time || log.created_at;
+                                  const exitTime = log.exit_time || log.approved_at;
+                                  return getDuration(entryTime, exitTime);
+                                })()}
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                                <Badge className="bg-green-100 text-green-800 hover:bg-green-100 text-xs">
+                                  Approved
+                                </Badge>
+                              </td>
+                              <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                                <div className="flex flex-col sm:flex-row gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleEdit(log)}
+                                  >
+                                    <Edit className="h-3 w-3 mr-1" />
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={() => {
+                                      console.log('🚨 APPROVED LOG DELETE BUTTON CLICKED!');
+                                      console.log('Log object:', log);
+                                      console.log('Log ID:', log.id);
+                                      console.log('Log ID type:', typeof log.id);
+                                      console.log('Log ID length:', log.id?.length);
+                                      
+                                      if (!log.id) {
+                                        console.error('❌ Log ID is missing or undefined!');
+                                        toast.error('Cannot delete: Log ID is missing');
+                                        return;
+                                      }
+                                      
+                                      handleDelete(log.id);
+                                    }}
+                                    className="text-xs"
+                                    title="Delete log"
+                                    disabled={isDeleting.has(log.id)}
+                                  >
+                                    {isDeleting.has(log.id) ? (
+                                      <X className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="h-3 w-3" />
+                                    )}
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>
@@ -641,12 +942,12 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
 
         {/* Checkout Dialog */}
         <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] overflow-hidden flex flex-col">
             <DialogHeader>
               <DialogTitle>Checkout</DialogTitle>
               <DialogDescription>Confirm details before completing checkout.</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
+            <div className="space-y-4 overflow-y-auto flex-1 pr-2">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Vehicle No</Label>
@@ -663,26 +964,19 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
               </div>
               <div>
                 <Label>Service Chosen</Label>
-                <ReactSelect
-                  isMulti
-                  options={serviceOptions.map(opt => ({ value: opt, label: opt }))}
-                  value={checkoutServices.map(s => ({ value: s, label: s }))}
-                  onChange={(selected) => {
-                    const values = Array.isArray(selected) ? selected.map((s: any) => s.value) : [];
-                    setCheckoutServices(values);
-                    // recompute amount if price matrix available
-                    if (priceMatrix.length > 0 && checkoutLog?.vehicle_type) {
-                      let total = 0;
-                      for (const sv of values) {
-                        const row = priceMatrix.find(r => (r.VEHICLE && r.VEHICLE.trim()) === String(checkoutLog.vehicle_type).trim() && (r.SERVICE && r.SERVICE.trim()) === String(sv).trim());
-                        if (row && row.PRICE !== undefined) total += Number(row.PRICE);
-                      }
-                      setCheckoutAmount(String(total));
-                    }
-                  }}
-                  placeholder={serviceOptions.length ? 'Select services' : 'No services'}
-                  classNamePrefix="react-select"
-                />
+                <div className="mt-1 text-sm">
+                  {checkoutServices.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {checkoutServices.map((service, index) => (
+                        <Badge key={index} variant="secondary" className="text-xs">
+                          {service}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">No services selected</span>
+                  )}
+                </div>
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div>
@@ -718,10 +1012,162 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* UPI Account Selection */}
+              {checkoutPaymentMode === 'upi' && (
+                <div>
+                  <Label>Select UPI Account</Label>
+                  <Select value={selectedUpiAccount} onValueChange={setSelectedUpiAccount}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder={upiAccountsLoading ? "Loading accounts..." : "Select UPI account"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {upiAccounts.map((account) => (
+                        <SelectItem key={account.id} value={account.id}>
+                          {account.account_name} - {account.upi_id} ({account.location_name || 'N/A'})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {upiAccounts.length === 0 && !upiAccountsLoading && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      No UPI accounts found. Please add UPI accounts in the settings.
+                    </p>
+                  )}
+                  
+                  {/* QR Code Display */}
+                  {selectedUpiAccount && (
+                    <div className="mt-4 space-y-2">
+                      <Label>QR Code</Label>
+                      {(() => {
+                        const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
+                        if (selectedAccount?.qr_code_url) {
+                          return (
+                            <div className="flex justify-center p-2">
+                              <img 
+                                src={selectedAccount.qr_code_url} 
+                                alt={`QR Code for ${selectedAccount.account_name}`}
+                                className="w-32 h-32 object-contain border rounded-lg shadow-sm"
+                              />
+                            </div>
+                          );
+                        } else {
+                          return (
+                            <div className="text-sm text-muted-foreground text-center py-8 border rounded-lg bg-muted/20">
+                              No QR code available for this account
+                            </div>
+                          );
+                        }
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Remarks Field */}
+              <div>
+                <Label htmlFor="checkout-remarks">Remarks (Optional)</Label>
+                <Textarea 
+                  id="checkout-remarks"
+                  placeholder="Any additional notes for this checkout..."
+                  value={checkoutRemarks}
+                  onChange={(e) => setCheckoutRemarks(e.target.value)}
+                  rows={3}
+                />
+              </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setCheckoutOpen(false)}>Cancel</Button>
               <Button onClick={confirmCheckout}>Confirm Checkout</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Settle Pay Later Dialog */}
+        <Dialog open={settleOpen} onOpenChange={setSettleOpen}>
+          <DialogContent className="max-h-[90vh] overflow-hidden flex flex-col">
+            <DialogHeader>
+              <DialogTitle>Settle Payment</DialogTitle>
+              <DialogDescription>Choose payment mode to close this Pay Later ticket.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 overflow-y-auto flex-1 pr-2">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Vehicle No</Label>
+                  <div className="mt-1 text-sm font-medium">{settleLog?.vehicle_number || '-'}</div>
+                </div>
+                <div>
+                  <Label>Amount</Label>
+                  <div className="mt-1 text-sm font-medium">{settleLog?.Amount-settleLog?.discount!= null ? formatCurrency(settleLog?.Amount-settleLog?.discount) : '-'}</div>
+                </div>
+              </div>
+              <div>
+                <Label>Payment Mode</Label>
+                <Select value={settlePaymentMode} onValueChange={(v: any) => setSettlePaymentMode(v)}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select payment mode" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="upi">UPI</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* UPI Account Selection for Settle */}
+              {settlePaymentMode === 'upi' && (
+                <div>
+                  <Label>Select UPI Account</Label>
+                  <Select value={selectedUpiAccount} onValueChange={setSelectedUpiAccount}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder={upiAccountsLoading ? "Loading accounts..." : "Select UPI account"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {upiAccounts.map((account) => (
+                        <SelectItem key={account.id} value={account.id}>
+                          {account.account_name} - {account.upi_id} ({account.location_name || 'N/A'})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {upiAccounts.length === 0 && !upiAccountsLoading && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      No UPI accounts found. Please add UPI accounts in the settings.
+                    </p>
+                  )}
+                  
+                  {/* QR Code Display for Settle */}
+                  {selectedUpiAccount && (
+                    <div className="mt-4 space-y-2">
+                      <Label>QR Code</Label>
+                      {(() => {
+                        const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
+                        if (selectedAccount?.qr_code_url) {
+                          return (
+                            <div className="flex justify-center p-2">
+                              <img 
+                                src={selectedAccount.qr_code_url} 
+                                alt={`QR Code for ${selectedAccount.account_name}`}
+                                className="w-32 h-32 object-contain border rounded-lg shadow-sm"
+                              />
+                            </div>
+                          );
+                        } else {
+                          return (
+                            <div className="text-sm text-muted-foreground text-center py-8 border rounded-lg bg-muted/20">
+                              No QR code available for this account
+                            </div>
+                          );
+                        }
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSettleOpen(false)}>Cancel</Button>
+              <Button onClick={confirmSettle}>Confirm</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

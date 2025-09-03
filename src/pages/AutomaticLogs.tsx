@@ -8,13 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 
-// Debug Supabase client
-console.log('🔍 AutomaticLogs Supabase client debug:', {
-  hasSupabase: !!supabase,
-  supabaseType: typeof supabase,
-  hasFrom: !!supabase?.from,
-  hasSelect: !!supabase?.from?.('test')?.select
-});
+
 
 interface AutomaticLogsProps {
   selectedLocation?: string;
@@ -26,85 +20,28 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
   const [selectedDate, setSelectedDate] = useState(() => {
     const today = new Date();
     const defaultDate = today.toISOString().split('T')[0];
-    console.log('🔍 AutomaticLogs Initial date state:', {
-      today,
-      todayISO: today.toISOString(),
-      defaultDate
-    });
     return defaultDate;
   });
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState("");
 
-  // Debug selectedLocation prop changes
-  useEffect(() => {
-    console.log('🔍 AutomaticLogs selectedLocation prop changed:', {
-      selectedLocation,
-      hasLocation: !!selectedLocation,
-      locationType: typeof selectedLocation,
-      locationLength: selectedLocation?.length || 0
-    });
-  }, [selectedLocation]);
 
-  // Debug logs state changes
-  useEffect(() => {
-    console.log('🔍 AutomaticLogs logs state changed:', {
-      logsLength: logs?.length || 0,
-      loading,
-      hasLogs: !!logs
-    });
-  }, [logs, loading]);
 
-  // Debug table rendering
-  useEffect(() => {
-    console.log('🔍 AutomaticLogs Table rendering with:', {
-      loading,
-      logsLength: logs?.length || 0,
-      selectedDate,
-      hasLogs: !!logs
-    });
-  }, [loading, logs, selectedDate]);
 
-  // Debug component lifecycle
-  useEffect(() => {
-    console.log('🔍 AutomaticLogs Component mounted');
-    return () => {
-      console.log('🔍 AutomaticLogs Component unmounting');
-    };
-  }, []);
-
-  console.log("AutomaticLogs component rendered:", {
-    selectedLocation,
-    selectedDate,
-    loading,
-    logsLength: logs?.length || 0
-  });
 
   const fetchLogs = useCallback(async () => {
-    console.log('🔍 AutomaticLogs Starting fetchLogs with:', {
-      selectedLocation,
-      selectedDate
-    });
-
-    // Safety check - don't proceed without location
-    if (!selectedLocation) {
-      console.warn('⚠️ AutomaticLogs fetchLogs called without selectedLocation, aborting');
-      setLoading(false);
-      setLogs([]);
-      return;
-    }
+          // Safety check - don't proceed without location
+      if (!selectedLocation) {
+        setLoading(false);
+        setLogs([]);
+        return;
+      }
 
     setLoading(true);
 
     try {
-      // Test Supabase connection first
-      console.log('🔍 AutomaticLogs Testing Supabase connection...');
-      const { data: testData, error: testError } = await supabase
-        .from("logs-auto")
-        .select("id")
-        .limit(1);
-      console.log('🔍 AutomaticLogs Supabase connection test:', { testData, testError });
+
 
       // Build query step by step to ensure proper filtering
       let query = supabase
@@ -131,40 +68,20 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
           .gte('entry_time', startOfDay.toISOString())
           .lt('entry_time', endOfDay.toISOString());
         
-        console.log('🔍 AutomaticLogs Date filter applied:', {
-          selectedDate,
-          startOfDay: startOfDay.toISOString(),
-          endOfDay: endOfDay.toISOString(),
-          queryAfterDate: !!query
-        });
+
       }
 
       // Order by entry time (newest first) and limit results
       query = query.order('entry_time', { ascending: false }).limit(100);
       
-      console.log('🔍 AutomaticLogs Final query ready, executing...');
       const { data, error } = await query;
-      
-      console.log('🔍 AutomaticLogs Query executed:', {
-        error: error ? error.message : null,
-        dataLength: data?.length || 0,
-        hasData: !!data
-      });
 
       if (error) {
-        console.error('❌ AutomaticLogs Error fetching logs:', error);
-        console.error('❌ Error details:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        });
         setLogs([]);
         return;
       }
 
       if (!data || data.length === 0) {
-        console.log('ℹ️ AutomaticLogs No logs found for the selected criteria');
         setLogs([]);
         return;
       }
@@ -207,58 +124,27 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
         const seenIds = new Set();
         uniqueData = data.filter(item => {
           if (seenIds.has(item.id)) {
-            console.log('🔍 AutomaticLogs Duplicate ID found and removed:', item.id);
             return false;
           }
           seenIds.add(item.id);
           return true;
         });
-        
-        console.log('🔍 AutomaticLogs Duplicate removal:', {
-          originalCount: data.length,
-          uniqueCount: uniqueData.length,
-          duplicatesRemoved: data.length - uniqueData.length
-        });
       }
 
       if (!error && uniqueData) {
-        console.log('🔍 AutomaticLogs Setting logs state with data:', {
-          dataLength: uniqueData.length,
-          sampleData: uniqueData.slice(0, 2)
-        });
         setLogs(uniqueData);
-        console.log('AutomaticLogs logs state after setLogs:', uniqueData);
-        console.log('AutomaticLogs Final logs count:', uniqueData.length);
       } else {
-        console.warn('AutomaticLogs No data or error:', { error, uniqueData });
-        console.log('🔍 AutomaticLogs Setting logs state to empty array');
         setLogs([]);
       }
     } catch (error) {
-      console.error('AutomaticLogs Error in fetchLogs:', error);
-      console.log('🔍 AutomaticLogs Error details:', {
-        errorType: typeof error,
-        errorMessage: error?.message,
-        errorStack: error?.stack
-      });
       setLogs([]);
     } finally {
       setLoading(false);
-      console.log('AutomaticLogs Loading states reset:', { loading: false });
     }
   }, [selectedLocation, selectedDate]); // Removed isFetching from dependencies
 
   useEffect(() => {
-    console.log("AutomaticLogs useEffect running:", {
-      selectedLocation,
-      selectedDate,
-      fetchLogsFunction: typeof fetchLogs,
-      hasLocation: !!selectedLocation,
-      locationType: typeof selectedLocation
-    });
-
     if (!selectedLocation) {
-      console.log("🔍 AutomaticLogs No location selected, skipping fetch");
       setLoading(false);
       setLogs([]);
       return;
@@ -266,11 +152,9 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
 
     // Don't fetch if date is not set yet
     if (!selectedDate) {
-      console.log("🔍 AutomaticLogs Date not set yet, skipping fetch");
       return;
     }
 
-    console.log("🔍 AutomaticLogs Calling fetchLogs with location:", selectedLocation);
     fetchLogs();
   }, [selectedLocation, selectedDate, fetchLogs]);
 

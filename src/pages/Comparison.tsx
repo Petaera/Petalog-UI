@@ -64,6 +64,7 @@ export default function Comparison({ selectedLocation }: ComparisonProps) {
         data={data}
         selectedDate={selectedDate}
         selectedLogType={selectedLogType}
+        selectedLocation={selectedLocation}
       />
     </div>
   );

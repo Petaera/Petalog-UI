@@ -193,6 +193,10 @@
     @apply bg-gradient-to-br from-success-light to-card border-success/20;
   }
   
+  .metric-card-warning {
+    @apply bg-gradient-to-br from-warning-light to-card border-warning/20;
+  }
+  
   .data-table {
     @apply bg-card border border-border rounded-lg overflow-hidden;
   }

@@ -38,6 +38,17 @@ export default function ManagerPortal() {
   // Button disable state for 5 seconds after submit
   const [isSubmitDisabled, setIsSubmitDisabled] = useState(false);
 
+  // Custom entry date and time
+  const [customEntryDate, setCustomEntryDate] = useState(() => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  });
+  const [customEntryTime, setCustomEntryTime] = useState(() => {
+    const now = new Date();
+    return now.toTimeString().slice(0, 5);
+  });
+  const [useCustomDateTime, setUseCustomDateTime] = useState(false);
+
   // Service price map
   const SERVICE_PRICES: { [key: string]: number } = {
     'basic': 200,
@@ -141,6 +152,18 @@ export default function ManagerPortal() {
       return;
     }
 
+    // Validate custom date and time if enabled
+    if (useCustomDateTime) {
+      const selectedDateTime = new Date(`${customEntryDate}T${customEntryTime}`);
+      const now = new Date();
+      
+      if (selectedDateTime > now) {
+        toast.error('Entry date and time cannot be in the future');
+        setIsSubmitDisabled(false);
+        return;
+      }
+    }
+
     // Mock submission
     toast.success('Vehicle entry submitted successfully!');
     
@@ -153,6 +176,10 @@ export default function ManagerPortal() {
     setRemarks('');
     setPaymentMode('cash');
     setScratchImage(null);
+    // Reset custom datetime
+    setUseCustomDateTime(false);
+    setCustomEntryDate(new Date().toISOString().split('T')[0]);
+    setCustomEntryTime(new Date().toTimeString().slice(0, 5));
   };
 
   const handleScratchSave = (imageBlob: Blob) => {
@@ -318,6 +345,50 @@ export default function ManagerPortal() {
                     <span className="text-muted-foreground">
                       {previousVisits > 0 ? `Previous Visits: ${previousVisits} times` : 'New Customer'}
                     </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Custom Entry Date and Time */}
+              <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="useCustomDateTime"
+                    checked={useCustomDateTime}
+                    onCheckedChange={(checked) => setUseCustomDateTime(checked as boolean)}
+                  />
+                  <Label htmlFor="useCustomDateTime" className="text-base font-semibold">
+                    Use Custom Entry Date & Time
+                  </Label>
+                </div>
+                
+                {useCustomDateTime && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="customEntryDate">Entry Date</Label>
+                      <Input
+                        id="customEntryDate"
+                        type="date"
+                        value={customEntryDate}
+                        onChange={(e) => setCustomEntryDate(e.target.value)}
+                        max={new Date().toISOString().split('T')[0]}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="customEntryTime">Entry Time</Label>
+                      <Input
+                        id="customEntryTime"
+                        type="time"
+                        value={customEntryTime}
+                        onChange={(e) => setCustomEntryTime(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
+                
+                {useCustomDateTime && (
+                  <div className="text-sm text-muted-foreground">
+                    Entry will be recorded for: {customEntryDate} at {customEntryTime}
                   </div>
                 )}
               </div>

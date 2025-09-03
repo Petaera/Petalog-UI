@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Camera, Clock, Database, Gauge, Gift, Download, Zap, Eye, BarChart3, Car, Truck, Building, Warehouse, Shield, Users, Timer, FileText, MapPin, RefreshCw, PenTool, Settings } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from '@/contexts/AuthContext';
-import { applyLocationFilter, getLocationFilterDescription, debugLocationFiltering, debugVehicleData } from "@/lib/utils";
+import { applyLocationFilter, getLocationFilterDescription } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { useLogsQuery } from "@/hooks/useSupabaseQuery";
 
@@ -44,14 +44,7 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
     timeout: 45000 
   });
 
-  // Debug logging
-  console.log('🎯 Dashboard component rendered with:', {
-    user: user ? { id: user.id, role: user.role, assignedLocation: user.assigned_location } : null,
-    selectedLocation,
-    hasUser: !!user,
-    userRole: user?.role,
-    assignedLocation: user?.assigned_location
-  });
+
 
   // Handle errors and show retry options
   useEffect(() => {
@@ -83,13 +76,7 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
 
       setLocationFilterApplied(isFiltered);
 
-      // Debug location filtering
-      debugLocationFiltering(user, selectedLocation || '', filteredManualLogs, 'Manual Logs');
-      debugLocationFiltering(user, selectedLocation || '', filteredAutoLogs, 'Auto Logs');
-      
-      // Debug vehicle data fetching
-      debugVehicleData(filteredManualLogs, 'Manual Logs');
-      debugVehicleData(filteredAutoLogs, 'Auto Logs');
+
     }
   }, [manualLogs, autoLogs, user?.role, user?.assigned_location, selectedLocation]);
 
@@ -114,41 +101,31 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
         isLocationFiltered = true;
       }
 
-      console.log('🏢 Dashboard Stats Debug:');
-      console.log('- User role:', user?.role);
-      console.log('- User assigned_location:', user?.assigned_location);
-      console.log('- Selected location prop:', selectedLocation);
-      console.log('- Final location filter:', locationFilter);
-      console.log('- Date range:', startOfDay.toISOString(), 'to', endOfDay.toISOString());
+
 
       // Build queries with location filter if needed
+      // Only count approved/closed tickets for today's income (excluding Pay Later/credit)
       let todayQuery = supabase
         .from('logs-man')
-        .select('Amount, created_at, location_id')
+        .select('Amount, created_at, location_id, approval_status, payment_mode')
+        .eq('approval_status', 'approved') // Only count approved/closed tickets
+        .neq('payment_mode', 'credit') // Exclude Pay Later/credit tickets
         .gte('created_at', startOfDay.toISOString())
         .lt('created_at', endOfDay.toISOString());
       
       if (locationFilter) {
-        console.log('📍 Applying location filter to stats:', locationFilter);
         todayQuery = todayQuery.eq('location_id', locationFilter);
-      } else {
-        console.log('📍 No location filter applied to stats - showing all locations');
       }
 
       const { data: todayData, error: todayError } = await todayQuery;
       
-      console.log('📊 Today\'s data query result:');
-      console.log('- Error:', todayError);
-      console.log('- Data count:', todayData?.length || 0);
-      console.log('- Sample data:', todayData?.slice(0, 3));
       
-      // Calculate stats
+      
+      // Calculate stats - only for approved/closed tickets
       const totalVehiclesToday = todayData?.length || 0;
       const revenueToday = todayData?.reduce((sum, log) => sum + (log.Amount || 0), 0) || 0;
       
-      console.log('💰 Calculated stats:');
-      console.log('- Total vehicles today:', totalVehiclesToday);
-      console.log('- Revenue today:', revenueToday);
+      
       
       // For active sessions, we'll use pending approval status as a proxy
       // Only count pending tickets from today
@@ -159,17 +136,14 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
         .gte('entry_time', startOfDay.toISOString())
         .lt('entry_time', endOfDay.toISOString());
       
-      if (locationFilter) {
-        console.log('📍 Applying location filter to active sessions:', locationFilter);
-        activeQuery = activeQuery.eq('location_id', locationFilter);
-      }
+             if (locationFilter) {
+         activeQuery = activeQuery.eq('location_id', locationFilter);
+       }
       
       const { data: activeData, error: activeError } = await activeQuery;
       let activeSessions = activeData?.length || 0;
       
-      console.log('⏰ Active sessions query result:');
-      console.log('- Error:', activeError);
-      console.log('- Active sessions count:', activeSessions);
+      
       
       setStats({
         totalVehiclesToday,
@@ -193,13 +167,12 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
     }
   }, [user?.id, user?.role, user?.assigned_location, selectedLocation]); // Removed fetchStats from dependencies
 
-  // Retry function for failed queries
-  const handleRetry = () => {
-    console.log('🔄 Retrying failed queries...');
-    refetchManualLogs();
-    refetchAutoLogs();
-    fetchStats();
-  };
+     // Retry function for failed queries
+   const handleRetry = () => {
+     refetchManualLogs();
+     refetchAutoLogs();
+     fetchStats();
+   };
 
   // Show error state with retry option
   if (manualLogsError && autoLogsError) {

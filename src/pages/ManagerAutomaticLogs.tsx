@@ -11,132 +11,48 @@ import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from "sonner";
 
-// Debug Supabase client
-console.log('🔍 ManagerAutomaticLogs Supabase client debug:', {
-  hasSupabase: !!supabase,
-  supabaseType: typeof supabase,
-  hasFrom: !!supabase?.from,
-  hasSelect: !!supabase?.from?.('test')?.select
-});
+
 
 export default function ManagerAutomaticLogs() {
   const { user } = useAuth();
   
-  // Debug AuthContext
-  console.log('🔍 ManagerAutomaticLogs AuthContext debug:', {
-    hasAuth: !!useAuth,
-    hasUser: !!user,
-    userKeys: user ? Object.keys(user) : [],
-    userType: typeof user
-  });
+
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState(() => {
-    // Set default date to today
-    const today = new Date();
-    const defaultDate = today.toISOString().split('T')[0];
-    console.log('🔍 ManagerAutomaticLogs Initial date state:', { 
-      today, 
-      todayISO: today.toISOString(), 
-      defaultDate 
-    });
-    return defaultDate;
-  });
+     const [selectedDate, setSelectedDate] = useState(() => {
+     // Set default date to today
+     const today = new Date();
+     const defaultDate = today.toISOString().split('T')[0];
+     return defaultDate;
+   });
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState("");
 
-  // Debug logs state changes
-  useEffect(() => {
-    console.log('🔍 ManagerAutomaticLogs logs state changed:', { 
-      logsLength: logs?.length || 0, 
-      loading, 
-      hasLogs: !!logs 
-    });
-  }, [logs, loading]);
   
-  // Debug table rendering
-  useEffect(() => {
-    console.log('🔍 ManagerAutomaticLogs Table rendering with:', { 
-      loading, 
-      logsLength: logs?.length || 0, 
-      selectedDate,
-      hasLogs: !!logs 
-    });
-  }, [loading, logs, selectedDate]);
+
   
-  // Debug component lifecycle
-  useEffect(() => {
-    console.log('🔍 ManagerAutomaticLogs Component mounted');
-    return () => {
-      console.log('🔍 ManagerAutomaticLogs Component unmounting');
-    };
-  }, []);
 
-  console.log("ManagerAutomaticLogs component rendered:", {
-    hasUser: !!user,
-    userId: user?.id,
-    userEmail: user?.email,
-    assignedLocation: user?.assigned_location,
-    locationType: typeof user?.assigned_location
-  });
+     const fetchLogs = useCallback(async () => {
+     setLoading(true);
+     
+     try {
+       // Build query step by step to ensure proper filtering
+       let query = supabase
+         .from("logs-auto")
+         .select("id, entry_time, exit_time, vehicle_id, entry_url, exit_image, created_at, vehicles(number_plate), location_id");
 
-  const fetchLogs = useCallback(async () => {
-    console.log('🔍 ManagerAutomaticLogs Starting fetchLogs with:', { 
-      assignedLocation: user?.assigned_location, 
-      selectedDate,
-      userId: user?.id,
-      userEmail: user?.email,
-      hasUser: !!user
-    });
-    
-    setLoading(true);
-    
-    try {
-      // Test Supabase connection first
-      console.log('🔍 ManagerAutomaticLogs Testing Supabase connection...');
-      const { data: testData, error: testError } = await supabase
-        .from("logs-auto")
-        .select("id")
-        .limit(1);
-      console.log('🔍 ManagerAutomaticLogs Supabase connection test:', { testData, testError });
-      
-      // Build query step by step to ensure proper filtering
-      let query = supabase
-        .from("logs-auto")
-        .select("id, entry_time, exit_time, vehicle_id, entry_url, exit_image, created_at, vehicles(number_plate), location_id");
-      
-      console.log('🔍 ManagerAutomaticLogs Query built:', { table: "logs-auto", hasQuery: !!query });
+             // Apply location filter
+       query = query.eq("location_id", user?.assigned_location);
 
-      // Apply location filter
-      query = query.eq("location_id", user?.assigned_location);
-      console.log('🔍 ManagerAutomaticLogs Location filter applied:', { 
-        assignedLocation: user?.assigned_location,
-        locationType: typeof user?.assigned_location,
-        hasLocation: !!user?.assigned_location,
-        queryAfterLocation: !!query
-      });
-
-      // Apply single date filter if provided
-      if (selectedDate) {
-        const startOfDay = `${selectedDate}T00:00:00.000Z`;
-        const endOfDay = `${selectedDate}T23:59:59.999Z`;
-        query = query
-          .gte("entry_time", startOfDay)
-          .lte("entry_time", endOfDay);
-        console.log('🔍 ManagerAutomaticLogs Date filter applied:', { startOfDay, endOfDay, selectedDate });
-        console.log('🔍 ManagerAutomaticLogs Query after date filter:', { hasQuery: !!query });
-        
-        // Also try a broader date range to see if there's any data
-        console.log('🔍 ManagerAutomaticLogs Date format check:', {
-          selectedDate,
-          startOfDay,
-          endOfDay,
-          isDateValid: !isNaN(new Date(selectedDate).getTime()),
-          dateObject: new Date(selectedDate),
-          dateISO: new Date(selectedDate).toISOString()
-        });
-      }
+             // Apply single date filter if provided
+       if (selectedDate) {
+         const startOfDay = `${selectedDate}T00:00:00.000Z`;
+         const endOfDay = `${selectedDate}T23:59:59.999Z`;
+         query = query
+           .gte("entry_time", startOfDay)
+           .lte("entry_time", endOfDay);
+       }
 
       // Add distinct to prevent duplicate rows
       console.log('🔍 ManagerAutomaticLogs Executing final query...');
