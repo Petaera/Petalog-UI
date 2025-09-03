@@ -585,8 +585,14 @@ useEffect(() => {
       ...csvRows.map(row => row.join(','))
     ].join('\n');
     
+    // Get location name for filename
+    const currentLocation = user?.role === 'manager' ? user?.assigned_location : 
+                          (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
+    const locationName = locations.find(loc => loc.id === currentLocation)?.name || 'All-Locations';
+    const sanitizedLocationName = locationName.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+
     // Generate filename based on the actual date range being exported
-    let filename = 'car-wash-report';
+    let filename = `${sanitizedLocationName}-car-wash-report`;
     
     if (dateRange === "today") {
       filename += `-${format(new Date(), 'dd-MM-yyyy')}`;
@@ -654,8 +660,14 @@ useEffect(() => {
       ...csvRows.map(row => row.join(','))
     ].join('\n');
 
+    // Get location name for filename
+    const currentLocation = user?.role === 'manager' ? user?.assigned_location : 
+                          (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
+    const locationName = locations.find(loc => loc.id === currentLocation)?.name || 'All-Locations';
+    const sanitizedLocationName = locationName.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+
     // Generate filename based on the actual date range being exported
-    let filename = 'payment-breakdown';
+    let filename = `${sanitizedLocationName}-payment-breakdown`;
     
     if (dateRange === "today") {
       filename += `-${format(new Date(), 'dd-MM-yyyy')}`;
