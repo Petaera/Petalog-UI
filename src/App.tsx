@@ -25,6 +25,7 @@ import PriceSettings from "./pages/PriceSettings";
 import VehicleHistory from "./pages/VehicleHistory";
 import OwnerEntry from "./pages/OwnerEntry";
 import ManagerSettings from "./pages/ManagerSettings";
+import Loyalty from "./pages/Loyalty";
 
 // Manager pages
 import ManagerPortal from "./pages/ManagerPortal";
@@ -234,6 +235,17 @@ const App = () => (
                    <ProtectedRoute requiredRole="owner">
                      <Layout>
                        <OwnerEntry />
+                     </Layout>
+                   </ProtectedRoute>
+                 }
+               />
+               
+               <Route 
+                 path="/loyalty" 
+                 element={
+                   <ProtectedRoute requiredRole={["owner", "manager"]}>
+                     <Layout>
+                       <Loyalty />
                      </Layout>
                    </ProtectedRoute>
                  }
