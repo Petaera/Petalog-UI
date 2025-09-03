@@ -1640,68 +1640,45 @@ useEffect(() => {
           </CardContent>
         </Card>
 
-        <Card className="metric-card bg-blue-50 border-blue-100 shadow-none">
-  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-    <CardTitle className="text-sm font-medium text-blue-900">Pending Tickets</CardTitle>
-    <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200">
-      {dateRange === "today" ? "Today" : "Yesterday"}
-    </Badge>
-  </CardHeader>
-  <CardContent>
-    <div className="text-lg font-bold text-blue-900">
-      {dateRange === "today"
-        ? pendingLogs.filter(log => {
-            const logDate = new Date(log.entry_time || log.created_at);
-            const today = new Date();
-            return (
-              logDate.getFullYear() === today.getFullYear() &&
-              logDate.getMonth() === today.getMonth() &&
-              logDate.getDate() === today.getDate()
-            );
-          }).length
-        : pendingLogs.filter(log => {
-            const logDate = new Date(log.entry_time || log.created_at);
-            const yesterday = new Date();
-            yesterday.setDate(yesterday.getDate() - 1);
-            return (
-              logDate.getFullYear() === yesterday.getFullYear() &&
-              logDate.getMonth() === yesterday.getMonth() &&
-              logDate.getDate() === yesterday.getDate()
-            );
-          }).length}
-      <span className="ml-2 text-xs text-blue-700">tickets</span>
-    </div>
-    <div className="text-xs text-blue-700 mt-1">
-      Total Amount: ₹
-      {dateRange === "today"
-        ? pendingLogs
-            .filter(log => {
-              const logDate = new Date(log.entry_time || log.created_at);
-              const today = new Date();
-              return (
-                logDate.getFullYear() === today.getFullYear() &&
-                logDate.getMonth() === today.getMonth() &&
-                logDate.getDate() === today.getDate()
-              );
-            })
-            .reduce((sum, log) => sum + (log.Amount || 0), 0)
-            .toLocaleString()
-        : pendingLogs
-            .filter(log => {
-              const logDate = new Date(log.entry_time || log.created_at);
-              const yesterday = new Date();
-              yesterday.setDate(yesterday.getDate() - 1);
-              return (
-                logDate.getFullYear() === yesterday.getFullYear() &&
-                logDate.getMonth() === yesterday.getMonth() &&
-                logDate.getDate() === yesterday.getDate()
-              );
-            })
-            .reduce((sum, log) => sum + (log.Amount || 0), 0)
-            .toLocaleString()}
-    </div>
-  </CardContent>
-</Card>
+        {dateRange === "today" && (
+          <Card className="metric-card bg-blue-50 border-blue-100 shadow-none">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-blue-900">Pending Tickets</CardTitle>
+              <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200">
+                Today
+              </Badge>
+            </CardHeader>
+            <CardContent>
+              <div className="text-lg font-bold text-blue-900">
+                {pendingLogs.filter(log => {
+                  const logDate = new Date(log.entry_time || log.created_at);
+                  const today = new Date();
+                  return (
+                    logDate.getFullYear() === today.getFullYear() &&
+                    logDate.getMonth() === today.getMonth() &&
+                    logDate.getDate() === today.getDate()
+                  );
+                }).length}
+                <span className="ml-2 text-xs text-blue-700">tickets</span>
+              </div>
+              <div className="text-xs text-blue-700 mt-1">
+                Total Amount: ₹
+                {pendingLogs
+                  .filter(log => {
+                    const logDate = new Date(log.entry_time || log.created_at);
+                    const today = new Date();
+                    return (
+                      logDate.getFullYear() === today.getFullYear() &&
+                      logDate.getMonth() === today.getMonth() &&
+                      logDate.getDate() === today.getDate()
+                    );
+                  })
+                  .reduce((sum, log) => sum + (log.Amount || 0), 0)
+                  .toLocaleString()}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Today's Collection - Commented out
         <Card className="metric-card-warning">
