@@ -259,13 +259,15 @@ if (dateRange === "today") {
     const logDate = new Date(log.created_at);
 
     if (from && to) {
-      return logDate >= from && logDate <= to;
+      // Fix: Make 'to' exclusive by adding 1 day
+      const nextDayAfterTo = new Date(to.getTime() + 24 * 60 * 60 * 1000);
+      return logDate >= from && logDate < nextDayAfterTo;
     } else if (from) {
       const nextDay = new Date(from.getTime() + 24 * 60 * 60 * 1000);
       return logDate >= from && logDate < nextDay;
     } else if (to) {
-      const prevDay = new Date(to.getTime() - 24 * 60 * 60 * 1000);
-      return logDate >= prevDay && logDate <= to;
+      const nextDayAfterTo = new Date(to.getTime() + 24 * 60 * 60 * 1000);
+      return logDate < nextDayAfterTo;
     }
     return true;
   });
@@ -1210,7 +1212,7 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
               (customToDate.getTime() -
                 customFromDate.getTime()) /
                 (24 * 60 * 60 * 1000)
-            ) + 1;
+            ) +1;
         }
 
         // Current period
@@ -1266,7 +1268,7 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
   </CardContent>
 </Card>
 
-        <Card className="metric-card-success">
+        {/* <Card className="metric-card-success">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Vehicles</CardTitle>
             <Badge variant="outline" className="text-success border-success">
@@ -1277,7 +1279,333 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
             <div className="text-2xl font-bold text-success">{filteredData.totalVehicles}</div>
             <p className="text-xs text-muted-foreground">+8.2% from previous period</p>
           </CardContent>
-        </Card>
+        </Card> */}
+        {/* These 2 cards updated on 03/09/25 by vishnu */}
+       <Card className="metric-card-success">
+  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+    <CardTitle className="text-sm font-medium">Total Vehicles</CardTitle>
+    <Badge variant="outline" className="text-success border-success">
+      {dateRange === "today"
+        ? "Today"
+        : dateRange === "yesterday"
+        ? "Yesterday"
+        : dateRange === "singleday"
+        ? customFromDate
+          ? format(customFromDate, "PPP")
+          : "Single Day"
+        : dateRange === "last7days"
+        ? "Last 7 Days"
+        : dateRange === "last30days"
+        ? "Last 30 Days"
+        : dateRange === "custom" && customFromDate && customToDate
+        ? `${format(customFromDate, "dd MMM yyyy")} - ${format(customToDate, "dd MMM yyyy")}`
+        : "Filtered Period"}
+    </Badge>
+  </CardHeader>
+  <CardContent>
+    <div className="text-2xl font-bold text-success">{filteredData.totalVehicles}</div>
+    {/* --- Vehicle Count Comparison Section --- */}
+    {(() => {
+      // Use the same filters as getFilteredData, except for date
+      let baseFilteredLogs = [...logs];
+      // Location filter
+      const currentLocation = user?.role === 'manager'
+        ? user?.assigned_location
+        : (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
+      if (currentLocation) {
+        baseFilteredLogs = baseFilteredLogs.filter(log => log.location_id === currentLocation);
+      }
+      // Approval status
+      baseFilteredLogs = baseFilteredLogs.filter(log => log.approval_status === 'approved');
+      // Vehicle type
+      if (vehicleType !== "all") {
+        baseFilteredLogs = baseFilteredLogs.filter(log =>
+          (log.vehicle_type || '').toString().trim().toLowerCase() === vehicleType.trim().toLowerCase()
+        );
+      }
+      // Service
+      if (service !== "all") {
+        baseFilteredLogs = baseFilteredLogs.filter(log =>
+          (log.service || '').toString().trim().toLowerCase() === service.trim().toLowerCase()
+        );
+      }
+      // Entry type
+      if (entryType !== "all") {
+        baseFilteredLogs = baseFilteredLogs.filter(log =>
+          (log.entry_type || '').toString().trim().toLowerCase() === entryType.trim().toLowerCase()
+        );
+      }
+      // Manager
+      if (manager !== "all") {
+        baseFilteredLogs = baseFilteredLogs.filter(log => log.created_by === manager);
+      }
+
+      // Helper to get vehicle count for a specific date (full day)
+      const getCountForDate = (date: Date) => {
+        const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+        return baseFilteredLogs
+          .filter(
+            log =>
+              new Date(log.created_at) >= start &&
+              new Date(log.created_at) < end
+          ).length;
+      };
+
+      // Helper to get vehicle count for a range (inclusive of start, exclusive of end)
+      const getCountForRange = (start: Date, end: Date) => {
+        return baseFilteredLogs
+          .filter(
+            log =>
+              new Date(log.created_at) >= start &&
+              new Date(log.created_at) < end
+          ).length;
+      };
+
+      // Arrow and color helpers
+      const Arrow = ({ change }: { change: number }) =>
+        change > 0 ? (
+          <span className="text-green-600 ml-1">&#8593;</span>
+        ) : change < 0 ? (
+          <span className="text-red-600 ml-1">&#8595;</span>
+        ) : (
+          <span className="text-muted-foreground ml-1">&#8596;</span>
+        );
+
+      // Percentage change helpers
+      const getChange = (current: number, prev: number) => {
+        if (prev === 0) return current === 0 ? 0 : 100;
+        return ((current - prev) / prev) * 100;
+      };
+
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+      // TODAY
+      if (dateRange === "today") {
+        const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+        const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const todayCount = getCountForDate(today);
+        const yesterdayCount = getCountForDate(yesterday);
+        const lastWeekCount = getCountForDate(lastWeek);
+        const yChange = getChange(todayCount, yesterdayCount);
+        const lwChange = getChange(todayCount, lastWeekCount);
+
+        return (
+          <div className="space-y-1 mt-2">
+            <div className="flex items-center text-xs">
+              <span className="text-muted-foreground mr-1">Yesterday:</span>
+              <span className="font-semibold">{yesterdayCount}</span>
+              <Arrow change={yChange} />
+              <span
+                className={
+                  "ml-1 font-medium " +
+                  (yChange > 0
+                    ? "text-green-600"
+                    : yChange < 0
+                    ? "text-red-600"
+                    : "text-muted-foreground")
+                }
+              >
+                {Math.abs(yChange).toFixed(1)}%
+              </span>
+            </div>
+            <div className="flex items-center text-xs">
+              <span className="text-muted-foreground mr-1">
+                Last {today.toLocaleString("en-US", { weekday: "long" })}:
+              </span>
+              <span className="font-semibold">{lastWeekCount}</span>
+              <Arrow change={lwChange} />
+              <span
+                className={
+                  "ml-1 font-medium " +
+                  (lwChange > 0
+                    ? "text-green-600"
+                    : lwChange < 0
+                    ? "text-red-600"
+                    : "text-muted-foreground")
+                }
+              >
+                {Math.abs(lwChange).toFixed(1)}%
+              </span>
+            </div>
+          </div>
+        );
+      }
+
+      // YESTERDAY
+      if (dateRange === "yesterday") {
+        const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+        const dayBefore = new Date(yesterday.getTime() - 24 * 60 * 60 * 1000);
+        const lastWeek = new Date(yesterday.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const yesterdayCount = getCountForDate(yesterday);
+        const dayBeforeCount = getCountForDate(dayBefore);
+        const lastWeekCount = getCountForDate(lastWeek);
+        const yChange = getChange(yesterdayCount, dayBeforeCount);
+        const lwChange = getChange(yesterdayCount, lastWeekCount);
+
+        return (
+          <div className="space-y-1 mt-2">
+            <div className="flex items-center text-xs">
+              <span className="text-muted-foreground mr-1">Day Before:</span>
+              <span className="font-semibold">{dayBeforeCount}</span>
+              <Arrow change={yChange} />
+              <span
+                className={
+                  "ml-1 font-medium " +
+                  (yChange > 0
+                    ? "text-green-600"
+                    : yChange < 0
+                    ? "text-red-600"
+                    : "text-muted-foreground")
+                }
+              >
+                {Math.abs(yChange).toFixed(1)}%
+              </span>
+            </div>
+            <div className="flex items-center text-xs">
+              <span className="text-muted-foreground mr-1">
+                Last {yesterday.toLocaleString("en-US", { weekday: "long" })}:
+              </span>
+              <span className="font-semibold">{lastWeekCount}</span>
+              <Arrow change={lwChange} />
+              <span
+                className={
+                  "ml-1 font-medium " +
+                  (lwChange > 0
+                    ? "text-green-600"
+                    : lwChange < 0
+                    ? "text-red-600"
+                    : "text-muted-foreground")
+                }
+              >
+                {Math.abs(lwChange).toFixed(1)}%
+              </span>
+            </div>
+          </div>
+        );
+      }
+
+      // SINGLEDAY
+      if (dateRange === "singleday" && customFromDate) {
+        const singleDay = new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate());
+        const prevDay = new Date(singleDay.getTime() - 24 * 60 * 60 * 1000);
+        const lastWeek = new Date(singleDay.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const singleDayCount = getCountForDate(singleDay);
+        const prevDayCount = getCountForDate(prevDay);
+        const lastWeekCount = getCountForDate(lastWeek);
+        const yChange = getChange(singleDayCount, prevDayCount);
+        const lwChange = getChange(singleDayCount, lastWeekCount);
+
+        return (
+          <div className="space-y-1 mt-2">
+            <div className="flex items-center text-xs">
+              <span className="text-muted-foreground mr-1">Previous Day:</span>
+              <span className="font-semibold">{prevDayCount}</span>
+              <Arrow change={yChange} />
+              <span
+                className={
+                  "ml-1 font-medium " +
+                  (yChange > 0
+                    ? "text-green-600"
+                    : yChange < 0
+                    ? "text-red-600"
+                    : "text-muted-foreground")
+                }
+              >
+                {Math.abs(yChange).toFixed(1)}%
+              </span>
+            </div>
+            <div className="flex items-center text-xs">
+              <span className="text-muted-foreground mr-1">
+                Last {singleDay.toLocaleString("en-US", { weekday: "long" })}:
+              </span>
+              <span className="font-semibold">{lastWeekCount}</span>
+              <Arrow change={lwChange} />
+              <span
+                className={
+                  "ml-1 font-medium " +
+                  (lwChange > 0
+                    ? "text-green-600"
+                    : lwChange < 0
+                    ? "text-red-600"
+                    : "text-muted-foreground")
+                }
+              >
+                {Math.abs(lwChange).toFixed(1)}%
+              </span>
+            </div>
+          </div>
+        );
+      }
+
+      // LAST 7/30 DAYS & CUSTOM
+      if (
+        dateRange === "last7days" ||
+        dateRange === "last30days" ||
+        (dateRange === "custom" && customFromDate && customToDate)
+      ) {
+        let rangeDays = 7;
+        if (dateRange === "last30days") rangeDays = 30;
+        if (dateRange === "custom" && customFromDate && customToDate) {
+          rangeDays =
+            Math.ceil(
+              (customToDate.getTime() -
+                customFromDate.getTime()) /
+                (24 * 60 * 60 * 1000)
+            ) + 1;
+        }
+
+        // Current period
+        let periodStart: Date, periodEnd: Date;
+        if (dateRange === "custom" && customFromDate && customToDate) {
+          periodStart = new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate());
+          periodEnd = new Date(customToDate.getFullYear(), customToDate.getMonth(), customToDate.getDate() + 1);
+        } else {
+          periodEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000); // tomorrow 00:00
+          periodStart = new Date(periodEnd.getTime() - rangeDays * 24 * 60 * 60 * 1000);
+        }
+
+        // Previous period: strictly before current period, same length
+        const prevPeriodEnd = new Date(periodStart.getTime());
+        const prevPeriodStart = new Date(
+          prevPeriodEnd.getTime() - rangeDays * 24 * 60 * 60 * 1000
+        );
+
+        const currentCount = getCountForRange(periodStart, periodEnd);
+        const prevCount = getCountForRange(prevPeriodStart, prevPeriodEnd);
+        const change = getChange(currentCount, prevCount);
+
+        return (
+          <div className="space-y-1 mt-2">
+            <div className="flex items-center text-xs">
+              <span className="text-muted-foreground mr-1">
+                Previous {rangeDays} days:
+              </span>
+              <span className="font-semibold">{prevCount}</span>
+              <Arrow change={change} />
+              <span
+                className={
+                  "ml-1 font-medium " +
+                  (change > 0
+                    ? "text-green-600"
+                    : change < 0
+                    ? "text-red-600"
+                    : "text-muted-foreground")
+                }
+              >
+                {Math.abs(change).toFixed(1)}%
+              </span>
+            </div>
+          </div>
+        );
+      }
+
+      // Default: nothing
+      return null;
+    })()}
+  </CardContent>
+</Card>
 
         <Card className="metric-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
