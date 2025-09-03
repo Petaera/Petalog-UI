@@ -1900,104 +1900,99 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
 
 
       <Card>
-  <CardHeader>
-    <CardTitle>Vehicle Type Distribution</CardTitle>
-  </CardHeader>
-  <CardContent>
-    {filteredData.vehicleDistribution.length === 0 ? (
-      <div className="text-center p-4 text-muted-foreground">
-        No vehicle type data available
-      </div>
-    ) : (
-      <div className="w-full flex flex-col md:flex-row items-center justify-center gap-8">
-        {/* Horizontally scrollable chart on mobile, fixed on desktop */}
-        <div
-          className="w-full md:w-1/2 h-64 overflow-x-auto"
-          style={{ WebkitOverflowScrolling: "touch" }}
-        >
-          {/* Set a large minWidth for the chart to allow scrolling */}
-          <div style={{ minWidth: 520, width: 520, height: "100%" }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={filteredData.vehicleDistribution}
-                  dataKey="count"
-                  nameKey="type"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius="80%"
-                  innerRadius="45%"
-                  labelLine={false}
-                  minAngle={10}
-                  label={({ type, percentage, cx, cy, midAngle, outerRadius, index }) => {
-                    const RADIAN = Math.PI / 180;
-                    const radius = outerRadius + 10;
-                    const x = cx + radius * Math.cos(-midAngle * RADIAN);
-                    const y = cy + radius * Math.sin(-midAngle * RADIAN);
-                    // Show full label, smaller font
-                    const labelText = `${type || 'Unknown'} (${percentage.toFixed(1)}%)`;
-                    return (
-                      <text
-                        x={x}
-                        y={y}
-                        textAnchor={x > cx ? "start" : "end"}
-                        dominantBaseline="central"
-                        fontSize={11}
-                        fill="#444"
-                        style={{ pointerEvents: "none", whiteSpace: "nowrap" }}
-                      >
-                        {labelText}
-                      </text>
-                    );
-                  }}
-                >
-                  {filteredData.vehicleDistribution.map((entry: any, idx: number) => {
-                    const COLORS = [
-                      "#6366f1", "#22d3ee", "#f59e42", "#10b981",
-                      "#f43f5e", "#a21caf", "#fbbf24", "#64748b"
-                    ];
-                    return (
-                      <Cell key={`cell-${idx}`} fill={COLORS[idx % COLORS.length]} />
-                    );
-                  })}
-                </Pie>
-                <Tooltip
-                  formatter={(value: number, name: string, props: any) =>
-                    [`${value} vehicles`, props.payload.type || 'Unknown']
-                  }
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-        {/* Legend/Breakdown stays fixed, not scrollable */}
-        <div className="w-full md:w-1/2 space-y-2">
-          {filteredData.vehicleDistribution.map((item: any, idx: number) => (
-            <div
-              key={`vehicle-distribution-legend-${item.type || 'unknown'}-${idx}`}
-              className="flex items-center gap-3"
-            >
-              <span
-                className="inline-block w-4 h-4 rounded"
-                style={{
-                  backgroundColor: [
-                    "#6366f1", "#22d3ee", "#f59e42", "#10b981",
-                    "#f43f5e", "#a21caf", "#fbbf24", "#64748b"
-                  ][idx % 8]
-                }}
-              />
-              <span className="font-medium truncate max-w-[100px] md:max-w-[160px]">
-                {item.type || 'Unknown Type'}
-              </span>
-              <span className="ml-auto text-primary font-bold">{item.count}</span>
-              <span className="ml-2 text-muted-foreground text-sm">{item.percentage.toFixed(1)}%</span>
+        <CardHeader>
+          <CardTitle>Vehicle Type Distribution</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {filteredData.vehicleDistribution.length === 0 ? (
+            <div className="text-center p-4 text-muted-foreground">
+              No vehicle type data available
             </div>
-          ))}
-        </div>
-      </div>
-    )}
-  </CardContent>
-</Card>
+          ) : (
+            <div className="w-full flex flex-col md:flex-row items-center justify-center gap-8">
+              <div className="w-full md:w-1/2 min-w-[220px] h-64 ">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={filteredData.vehicleDistribution}
+                      dataKey="count"
+                      nameKey="type"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius="80%"
+                      innerRadius="45%"
+                      labelLine={false}
+                      minAngle={10}
+                     label={({ type, percentage, cx, cy, midAngle, outerRadius, index }) => {
+    // Calculate label position
+    const RADIAN = Math.PI / 180;
+    const radius = outerRadius + 10;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+    // Shorten long names
+    const labelText = `${type?.length > 10 ? type.slice(0, 10) + '…' : type || 'Unknown'} (${percentage.toFixed(1)}%)`;
+    return (
+      <text
+        x={x}
+        y={y}
+        textAnchor={x > cx ? "start" : "end"}
+        dominantBaseline="central"
+        fontSize={10} // Smaller font size
+        fill="#444"
+        style={{ pointerEvents: "none" }}
+      >
+        {labelText}
+      </text>
+    );
+  }}
+                      
+                    >
+                      {filteredData.vehicleDistribution.map((entry: any, idx: number) => {
+                        const COLORS = [
+                          "#6366f1", "#22d3ee", "#f59e42", "#10b981",
+                          "#f43f5e", "#a21caf", "#fbbf24", "#64748b"
+                        ];
+                        return (
+                          <Cell key={`cell-${idx}`} fill={COLORS[idx % COLORS.length]} />
+                        );
+                      })}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: number, name: string, props: any) =>
+                        [`${value} vehicles`, props.payload.type || 'Unknown']
+                      }
+                    />
+                    {/* Legend removed as per request */}
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="w-full md:w-1/2 space-y-2">
+                {filteredData.vehicleDistribution.map((item: any, idx: number) => (
+                  <div
+                    key={`vehicle-distribution-legend-${item.type || 'unknown'}-${idx}`}
+                    className="flex items-center gap-3"
+                  >
+                    <span
+                      className="inline-block w-4 h-4 rounded"
+                      style={{
+                        backgroundColor: [
+                          "#6366f1", "#22d3ee", "#f59e42", "#10b981",
+                          "#f43f5e", "#a21caf", "#fbbf24", "#64748b"
+                        ][idx % 8]
+                      }}
+                    />
+                    <span className="font-medium truncate max-w-[100px] md:max-w-[160px]">
+                      {item.type || 'Unknown Type'}
+                    </span>
+                    <span className="ml-auto text-primary font-bold">{item.count}</span>
+                    <span className="ml-2 text-muted-foreground text-sm">{item.percentage.toFixed(1)}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Hourly Sales Bar Chart - Only for today, yesterday, or single day */}
       {["today", "yesterday", "singleday"].includes(dateRange) && (
