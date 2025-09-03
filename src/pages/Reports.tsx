@@ -15,6 +15,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 import { useAuth } from '@/contexts/AuthContext';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { Switch } from "@/components/ui/switch";
 // Types for our data
 interface Vehicle {
   id: string;
@@ -181,7 +182,8 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
       console.log('🏁 Data fetch process completed');
     }
   };
-
+// Switch between list and pie chart view for service breakdown
+const [serviceBreakdownView, setServiceBreakdownView] = useState<"list" | "pie">("list");
   useEffect(() => {
     fetchAllData();
   }, []);
@@ -1083,6 +1085,115 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
 
       {/* Service Breakdown */}
       <Card>
+  <CardHeader className="flex flex-row items-center justify-between">
+    <CardTitle>Service Breakdown - Filtered Results</CardTitle>
+    <div className="flex items-center gap-2">
+      <span className="text-xs font-medium text-muted-foreground">List</span>
+      <Switch
+        checked={serviceBreakdownView === "pie"}
+        onCheckedChange={(checked) => setServiceBreakdownView(checked ? "pie" : "list")}
+        aria-label="Toggle Service Breakdown View"
+      />
+      <span className="text-xs font-medium text-muted-foreground">Pie Chart</span>
+    </div>
+  </CardHeader>
+  <CardContent>
+    {filteredData.serviceBreakdown.length === 0 ? (
+      <div className="text-center p-4 text-muted-foreground">
+        No service data available
+      </div>
+    ) : serviceBreakdownView === "pie" ? (
+      <div className="w-full flex flex-col md:flex-row items-center justify-center gap-4">
+        <div className="w-full md:w-1/2 min-w-[220px] h-72">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={filteredData.serviceBreakdown}
+                dataKey="revenue"
+                nameKey="service"
+                cx="50%"
+                cy="50%"
+                outerRadius="80%"
+                innerRadius="45%"
+                label={({ service, revenue, percentage }) =>
+                  `${service?.length > 12 ? service.slice(0, 12) + '…' : service || 'Unknown'}`
+                }
+                labelLine={false}
+                minAngle={10}
+              >
+                {filteredData.serviceBreakdown.map((entry: any, idx: number) => {
+                  const COLORS = [
+                    "#6366f1", "#22d3ee", "#f59e42", "#10b981",
+                    "#f43f5e", "#a21caf", "#fbbf24", "#64748b"
+                  ];
+                  return (
+                    <Cell key={`cell-${idx}`} fill={COLORS[idx % COLORS.length]} />
+                  );
+                })}
+              </Pie>
+              <Tooltip
+                formatter={(value: number, name: string, props: any) =>
+                  [
+                    `₹${value.toLocaleString()} revenue`,
+                    props.payload.service || 'Unknown'
+                  ]
+                }
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        {/* Legend/Breakdown: right on desktop, bottom on mobile */}
+        <div className="w-full md:w-1/2">
+          <div className="space-y-2 md:ml-6 flex flex-col md:block">
+            {/* On mobile, show below chart; on desktop, show on right */}
+            {filteredData.serviceBreakdown.map((item: any, idx: number) => (
+              <div
+                key={`service-pie-legend-${item.service || 'unknown'}-${idx}`}
+                className="flex items-center gap-3"
+              >
+                <span
+                  className="inline-block w-4 h-4 rounded"
+                  style={{
+                    backgroundColor: [
+                      "#6366f1", "#22d3ee", "#f59e42", "#10b981",
+                      "#f43f5e", "#a21caf", "#fbbf24", "#64748b"
+                    ][idx % 8]
+                  }}
+                />
+                <span className="font-medium truncate max-w-[100px] md:max-w-[160px]">
+                  {item.service || 'Unknown'}
+                </span>
+                <span className="ml-auto text-primary font-bold">{item.count}</span>
+                <span className="ml-2 text-muted-foreground text-sm">
+                  {filteredData.totalRevenue > 0 ? (((item.revenue || 0) / filteredData.totalRevenue) * 100).toFixed(1) : 0}%
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    ) : (
+      <div className="space-y-4">
+        {filteredData.serviceBreakdown.map((item: any, index: number) => (
+          <div key={`service-breakdown-${item.service || 'unknown'}-${index}`} className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
+            <div>
+              <p className="font-medium">{item.service || 'Unknown Service'}</p>
+              <p className="text-sm text-muted-foreground">{item.count} vehicles • ₹{Math.round(item.price || 0).toLocaleString()} avg</p>
+            </div>
+            <div className="text-right">
+              <p className="font-semibold text-financial">₹{(item.revenue || 0).toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground">
+                {filteredData.totalRevenue > 0 ? (((item.revenue || 0) / filteredData.totalRevenue) * 100).toFixed(1) : 0}% of total
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+  </CardContent>
+</Card>
+      {/* Before the update on 03/09/2025 pushed by vishnu */}
+      {/* <Card>
         <CardHeader>
           <CardTitle>Service Breakdown - Filtered Results</CardTitle>
         </CardHeader>
@@ -1110,7 +1221,7 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
             )}
           </div>
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* Vehicle Type Distribution */}
       
@@ -1223,11 +1334,11 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
                 <thead>
                   <tr className="border-b">
                     <th className="text-left p-2 font-medium">Vehicle No.</th>
-                    <th className="text-left p-2 font-medium">Owner</th>
                     <th className="text-left p-2 font-medium">Model</th>
                     <th className="text-left p-2 font-medium">Service</th>
-                    <th className="text-left p-2 font-medium">Price</th>
-                    <th className="text-left p-2 font-medium">Entry Type</th>
+                    <th className="text-left p-2 font-medium">Amount</th>
+                    <th className="text-left p-2 font-medium">Owner</th>
+                    {/* <th className="text-left p-2 font-medium">Entry Type</th> */}
                     <th className="text-left p-2 font-medium">Date</th>
                     <th className="text-left p-2 font-medium">Location</th>
                   </tr>
@@ -1236,24 +1347,40 @@ console.log("🔍 After date filter:", filteredLogs.length, "records");
                   {filteredData.filteredVehicles.slice(0, 50).map((vehicle) => (
                     <tr key={vehicle.id} className="border-b hover:bg-accent/50">
                       <td className="p-2 font-mono text-sm">{vehicle.vehicle_number}</td>
+                      
+                      <td className="p-2">
+                        <Badge variant="outline">{vehicle.vehicle_model || 'N/A'}</Badge>
+                      </td>
+                      <td className="p-2">{vehicle.service_type}</td>
+                      <td className="p-2 font-semibold text-financial">
+                        {/* Amount */}
+                        {vehicle.price && vehicle.price > 0 ? `₹${vehicle.price.toLocaleString()}` : "-"}
+                        {/* Payment Method & UPI Account */}
+                        <div className="mt-1 text-xs text-muted-foreground font-normal">
+                          Payment: {(() => {
+                            // Find the corresponding log entry for payment info
+                            const logEntry = logs.find(log => log.id === vehicle.id);
+                            if (!logEntry) return "-";
+                            const mode = logEntry.payment_mode ? logEntry.payment_mode.toUpperCase() : "-";
+                            if (logEntry.payment_mode === "upi" && logEntry.upi_account_name) {
+                              return (
+                                <>
+                                  {mode} <span className="font-medium">{logEntry.upi_account_name}</span>
+                                </>
+                              );
+                            }
+                            return mode;
+                          })()}
+                        </div>
+                      </td>
                       <td className="p-2">
                         <div>
                           <p className="font-medium">{vehicle.owner_name}</p>
                           <p className="text-xs text-muted-foreground">{vehicle.phone_number}</p>
                         </div>
                       </td>
-                      <td className="p-2">
-                        <Badge variant="outline">{vehicle.vehicle_model || 'N/A'}</Badge>
-                      </td>
-                      <td className="p-2">{vehicle.service_type}</td>
-                      <td className="p-2 font-semibold text-financial">₹{vehicle.price?.toLocaleString() || 0}</td>
-                      <td className="p-2">
-                        <Badge variant={vehicle.entry_type === 'Manual' ? 'default' : 'secondary'}>
-                          {vehicle.entry_type}
-                        </Badge>
-                      </td>
                       <td className="p-2 text-sm">
-                        {format(new Date(vehicle.created_at), 'dd/MM/yy HH:mm')}
+                        {format(new Date(vehicle.created_at), 'dd/MM/yy hh:mm a')}
                       </td>
                       <td className="p-2 text-sm">
                         {locations.find(loc => loc.id === vehicle.location_id)?.name || 'Unknown'}
