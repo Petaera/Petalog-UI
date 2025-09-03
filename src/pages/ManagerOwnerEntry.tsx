@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Car, CreditCard, Banknote } from "lucide-react";
+import { ArrowLeft, Car, CreditCard, Banknote, ChevronDown, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -127,6 +127,48 @@ interface ManagerOwnerEntryProps {
 }
 
 export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntryProps) {
+
+const [selectedDateOption, setSelectedDateOption] = useState('today');
+const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
+
+// ---- Date helpers to avoid invalid Date/toISOString issues ----
+const isValidDate = (d: Date) => d instanceof Date && !isNaN(d.getTime());
+const parseYMD = (value: string): Date | null => {
+  if (!value || typeof value !== 'string') return null;
+  const [y, m, d] = value.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  const dt = new Date(y, m - 1, d);
+  return isValidDate(dt) ? dt : null;
+};
+const toYMD = (d: Date): string => {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+const todayYMD = () => toYMD(new Date());
+const yesterdayYMD = () => {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return toYMD(d);
+};
+
+const getDisplayDate = () => {
+  switch (selectedDateOption) {
+    case 'today':
+      return 'Today';
+    case 'yesterday':
+      return 'Yesterday';
+    case 'custom':
+      {
+        const parsed = parseYMD(customEntryDate);
+        return parsed ? parsed.toLocaleDateString() : 'Select date';
+      }
+    default:
+      return 'Today';
+  }
+};
+
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [vehicleTypes, setVehicleTypes] = useState<string[]>([]);
   const [serviceOptions, setServiceOptions] = useState<string[]>([]);
@@ -160,6 +202,9 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
   const [availableModels, setAvailableModels] = useState<{name: string, id: string, brand: string}[]>([]);
   const [vehicleData, setVehicleData] = useState<any[]>([]);
 
+
+//workshop
+const [customWorkshopName, setCustomWorkshopName] = useState('');
   // Edit mode state
   const [isEditing, setIsEditing] = useState(false);
   const [editLogId, setEditLogId] = useState<string | null>(null);
@@ -926,8 +971,8 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
 
         let manualCount = 0;
         const base = supabase.from('logs-man').select('id', { count: 'exact', head: true });
-        const withLocation = user?.assigned_location
-          ? (q: any) => q.eq('location_id', user.assigned_location)
+        const withLocation = selectedLocation && selectedLocation.trim() !== ''
+          ? (q: any) => q.eq('location_id', selectedLocation)
           : (q: any) => q;
 
         if (veh?.id) {
@@ -1009,16 +1054,29 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
     
     const trimmedCustomerName = customerName.trim();
     
+    if (!selectedLocation) {
+      toast.error('Please select a location from the toolbar');
+      setIsSubmitDisabled(false); // Re-enable button on validation error
+      return;
+    }
+    
     if (!vehicleNumber || !vehicleType || (entryType === 'customer' && service.length === 0)) {
       toast.error('Please fill in all required fields (Vehicle Number, Vehicle Type, and Service)');
       setIsSubmitDisabled(false); // Re-enable button on validation error
       return;
     }
 
-    // Validate UPI account selection if UPI is selected
+    // Validate UPI account selection when UPI payment mode is selected
     if (paymentMode === 'upi' && !selectedUpiAccount) {
-      toast.error('Please select a UPI account');
-      setIsSubmitDisabled(false);
+      toast.error('Please select a UPI account when using UPI payment mode');
+      setIsSubmitDisabled(false); // Re-enable button on validation error
+      return;
+    }
+
+    // Validate that UPI accounts are available when UPI payment mode is selected
+    if (paymentMode === 'upi' && upiAccounts.length === 0) {
+      toast.error('No UPI accounts found. Please add UPI accounts in the settings first.');
+      setIsSubmitDisabled(false); // Re-enable button on validation error
       return;
     }
 
@@ -1148,7 +1206,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
           {
             vehicle_id: vehicleId,
             vehicle_number: vehicleNumber,
-            location_id: user?.assigned_location,
+            location_id: selectedLocation,
             entry_type: entryType,
             image_url: imageUrl,
             created_by: user?.id,
@@ -1195,31 +1253,30 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
         // No persistent counter increment; count is derived from logs-man only
       }
 
-      // Reset form
-      setVehicleNumber('');
-      setVehicleType('');
-      setService([]); // Reset service to empty array
-      setAmount('500');
-      setDiscount('');
-      setRemarks('');
-      setPaymentMode('cash');
-      setSelectedUpiAccount(''); // Reset UPI account selection
-              // setScratchImage(null);
-      setCustomerName('');
-      setPhoneNumber('');
-      setDateOfBirth('');
-      setCustomerLocation('');
-      setSelectedVehicleBrand('');
-      setSelectedModel('');
-      setSelectedModelId('');
-      // Reset custom datetime
-      setUseCustomDateTime(false);
-      setCustomEntryDate(new Date().toISOString().split('T')[0]);
-      setCustomEntryTime(new Date().toTimeString().slice(0, 5));
-      
-      // Reset edit mode
-      setIsEditing(false);
-      setEditLogId(null);
+      // Reset form only if not in edit mode
+      if (!isEditing) {
+        setVehicleNumber('');
+        setVehicleType('');
+        setService([]); // Reset service to empty array
+        setAmount('500');
+        setDiscount('');
+        setRemarks('');
+        // Reset payment mode and UPI account selection
+        setPaymentMode('cash');
+        setSelectedUpiAccount('');
+        // setScratchImage(null);
+        setCustomerName('');
+        setPhoneNumber('');
+        setDateOfBirth('');
+        setCustomerLocation('');
+        setSelectedVehicleBrand('');
+        setSelectedModel('');
+        setSelectedModelId('');
+        // Reset custom datetime
+        setUseCustomDateTime(false);
+        setCustomEntryDate(new Date().toISOString().split('T')[0]);
+        setCustomEntryTime(new Date().toTimeString().slice(0, 5));
+      }
     } catch (err: any) {
       toast.error('Submission failed: ' + (err?.message || err));
     } finally {
@@ -1233,16 +1290,29 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
     
     const trimmedCustomerName = customerName.trim();
     
+    if (!selectedLocation) {
+      toast.error('Please select a location from the toolbar');
+      setIsSubmitDisabled(false); // Re-enable button on validation error
+      return;
+    }
+    
     if (!vehicleNumber || !vehicleType || (entryType === 'customer' && service.length === 0)) {
       toast.error('Please fill in all required fields (Vehicle Number, Vehicle Type, and Service)');
       setIsSubmitDisabled(false); // Re-enable button on validation error
       return;
     }
 
-    // Validate UPI account selection if UPI is selected
+    // Validate UPI account selection when UPI payment mode is selected
     if (paymentMode === 'upi' && !selectedUpiAccount) {
-      toast.error('Please select a UPI account');
-      setIsSubmitDisabled(false);
+      toast.error('Please select a UPI account when using UPI payment mode');
+      setIsSubmitDisabled(false); // Re-enable button on validation error
+      return;
+    }
+
+    // Validate that UPI accounts are available when UPI payment mode is selected
+    if (paymentMode === 'upi' && upiAccounts.length === 0) {
+      toast.error('No UPI accounts found. Please add UPI accounts in the settings first.');
+      setIsSubmitDisabled(false); // Re-enable button on validation error
       return;
     }
 
@@ -1255,7 +1325,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
       // Calculate final amount
       const priceNum = parseFloat(amount) || 0;
       const discountNum = discount === '' ? 0 : parseFloat(discount) || 0;
-      const finalAmount = priceNum ;
+      const finalAmount = priceNum - discountNum;
 
       // For checkout, we directly set the ticket as approved and closed
       const currentTime = new Date().toISOString();
@@ -1268,7 +1338,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
         {
           vehicle_id: vehicleId,
           vehicle_number: vehicleNumber,
-          location_id: user?.assigned_location,
+          location_id: selectedLocation,
           entry_type: entryType,
           image_url: imageUrl,
           created_by: user?.id,
@@ -1310,31 +1380,30 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
       
       toast.success('Entry checked out successfully! Ticket is now closed.');
       
-      // Reset form
-      setVehicleNumber('');
-      setVehicleType('');
-      setService([]); // Reset service to empty array
-      setAmount('500');
-      setDiscount('');
-      setRemarks('');
-      setPaymentMode('cash');
-      setSelectedUpiAccount(''); // Reset UPI account selection
-      setCustomerName('');
-      setPhoneNumber('');
-      setDateOfBirth('');
-      setCustomerLocation('');
-      setSelectedVehicleBrand('');
-      setSelectedModel('');
-      setSelectedModelId('');
-      setWheelCategory('4 Wheeler');
-      setWorkshop('');
-      setUseCustomDateTime(false);
-      setCustomEntryDate(new Date().toISOString().split('T')[0]);
-      setCustomEntryTime(new Date().toTimeString().slice(0, 5));
-      
-      // Reset edit mode
-      setIsEditing(false);
-      setEditLogId(null);
+      // Reset form only if not in edit mode
+      if (!isEditing) {
+        setVehicleNumber('');
+        setVehicleType('');
+        setService([]); // Reset service to empty array
+        setAmount('500');
+        setDiscount('');
+        setRemarks('');
+        // Reset payment mode and UPI account selection
+        setPaymentMode('cash');
+        setSelectedUpiAccount('');
+        // setScratchImage(null);
+        setCustomerName('');
+        setPhoneNumber('');
+        setDateOfBirth('');
+        setCustomerLocation('');
+        setSelectedVehicleBrand('');
+        setSelectedModel('');
+        setSelectedModelId('');
+        // Reset custom datetime
+        setUseCustomDateTime(false);
+        setCustomEntryDate(new Date().toISOString().split('T')[0]);
+        setCustomEntryTime(new Date().toTimeString().slice(0, 5));
+      }
       
     } catch (error) {
       console.error('Error checking out entry:', error);
@@ -1345,270 +1414,408 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="flex-1 p-4 lg:p-6 space-y-4 lg:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-2 lg:gap-4">
+          <div className="flex items-center gap-2">
+            <Car className="h-5 w-5 lg:h-6 lg:w-6 text-primary" />
+            <h1 className="text-xl lg:text-2xl font-bold">
+              {isEditing ? 'Edit Entry' : 'Manual Entry'}
+            </h1>
+          </div>
+          <Badge variant="outline" className="bg-primary/10 text-primary border-primary">
+            {isEditing ? 'Edit Mode' : 'Manager Access'}
+          </Badge>
+        </div>
+      </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           {/* Entry Form */}
           <Card>
             <CardHeader>
               <CardTitle>Vehicle Entry Details</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Entry Type - move this section above Vehicle Number */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Entry Type</Label>
-                  <div className="flex gap-2">
-                    <Button 
-                      variant={entryType === 'customer' ? 'default' : 'outline'} 
-                      size="sm" 
-                      className="flex-1 text-xs sm:text-sm"
-                      onClick={() => setEntryType('customer')}
-                    >
-                      Customer
-                    </Button>
-                    <Button 
-                      variant={entryType === 'workshop' ? 'default' : 'outline'} 
-                      size="sm" 
-                      className="flex-1 text-xs sm:text-sm"
-                      onClick={() => setEntryType('workshop')}
-                    >
-                      Workshop
-                    </Button>
+            <CardContent className="space-y-4">          
+              {/* Entry Type + Entry Date */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Entry Type Section  */}
+                    <div className="space-y-3">
+                      <Label className="text-base font-semibold text-foreground">Entry Type</Label>
+                      <div className="flex flex-col gap-2 p-1 bg-muted/30 rounded-lg">
+                        <Button
+                          variant={entryType === 'customer' ? 'default' : 'ghost'}
+                          size="default"
+                          className={`h-10 font-medium transition-all duration-200 justify-start ${
+                            entryType === 'customer' 
+                              ? 'bg-primary text-primary-foreground shadow-sm' 
+                              : 'text-muted-foreground hover:text-foreground hover:bg-background/80'
+                          }`}
+                          onClick={() => setEntryType('customer')}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${
+                              entryType === 'customer' ? 'bg-primary-foreground/80' : 'bg-muted-foreground/60'
+                            }`} />
+                            Customer
+                          </div>
+                        </Button>
+                        <Button
+                          variant={entryType === 'workshop' ? 'default' : 'ghost'}
+                          size="default"
+                          className={`h-10 font-medium transition-all duration-200 justify-start ${
+                            entryType === 'workshop' 
+                              ? 'bg-primary text-primary-foreground shadow-sm' 
+                              : 'text-muted-foreground hover:text-foreground hover:bg-background/80'
+                          }`}
+                          onClick={() => setEntryType('workshop')}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${
+                              entryType === 'workshop' ? 'bg-primary-foreground/80' : 'bg-muted-foreground/60'
+                            }`} />
+                            Workshop
+                          </div>
+                        </Button>
+                      </div>
+                    </div>
+
+
+
+
+                    {/* Custom Entry Date */}
+                    <div className="space-y-3 p-4 border rounded-lg bg-muted/20">
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Entry Date</Label>
+                        <div className="flex items-center gap-2">
+                          {/* Previous Date Button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const currentDate = parseYMD(customEntryDate) ?? new Date();
+                              currentDate.setDate(currentDate.getDate() - 1);
+                              const newYmd = toYMD(currentDate);
+                              setCustomEntryDate(newYmd);
+
+                              const todayStr = todayYMD();
+                              const yestStr = yesterdayYMD();
+
+                              if (newYmd === todayStr) setSelectedDateOption('today');
+                              else if (newYmd === yestStr) setSelectedDateOption('yesterday');
+                              else setSelectedDateOption('custom');
+                            }}
+                            className="flex items-center justify-center w-9 h-9 border rounded-md bg-background hover:bg-muted/50 transition-colors shadow-sm"
+                          >
+                            <ChevronDown className="h-4 w-4 rotate-90" />
+                          </button>
+                          
+                          {/* Date Display */}
+                          <div className="relative flex-1">
+                            <button
+                              type="button"
+                              onClick={() => setIsDateDropdownOpen(!isDateDropdownOpen)}
+                              className="w-full flex items-center justify-between px-3 py-2 border rounded-md bg-background hover:bg-muted/50 transition-colors shadow-sm text-sm"
+                            >
+                              <span className="font-medium">{getDisplayDate()}</span>
+                              <ChevronDown className="h-4 w-4" />
+                            </button>
+                            
+                            {isDateDropdownOpen && (
+                              <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-background border rounded-md shadow-lg">
+                                <div className="p-3">
+                                  <Label className="text-xs text-muted-foreground mb-2 block">Custom Date</Label>
+                                  <Input
+                                    type="date"
+                                    value={customEntryDate}
+                                    onChange={(e) => {
+                                      setCustomEntryDate(e.target.value);
+                                      setSelectedDateOption('custom');
+                                      setIsDateDropdownOpen(false);
+                                    }}
+                                    max={todayYMD()}
+                                    className="w-full text-sm"
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Next Date Button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const currentDate = parseYMD(customEntryDate) ?? new Date();
+                              const todayStr = todayYMD();
+                              const currentDateStr = customEntryDate;
+
+                              if (currentDateStr < todayStr) {
+                                currentDate.setDate(currentDate.getDate() + 1);
+                                const newDateStr = toYMD(currentDate);
+                                setCustomEntryDate(newDateStr);
+
+                                const yestStr = yesterdayYMD();
+                                if (newDateStr === todayStr) setSelectedDateOption('today');
+                                else if (newDateStr === yestStr) setSelectedDateOption('yesterday');
+                                else setSelectedDateOption('custom');
+                              }
+                            }}
+                            className={`flex items-center justify-center w-9 h-9 border rounded-md transition-colors shadow-sm ${
+                              customEntryDate === todayYMD()
+                                ? 'bg-muted/30 cursor-not-allowed opacity-50' 
+                                : 'bg-background hover:bg-muted/50 cursor-pointer'
+                            }`}
+                            disabled={customEntryDate === todayYMD()}
+                          >
+                            <ChevronDown className="h-4 w-4 -rotate-90" />
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <div className="text-xs text-muted-foreground leading-relaxed">
+                        Entry recorded for <strong className="text-foreground">{(() => {
+                          // Parse date correctly to avoid timezone issues
+                          const dateParts = customEntryDate.split('-');
+                          const date = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
+                          
+                          const dateStr = date.toLocaleDateString('en-US', { 
+                            weekday: 'long',
+                            year: 'numeric', 
+                            month: 'long', 
+                            day: 'numeric' 
+                          });
+                          const now = new Date();
+                          const timeStr = now.toLocaleTimeString('en-US', {
+                            hour: 'numeric',
+                            minute: '2-digit',
+                            hour12: true
+                          });
+                          return `${dateStr} at ${timeStr}`;
+                        })()}</strong>
+                      </div>
+                    </div>
+                </div>
+
+            {/* Vehicle Number - Separate section below */}
+            <div className="space-y-2">
+              <Label htmlFor="vehicleNumber" className="text-base font-medium">Vehicle Number</Label>
+              <div className="relative">
+                <Input 
+                  id="vehicleNumber"
+                  placeholder="Enter vehicle number (KL07AB0001)" 
+                  className="text-center font-mono text-lg uppercase tracking-wider h-12 border-2 focus:border-primary/50 shadow-sm"
+                  value={vehicleNumber}
+                  onChange={(e) => handleVehicleNumberChange(e.target.value)}
+                />
+                {isLoadingVehicleData && (
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
                   </div>
+                )}
+              </div>
+              {vehicleNumber && (
+                <div className="flex items-center gap-2 text-sm bg-muted/30 px-3 py-2 rounded-md">
+                  <div className={`w-2 h-2 rounded-full ${visitCount > 0 ? 'bg-green-500' : 'bg-amber-500'}`}></div>
+                  <span className="text-muted-foreground font-medium">
+                    {visitCount > 0 ? `Previous Visits: ${visitCount} ${visitCount === 1 ? 'time' : 'times'}` : 'New Customer'}
+                  </span>
+                </div>
+              )}   
+            </div>
+                      
+
+
+             {/* Category */}
+            <div className="space-y-2">
+              <Label htmlFor="wheelCategory">Category</Label>
+              <Select value={wheelCategory} onValueChange={setWheelCategory}>
+                <SelectTrigger id="wheelCategory">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="2">2 Wheeler</SelectItem>
+                  <SelectItem value="4">4 Wheeler</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+
+
+
+            
+            {/* Vehicle Brand and Model */}
+            <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
+              <Label className="text-base font-semibold">Vehicle Details</Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                
+                <div className="space-y-2">
+                  <Label htmlFor="selectedModel">Vehicle Model</Label>
+                  <ReactSelect
+                    isClearable
+                    isSearchable
+                    placeholder={wheelCategory ? "Type to search vehicle model..." : "Select category first"}
+                    options={availableModels.map(model => ({ value: model.name, label: model.name }))}
+                    value={selectedModel ? { value: selectedModel, label: selectedModel } : null}
+                    onChange={(selected) => {
+                      setSelectedModel(selected?.value || '');
+                      // Find and set the corresponding model ID
+                      const modelObj = availableModels.find(m => m.name === selected?.value);
+                      setSelectedModelId(modelObj?.id || '');
+                    }}
+                    classNamePrefix="react-select"
+                     isDisabled={!wheelCategory}
+                    noOptionsMessage={() => "No models found"}
+                  />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="wheelCategory">Category</Label>
-                  <Select value={wheelCategory} onValueChange={setWheelCategory}>
-                    <SelectTrigger id="wheelCategory">
-                      <SelectValue placeholder="Select category" />
+                  <Label htmlFor="selectedVehicleBrand">Vehicle Brand</Label>
+                  <ReactSelect
+                    isClearable
+                    isSearchable
+                    placeholder={wheelCategory ? (selectedModel ? "Brand will be auto-selected" : "Type to search vehicle brand...") : "Select category first"}
+                    options={(wheelCategory ? availableVehicleBrands : []).map(brand => ({ value: brand, label: brand }))}
+                    value={selectedVehicleBrand ? { value: selectedVehicleBrand, label: selectedVehicleBrand } : null}
+                    onChange={(selected) => setSelectedVehicleBrand(selected?.value || '')}
+                    classNamePrefix="react-select"
+                    noOptionsMessage={() => "No brands found"}
+                    isDisabled={!wheelCategory || !!selectedModel}
+                  />
+                  {selectedModel && !selectedVehicleBrand && (
+                    <p className="text-sm text-muted-foreground">
+                      Brand will be automatically selected based on the chosen model
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Service Selection */}
+            {entryType === 'customer' && (
+              <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
+                <Label className="text-base font-semibold">Service Selection</Label>
+
+                {/* Vehicle Type */}
+                <div className="space-y-2">
+                  <Label htmlFor="vehicleType">Vehicle Type</Label>
+                  <Select
+                    value={vehicleType}
+                    onValueChange={(val) => {
+                      setVehicleType(val);
+                      // ---------- Reset services and preselect FULL WASH-----------
+                      setService(["FULL WASH"]);
+                    }}
+                    disabled={!wheelCategory}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={wheelCategory ? "Select vehicle type" : "Select category first"} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="2">2 Wheeler</SelectItem>
-                      <SelectItem value="4">4 Wheeler</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
+                      {sortVehicleTypesWithPriority(vehicleTypes).map(type => (
+                        <SelectItem key={type} value={type}>{type}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Service Chosen */}
+                <div className="space-y-2">
+                  <Label htmlFor="service">Service Chosen</Label>
+                  <ReactSelect
+                    isMulti
+                    options={
+                      vehicleType
+                        ? (() => {
+                            let filteredServices = priceMatrix
+                              .filter(row => row.VEHICLE && row.VEHICLE.trim() === vehicleType.trim())
+                              .filter(row => {
+                                if (!wheelCategory) return true;
+                                if (!(row as any).type) return true;
+                                return doesTypeMatchWheelCategory((row as any).type, wheelCategory);
+                              })
+                              .map(row => row.SERVICE)
+                              .filter((v, i, arr) => v && arr.indexOf(v) === i);
+
+                            // ------ Always include FULL WASH--------
+                            if (!filteredServices.includes("FULL WASH")) {
+                              filteredServices = ["FULL WASH", ...filteredServices];
+                            }
+
+                            const sortedServices = sortServicesWithPriority(filteredServices);
+                            return sortedServices.map(option => ({ value: option, label: option }));
+                          })()
+                        : []
+                    }
+                    value={service.map(option => ({ value: option, label: option }))}
+                    onChange={(selected) =>
+                      setService(Array.isArray(selected) ? selected.map((s: any) => s.value) : [])
+                    }
+                    placeholder={vehicleType ? "Select services" : (wheelCategory ? "Select vehicle type first" : "Select category first")}
+                    classNamePrefix="react-select"
+                    isDisabled={!wheelCategory || !vehicleType}
+                  />
+                </div>
+              </div>
+            )}
+
+
+
+            {/* Workshop Selection */}
+            {entryType === 'workshop' && (
+              <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
+                <Label className="text-base font-semibold">Workshop Details</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="workshop">Workshop</Label>
+                  <Select value={workshop} onValueChange={setWorkshop}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select workshop" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {workshopOptions.map(option => (
+                        <SelectItem key={option} value={option}>{option}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {/* Show textbox when "OTHER WORKSHOPS" is selected */}
+                {workshop === "OTHER WORKSHOPS" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="customWorkshop">Enter Workshop Name</Label>
+                    <input
+                      type="text"
+                      id="customWorkshop"
+                      className="w-full p-2 border rounded-lg"
+                      placeholder="Type workshop name"
+                      value={customWorkshopName}
+                      onChange={(e) => setCustomWorkshopName(e.target.value)}
+                    />
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="vehicleType">Vehicle Type</Label>
+                  <Select 
+                    value={vehicleType} 
+                    onValueChange={setVehicleType} 
+                    disabled={!wheelCategory && workshop !== "OTHER WORKSHOPS"}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={
+                        (!wheelCategory && workshop !== "OTHER WORKSHOPS") 
+                          ? "Select category first" 
+                          : "Select vehicle type"
+                      } />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sortVehicleTypesWithPriority(vehicleTypes).map(type => (
+                        <SelectItem key={type} value={type}>{type}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
+            )}
 
-              Custom Entry Date and Time
-              <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="useCustomDateTime"
-                    checked={useCustomDateTime}
-                    onCheckedChange={(checked) => setUseCustomDateTime(checked as boolean)}
-                  />
-                  <Label htmlFor="useCustomDateTime" className="text-base font-semibold">
-                    Use Custom Entry Date & Time
-                  </Label>
-                </div>
-                
-                {useCustomDateTime && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="customEntryDate">Entry Date</Label>
-                      <Input
-                        id="customEntryDate"
-                        type="date"
-                        value={customEntryDate}
-                        onChange={(e) => setCustomEntryDate(e.target.value)}
-                        max={new Date().toISOString().split('T')[0]}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="customEntryTime">Entry Time</Label>
-                      <Input
-                        id="customEntryTime"
-                        type="time"
-                        value={customEntryTime}
-                        onChange={(e) => setCustomEntryTime(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                )}
-                
-                {useCustomDateTime && (
-                  <div className="text-sm text-muted-foreground">
-                    Entry will be recorded for: {customEntryDate} at {customEntryTime}
-                  </div>
-                )}
-              </div>
-
-              {/* Vehicle Number */}
-              <div className="space-y-2">
-                <Label htmlFor="vehicleNumber">Vehicle Number</Label>
-                <div className="relative">
-                  <Input 
-                    id="vehicleNumber"
-                    placeholder="Enter vehicle number (KL07AB0001)" 
-                    className="text-center font-mono text-lg uppercase"
-                    value={vehicleNumber}
-                    onChange={(e) => handleVehicleNumberChange(e.target.value)}
-                  />
-                  {isLoadingVehicleData && (
-                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-                    </div>
-                  )}
-                </div>
-                {vehicleNumber && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <div className={`w-2 h-2 rounded-full ${visitCount > 0 ? 'bg-success' : 'bg-warning'}`}></div>
-                    <span className="text-muted-foreground">
-                      {visitCount > 0 ? `Previous Visits: ${visitCount} ${visitCount === 1 ? 'time' : 'times'}` : 'New Customer'}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              
-
-              {/* Vehicle Brand and Model */}
-              <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
-                <Label className="text-base font-semibold">Vehicle Details</Label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="selectedVehicleBrand">Vehicle Brand</Label>
-                    <ReactSelect
-                      isClearable
-                      isSearchable
-                      placeholder={wheelCategory ? (selectedModel ? "Brand will be auto-selected" : "Type to search vehicle brand...") : "Select category first"}
-                      options={(wheelCategory ? availableVehicleBrands : []).map(brand => ({ value: brand, label: brand }))}
-                      value={selectedVehicleBrand ? { value: selectedVehicleBrand, label: selectedVehicleBrand } : null}
-                      onChange={(selected) => setSelectedVehicleBrand(selected?.value || '')}
-                      classNamePrefix="react-select"
-                      noOptionsMessage={() => "No brands found"}
-                      isDisabled={!wheelCategory || !!selectedModel}
-                    />
-                    {selectedModel && !selectedVehicleBrand && (
-                      <p className="text-sm text-muted-foreground">
-                        Brand will be automatically selected based on the chosen model
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="selectedModel">Vehicle Model</Label>
-                    <ReactSelect
-                      isClearable
-                      isSearchable
-                      placeholder={wheelCategory ? "Type to search vehicle model..." : "Select category first"}
-                      options={availableModels.map(model => ({ value: model.name, label: model.name }))}
-                      value={selectedModel ? { value: selectedModel, label: selectedModel } : null}
-                      onChange={(selected) => {
-                        setSelectedModel(selected?.value || '');
-                        // Find and set the corresponding model ID
-                        const modelObj = availableModels.find(m => m.name === selected?.value);
-                        setSelectedModelId(modelObj?.id || '');
-                      }}
-                      classNamePrefix="react-select"
-                      isDisabled={!wheelCategory}
-                      noOptionsMessage={() => "No models found"}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {entryType === 'customer' && (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="vehicleType">Vehicle Type</Label>
-                      <Select value={vehicleType} onValueChange={setVehicleType} disabled={!wheelCategory}>
-                        <SelectTrigger>
-                          <SelectValue placeholder={wheelCategory ? "Select vehicle type" : "Select category first"} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {sortVehicleTypesWithPriority(vehicleTypes).map(type => (
-                            <SelectItem key={type} value={type}>{type}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="service">Service Chosen</Label>
-                      <ReactSelect
-                        isMulti
-                        options={
-                          vehicleType
-                            ? (() => {
-                                const filteredServices = priceMatrix
-                                  .filter(row => row.VEHICLE && row.VEHICLE.trim() === vehicleType.trim())
-                                  // Only filter by type if the type field exists and wheelCategory is set
-                                  .filter(row => {
-                                    // If no wheel category is selected, show all services for the vehicle type
-                                    if (!wheelCategory) return true;
-                                    
-                                    // If the row doesn't have a type field, show it (fallback)
-                                    if (!(row as any).type) return true;
-                                    
-                                    // Otherwise, apply the type filtering
-                                    return doesTypeMatchWheelCategory((row as any).type, wheelCategory);
-                                  })
-                                  .map(row => row.SERVICE)
-                                  .filter((v, i, arr) => v && arr.indexOf(v) === i);
-                                
-                                const sortedServices = sortServicesWithPriority(filteredServices);
-                                const options = sortedServices.map(option => ({ value: option, label: option }));
-                                
-                                console.log('🚗 Service dropdown options for', vehicleType, ':', {
-                                  wheelCategory,
-                                  filteredServices,
-                                  sortedServices,
-                                  options
-                                });
-                                
-                                return options;
-                              })()
-                            : []
-                        }
-                        value={service.map(option => ({
-                          value: option,
-                          label: option
-                        }))}
-                        onChange={(selected) => setService(Array.isArray(selected) ? selected.map((s: any) => s.value) : [])}
-                        placeholder={vehicleType ? "Select services" : (wheelCategory ? "Select vehicle type first" : "Select category first")}
-                        classNamePrefix="react-select"
-                        isDisabled={!wheelCategory || !vehicleType}
-                      />
-                    </div>
-                  </>
-                )}
-
-                {entryType === 'workshop' && (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="workshop">Workshop</Label>
-                      <Select value={workshop} onValueChange={setWorkshop}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select workshop" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {workshopOptions.map(option => (
-                            <SelectItem key={option} value={option}>{option}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="vehicleType">Vehicle Type</Label>
-                      <Select value={vehicleType} onValueChange={setVehicleType}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select vehicle type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {sortVehicleTypesWithPriority(vehicleTypes).map(type => (
-                            <SelectItem key={type} value={type}>{type}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </>
-                )}
-              </div>
-
+            {/* Amount and Payment */}
+            <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
+              <Label className="text-base font-semibold">Payment Details</Label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="amount">Amount</Label>
@@ -1633,19 +1840,28 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                 </div>
               </div>
 
+
+
+
               {/* Customer Details - moved just above payment method */}
               <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
                 <Label className="text-base font-semibold">Customer Details</Label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="customerName">Customer Name (Optional)</Label>
-                    <Input 
-                      id="customerName"
-                      placeholder="Enter customer name" 
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                    />
-                  </div>
+                <div className="space-y-2">
+                <Label htmlFor="customerName">Customer Name (Optional)</Label>
+                <Input
+                  id="customerName"
+                  placeholder="Enter customer name"
+                  value={customerName}
+                  onChange={(e) => {
+                    const formattedName = e.target.value
+                      .split(" ")
+                      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                      .join(" ");
+                    setCustomerName(formattedName);
+                  }}
+                />
+              </div>
+                <div>
                   <div className="space-y-2">
                     <Label htmlFor="phoneNumber">Phone Number (Optional)</Label>
                     <Input 
@@ -1679,6 +1895,10 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                 </div>
               </div>
 
+
+
+
+              {/* Payment Mode Selection */}
               <div className="space-y-2">
                 <Label>Payment Mode</Label>
                 <div className="flex gap-2">
@@ -1710,28 +1930,48 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                     <span className="text-xs sm:text-sm">Pay Later</span>
                   </Button>
                 </div>
+                {paymentMode === 'upi' && (
+                  <p className="text-xs text-muted-foreground">
+                    Select a UPI account below to display the QR code for payment
+                  </p>
+                )}
+                {paymentMode === 'credit' && (
+                  <p className="text-xs text-muted-foreground">
+                    Customer will pay later. Ticket will be marked as pending payment.
+                  </p>
+                )}
               </div>
 
               {/* UPI Account Selection */}
               {paymentMode === 'upi' && (
                 <div className="space-y-2">
                   <Label>Select UPI Account</Label>
-                  <Select value={selectedUpiAccount} onValueChange={setSelectedUpiAccount}>
-                    <SelectTrigger>
-                      <SelectValue placeholder={upiAccountsLoading ? "Loading accounts..." : "Select UPI account"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {upiAccounts.map((account) => (
-                        <SelectItem key={account.id} value={account.id}>
-                          {account.account_name} - {account.upi_id} ({account.location_name || 'N/A'})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {upiAccounts.length === 0 && !upiAccountsLoading && (
-                    <p className="text-sm text-muted-foreground">
-                      No UPI accounts found. Please add UPI accounts in the settings.
-                    </p>
+                  {upiAccountsLoading ? (
+                    <div className="text-sm text-muted-foreground">Loading UPI accounts...</div>
+                  ) : upiAccounts.length === 0 ? (
+                    <div className="p-3 border rounded-lg bg-muted/20">
+                      <p className="text-sm text-muted-foreground text-center">
+                        No UPI accounts found. Please add UPI accounts in the settings first.
+                      </p>
+                      <p className="text-xs text-muted-foreground text-center mt-1">
+                        You can switch to Cash payment mode or add UPI accounts in the settings.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <Select value={selectedUpiAccount} onValueChange={setSelectedUpiAccount}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select UPI account" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {upiAccounts.map((account) => (
+                            <SelectItem key={account.id} value={account.id}>
+                              {account.account_name} - {account.upi_id} ({account.location_name || 'N/A'})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </>
                   )}
                   
                   {/* QR Code Display */}
@@ -1742,11 +1982,11 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                         const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
                         if (selectedAccount?.qr_code_url) {
                           return (
-                            <div className="flex justify-center">
+                            <div className="flex justify-center p-2">
                               <img 
                                 src={selectedAccount.qr_code_url} 
                                 alt={`QR Code for ${selectedAccount.account_name}`}
-                                className="w-32 h-32 object-contain border rounded-lg"
+                                className="w-32 h-32 object-contain border rounded-lg shadow-sm"
                               />
                             </div>
                           );
@@ -1763,48 +2003,57 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                 </div>
               )}
 
-              <div className="space-y-2">
-                <Label htmlFor="remarks">Remarks</Label>
-                <Textarea 
-                  id="remarks" 
-                  placeholder="Any additional notes..." 
-                  rows={3} 
-                  value={remarks}
-                  onChange={(e) => setRemarks(e.target.value)}
-                />
-              </div>
-            </CardContent>
-          </Card>
+            <div className="space-y-2">
+              <Label htmlFor="remarks">Remarks</Label>
+              <Textarea 
+                id="remarks" 
+                placeholder="Any additional notes..." 
+                rows={3} 
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+              />
+            </div>
+            
+          </div>
+        </CardContent>
+      </Card>
 
-          {/* Scratch Marking Section */}
-          {/* <ScratchMarking onSave={handleScratchSave} /> */}
-        </div>
+              {/* Scratch Marking Section - Disabled */}
+              {/* <Card>
+                <CardHeader>
+                  <CardTitle>Vehicle Scratch Marking</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ScratchMarking onSave={handleScratchSave} />
+                </CardContent>
+              </Card> */}
+    </div>
 
-        {/* Submit Button */}
-        <div className="flex justify-center gap-4">
+    {/* Submit Button */}
+      <div className="flex justify-center gap-4">
+        <Button 
+          variant="default" 
+          size="lg" 
+          className="px-8"
+          onClick={handleSubmit}
+          disabled={isSubmitDisabled}
+        >
+          {isEditing ? 'Update Entry' : 'Submit Entry'}
+        </Button>
+        
+        {/* Checkout Button - only show when no custom date is given */}
+        {!useCustomDateTime && !isEditing && (
           <Button 
-            variant="default" 
+            variant="outline" 
             size="lg" 
             className="px-8"
-            onClick={handleSubmit}
+            onClick={handleCheckout}
             disabled={isSubmitDisabled}
           >
-            {isEditing ? 'Update Entry' : 'Submit Entry'}
+            Checkout
           </Button>
-          
-          {/* Checkout Button - only show when no custom date is given */}
-          {!useCustomDateTime && !isEditing && (
-            <Button 
-              variant="outline" 
-              size="lg" 
-              className="px-8"
-              onClick={handleCheckout}
-              disabled={isSubmitDisabled}
-            >
-              Checkout
-            </Button>
-          )}
-        </div>
-       </div>
+        )}
+      </div>
+    </div>
    );
  }
