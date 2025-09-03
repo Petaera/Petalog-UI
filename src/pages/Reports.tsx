@@ -14,7 +14,7 @@ import { format } from "date-fns";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 import { useAuth } from '@/contexts/AuthContext';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, XAxis, YAxis, LabelList } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, XAxis, YAxis,LabelList} from 'recharts';
 import { Switch } from "@/components/ui/switch";
 // Types for our data
 interface Vehicle {
@@ -187,23 +187,23 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
 
   const [pendingLogs, setPendingLogs] = useState([]);
 
-  useEffect(() => {
-    const fetchTodayPendingLogs = async () => {
-      const today = new Date();
-      const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString();
-      const endOfDay = new Date(today.setHours(23, 59, 59, 999)).toISOString();
+useEffect(() => {
+  const fetchTodayPendingLogs = async () => {
+    const today = new Date();
+    const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString();
+    const endOfDay = new Date(today.setHours(23, 59, 59, 999)).toISOString();
 
-      const { data, error } = await supabase
-        .from("logs-man")
-        .select("*")
-        .in("approval_status", ["pending", null])
-        .gte("entry_time", startOfDay)
-        .lte("entry_time", endOfDay);
+    const { data, error } = await supabase
+      .from("logs-man")
+      .select("*")
+      .in("approval_status", ["pending", null])
+      .gte("entry_time", startOfDay)
+      .lte("entry_time", endOfDay);
 
-      if (!error) setPendingLogs(data || []);
-    };
-    fetchTodayPendingLogs();
-  }, []);
+    if (!error) setPendingLogs(data || []);
+  };
+  fetchTodayPendingLogs();
+}, []);
   // Filter data based on current selections
   const getFilteredData = () => {
     let filteredLogs = [...logs];
@@ -1623,24 +1623,68 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
           </CardContent>
         </Card>
 
-        {dateRange === "today" && (
-          <Card className="metric-card bg-blue-50 border-blue-100 shadow-none">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-blue-900">Pending Tickets</CardTitle>
-              <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200">Today</Badge>
-            </CardHeader>
-            <CardContent>
-              <div className="text-lg font-bold text-blue-900">
-                {pendingLogs.length}
-                <span className="ml-2 text-xs text-blue-700">tickets</span>
-              </div>
-              <div className="text-xs text-blue-700 mt-1">
-                Total Amount: ₹
-                {pendingLogs.reduce((sum, log) => sum + (log.Amount || 0), 0).toLocaleString()}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        <Card className="metric-card bg-blue-50 border-blue-100 shadow-none">
+  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+    <CardTitle className="text-sm font-medium text-blue-900">Pending Tickets</CardTitle>
+    <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200">
+      {dateRange === "today" ? "Today" : "Yesterday"}
+    </Badge>
+  </CardHeader>
+  <CardContent>
+    <div className="text-lg font-bold text-blue-900">
+      {dateRange === "today"
+        ? pendingLogs.filter(log => {
+            const logDate = new Date(log.entry_time || log.created_at);
+            const today = new Date();
+            return (
+              logDate.getFullYear() === today.getFullYear() &&
+              logDate.getMonth() === today.getMonth() &&
+              logDate.getDate() === today.getDate()
+            );
+          }).length
+        : pendingLogs.filter(log => {
+            const logDate = new Date(log.entry_time || log.created_at);
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            return (
+              logDate.getFullYear() === yesterday.getFullYear() &&
+              logDate.getMonth() === yesterday.getMonth() &&
+              logDate.getDate() === yesterday.getDate()
+            );
+          }).length}
+      <span className="ml-2 text-xs text-blue-700">tickets</span>
+    </div>
+    <div className="text-xs text-blue-700 mt-1">
+      Total Amount: ₹
+      {dateRange === "today"
+        ? pendingLogs
+            .filter(log => {
+              const logDate = new Date(log.entry_time || log.created_at);
+              const today = new Date();
+              return (
+                logDate.getFullYear() === today.getFullYear() &&
+                logDate.getMonth() === today.getMonth() &&
+                logDate.getDate() === today.getDate()
+              );
+            })
+            .reduce((sum, log) => sum + (log.Amount || 0), 0)
+            .toLocaleString()
+        : pendingLogs
+            .filter(log => {
+              const logDate = new Date(log.entry_time || log.created_at);
+              const yesterday = new Date();
+              yesterday.setDate(yesterday.getDate() - 1);
+              return (
+                logDate.getFullYear() === yesterday.getFullYear() &&
+                logDate.getMonth() === yesterday.getMonth() &&
+                logDate.getDate() === yesterday.getDate()
+              );
+            })
+            .reduce((sum, log) => sum + (log.Amount || 0), 0)
+            .toLocaleString()}
+    </div>
+  </CardContent>
+</Card>
 
         {/* Today's Collection - Commented out
         <Card className="metric-card-warning">
@@ -1945,29 +1989,29 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
                       innerRadius="45%"
                       labelLine={false}
                       minAngle={10}
-                      label={({ type, percentage, cx, cy, midAngle, outerRadius, index }) => {
-                        // Calculate label position
-                        const RADIAN = Math.PI / 180;
-                        const radius = outerRadius + 10;
-                        const x = cx + radius * Math.cos(-midAngle * RADIAN);
-                        const y = cy + radius * Math.sin(-midAngle * RADIAN);
-                        // Shorten long names
-                        const labelText = `${type?.length > 10 ? type.slice(0, 10) + '…' : type || 'Unknown'} (${percentage.toFixed(1)}%)`;
-                        return (
-                          <text
-                            x={x}
-                            y={y}
-                            textAnchor={x > cx ? "start" : "end"}
-                            dominantBaseline="central"
-                            fontSize={10} // Smaller font size
-                            fill="#444"
-                            style={{ pointerEvents: "none" }}
-                          >
-                            {labelText}
-                          </text>
-                        );
-                      }}
-
+                     label={({ type, percentage, cx, cy, midAngle, outerRadius, index }) => {
+    // Calculate label position
+    const RADIAN = Math.PI / 180;
+    const radius = outerRadius + 10;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+    // Shorten long names
+    const labelText = `${type?.length > 10 ? type.slice(0, 10) + '…' : type || 'Unknown'} (${percentage.toFixed(1)}%)`;
+    return (
+      <text
+        x={x}
+        y={y}
+        textAnchor={x > cx ? "start" : "end"}
+        dominantBaseline="central"
+        fontSize={10} // Smaller font size
+        fill="#444"
+        style={{ pointerEvents: "none" }}
+      >
+        {labelText}
+      </text>
+    );
+  }}
+                      
                     >
                       {filteredData.vehicleDistribution.map((entry: any, idx: number) => {
                         const COLORS = [
@@ -2091,16 +2135,16 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
                           }
                           labelFormatter={(label: string) => `Hour: ${label}`}
                         />
-
-                        <Bar dataKey="amount" fill="#6366f1" radius={[4, 4, 0, 0]}>
-                          <LabelList
-                            dataKey="amount"
-                            position="top"
-                            formatter={(value: number) => value > 0 ? `₹${value}` : ""}
-                            style={{ fontSize: isMobile ? 9 : 12, fill: "#222" }}
-                          />
-                        </Bar>
-
+                        
+                       <Bar dataKey="amount" fill="#6366f1" radius={[4, 4, 0, 0]}>
+  <LabelList
+    dataKey="amount"
+    position="top"
+    formatter={(value: number) => value > 0 ? `₹${value}` : ""}
+    style={{ fontSize: isMobile ? 9 : 12, fill: "#222" }}
+  />
+</Bar>
+                        
                       </BarChart>
                     </ResponsiveContainer>
                   );
