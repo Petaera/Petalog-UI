@@ -26,6 +26,12 @@ import VehicleHistory from "./pages/VehicleHistory";
 import OwnerEntry from "./pages/OwnerEntry";
 import ManagerSettings from "./pages/ManagerSettings";
 import Loyalty from "./pages/Loyalty";
+import { DashboardOverview } from "./components/loyalty/DashboardOverview";
+import { SubscriptionSchemes } from "./components/loyalty/SubscriptionSchemes";
+import { CreateSchemeWizard } from "./components/loyalty/CreateSchemeWizard";
+import { Customers } from "./components/loyalty/Customers";
+import { Analytics } from "./components/loyalty/Analytics";
+import { LoyaltyLayout } from "./components/loyalty/LoyaltyLayout";
 
 // Manager pages
 import ManagerPortal from "./pages/ManagerPortal";
@@ -240,16 +246,23 @@ const App = () => (
                  }
                />
                
+               {/* Loyalty Routes */}
                <Route 
                  path="/loyalty" 
                  element={
                    <ProtectedRoute requiredRole={["owner", "manager"]}>
-                     <Layout>
-                       <Loyalty />
-                     </Layout>
+                     <LoyaltyLayout />
                    </ProtectedRoute>
                  }
-               />
+               >
+                 <Route index element={<DashboardOverview />} />
+                 <Route path="dashboard" element={<DashboardOverview />} />
+                 <Route path="schemes" element={<SubscriptionSchemes />} />
+                 <Route path="create" element={<CreateSchemeWizard onComplete={() => {}} />} />
+                 <Route path="edit/:id" element={<CreateSchemeWizard onComplete={() => {}} />} />
+                 <Route path="customers" element={<Customers />} />
+                 <Route path="analytics" element={<Analytics />} />
+               </Route>
                
                <Route 
                  path="/location-partnerships" 
