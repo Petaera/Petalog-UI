@@ -54,13 +54,57 @@ const sidebarItems = [
 export function LoyaltySidebar({ activeSection }: { activeSection: string }) {
   const navigate = useNavigate(); // Initialize navigate
   const location = useLocation();
+  const [sidebarWidth, setSidebarWidth] = React.useState<number>(() => {
+    try {
+      const stored = typeof window !== 'undefined' ? window.localStorage.getItem('loyalty_sidebar_width') : null;
+      const parsed = stored ? parseInt(stored, 10) : NaN;
+      return Number.isFinite(parsed) ? Math.min(Math.max(parsed, 240), 480) : 320;
+    } catch {
+      return 320;
+    }
+  });
+  const isDraggingRef = React.useRef(false);
+
+  React.useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingRef.current) return;
+      const sidebarEl = document.getElementById('loyalty-sidebar');
+      if (!sidebarEl) return;
+      const rect = sidebarEl.getBoundingClientRect();
+      const newWidth = e.clientX - rect.left;
+      const clamped = Math.min(Math.max(newWidth, 240), 480);
+      setSidebarWidth(clamped);
+    };
+    const handleMouseUp = () => {
+      if (!isDraggingRef.current) return;
+      isDraggingRef.current = false;
+      try {
+        window.localStorage.setItem('loyalty_sidebar_width', String(sidebarWidth));
+      } catch {}
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [sidebarWidth]);
+
+  const onDragStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isDraggingRef.current = true;
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+  };
 
   const handleBackToMainApp = () => {
     navigate('/dashboard');
   };
 
   return (
-    <div className="w-80 lg:w-80 md:w-72 sm:w-64 bg-white border-r border-border flex flex-col">
+    <div id="loyalty-sidebar" className="relative bg-white border-r border-border flex flex-col" style={{ width: `${sidebarWidth}px` }}>
       
       {/* Header */}
       <div className="p-6 border-b border-border">
@@ -138,6 +182,12 @@ export function LoyaltySidebar({ activeSection }: { activeSection: string }) {
           <div className="text-sm font-bold text-primary">v1.0.0</div>
         </div>
       </div> */}
+      {/* Resize handle */}
+      <div
+        onMouseDown={onDragStart}
+        className="absolute top-0 right-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-primary/20 transition-colors"
+        aria-label="Resize sidebar"
+      />
     </div>
   );
 }

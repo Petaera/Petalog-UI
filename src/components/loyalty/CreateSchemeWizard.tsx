@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { Input } from '@/components/ui/input';
 import { Select, SelectTrigger, SelectContent, SelectItem } from '@/components/ui/select';
 import { useNavigate } from 'react-router-dom'; // Import useNavigate for navigation
+import { useAuth } from '@/contexts/AuthContext';
 
 interface CreateSchemeWizardProps {
   onComplete: () => void;
@@ -20,16 +21,18 @@ const steps = [
   { id: 5, title: 'Rewards', description: 'Benefits & loyalty' },
   { id: 6, title: 'Review', description: 'Final confirmation' }
 ];
-const mockLocations = [
-  { id: 'loc1', name: 'Main Branch' },
-  { id: 'loc2', name: 'Downtown Branch' },
-  { id: 'loc3', name: 'Partner Branch' }
-];
+// Locations available to the owner will be fetched from location_owners
 
 export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
+  const [permittedLocations, setPermittedLocations] = useState<Array<{ id: string; name: string }>>([]);
+  const [isLoadingLocations, setIsLoadingLocations] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [isCooldown, setIsCooldown] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     type: '',
@@ -55,20 +58,32 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
     if (currentStep < steps.length) {
       setCurrentStep(currentStep + 1);
     } else {
-      const owner_id = '4d7d1198-5780-4901-9f1b-a55fc190b4fb';
+      if (isCreating || isCooldown) return;
+      setIsCreating(true);
+      if (!user?.id) {
+        toast({ title: 'Not authenticated', description: 'Please sign in again to create a scheme.', status: 'error' });
+        setIsCreating(false);
+        return;
+      }
+      // Use logged-in user's id from users table as owner
+      const owner_id: string = user.id;
 
       const insertObj = {
         owner_id,
         name: formData.name.trim(),
         type: formData.type,
         duration_days: formData.duration_days ? Number(formData.duration_days) : null,
-        max_redemptions: formData.max_redemptions ? Number(formData.max_redemptions) : null,
-        price: formData.price ? Number(formData.price) : 0,
+        max_redemptions:
+          (formData.type === 'visit' || formData.type === 'package') && String(formData.max_redemptions || '').trim() !== ''
+            ? Number(formData.max_redemptions)
+            : null,
+        price: String(formData.price || '').trim() !== '' ? Number(formData.price) : 0,
         short_description: formData.description.trim() || null,
         currency: 'INR',
         allow_multiple_locations: formData.multiple_locations === 'yes',
         mixed_handling: formData.mixedHandling || null,
         allow_mixed_handling: formData.allowMixed === 'yes',
+        created_by: user.id,
         expiry: formData.expiryRule === 'unlimited' ? null : (formData.duration_days ? Number(formData.duration_days) : null),
         refund_policy: formData.refundPolicy === 'manual-override',
         allowed_payment_methods: formData.paymentModes.length > 0 ? formData.paymentModes.join(',') : null,
@@ -98,18 +113,20 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
       }
 
       if (!error) {
-        toast({
-          title: 'Scheme Created',
-          description: 'Your subscription scheme has been successfully created.',
-          status: 'success'
-        });
-        navigate('/loyalty/schemes');
+        // Show animated success, disable button for 5s, then navigate
+        setShowSuccess(true);
+        setIsCooldown(true);
+        setTimeout(() => setIsCooldown(false), 5000);
+        setTimeout(() => {
+          navigate('/loyalty/schemes');
+        }, 1500);
       } else {
         toast({
           title: 'Error',
           description: 'There was an error creating the scheme. Please try again.',
           status: 'error'
         });
+        setIsCreating(false);
       }
     }
   };
@@ -133,6 +150,45 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
       }));
     }
   }, [currentStep, formData.paymentModes.length]);
+
+  // Fetch permitted locations for the logged-in owner when entering Step 4
+  React.useEffect(() => {
+    const fetchPermittedLocations = async () => {
+      if (currentStep !== 4 || !user?.id) return;
+      setIsLoadingLocations(true);
+      try {
+        // Get location ids the owner has access to
+        const { data: ownerships, error: ownersError } = await supabase
+          .from('location_owners')
+          .select('location_id')
+          .eq('owner_id', user.id);
+
+        if (ownersError) throw ownersError;
+
+        const locationIds = (ownerships || []).map((o: any) => o.location_id).filter(Boolean);
+        if (locationIds.length === 0) {
+          setPermittedLocations([]);
+          setIsLoadingLocations(false);
+          return;
+        }
+
+        const { data: locations, error: locError } = await supabase
+          .from('locations')
+          .select('id, name')
+          .in('id', locationIds);
+
+        if (locError) throw locError;
+
+        setPermittedLocations((locations || []).map((l: any) => ({ id: l.id, name: l.name })));
+      } catch (e) {
+        setPermittedLocations([]);
+      } finally {
+        setIsLoadingLocations(false);
+      }
+    };
+
+    fetchPermittedLocations();
+  }, [currentStep, user?.id]);
 
   const renderStepContent = () => {
     switch (currentStep) {
@@ -364,36 +420,41 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
                   </label>
                 </div>
               </div>
-              {/* Location Picker */}
+              {/* Location Picker (from location_owners -> locations) */}
               <div>
                 <label className="block text-sm font-medium mb-1">Select Allowed Locations</label>
-                {/* Replace this with your actual locations fetch from PetaLog locations table */}
-                <div className="flex flex-wrap gap-2">
-                  {mockLocations.map((loc) => (
-                    <label key={loc.id} className="flex items-center gap-2">
-                      <input
-                        type={formData.multiple_locations === 'yes' ? 'checkbox' : 'radio'}
-                        checked={formData.locations.includes(loc.id)}
-                        onChange={(e) => {
-                          if (formData.multiple_locations === 'yes') {
-                            setFormData((prev) => ({
-                              ...prev,
-                              locations: e.target.checked
-                                ? [...prev.locations, loc.id]
-                                : prev.locations.filter((id: string) => id !== loc.id)
-                            }));
-                          } else {
-                            setFormData((prev) => ({
-                              ...prev,
-                              locations: [loc.id]
-                            }));
-                          }
-                        }}
-                      />
-                      <span>{loc.name}</span>
-                    </label>
-                  ))}
-                </div>
+                {isLoadingLocations ? (
+                  <div className="text-sm text-muted-foreground">Loading locations…</div>
+                ) : permittedLocations.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No permitted locations found for this owner.</div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {permittedLocations.map((loc) => (
+                      <label key={loc.id} className="flex items-center gap-2">
+                        <input
+                          type={formData.multiple_locations === 'yes' ? 'checkbox' : 'radio'}
+                          checked={formData.locations.includes(loc.id)}
+                          onChange={(e) => {
+                            if (formData.multiple_locations === 'yes') {
+                              setFormData((prev) => ({
+                                ...prev,
+                                locations: e.target.checked
+                                  ? [...prev.locations, loc.id]
+                                  : prev.locations.filter((id: string) => id !== loc.id)
+                              }));
+                            } else {
+                              setFormData((prev) => ({
+                                ...prev,
+                                locations: [loc.id]
+                              }));
+                            }
+                          }}
+                        />
+                        <span>{loc.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="text-xs text-muted-foreground mt-2">
                 <strong>Disclaimer:</strong> If partnership branches exist, the scheme may not apply automatically unless partner agrees.
@@ -445,7 +506,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
                     }
                   />
               </div>
-              <div>
+              {/* <div>
                 <label className="block text-sm font-medium mb-1">Enable Reward Reminders?</label>
                 <div className="flex gap-4">
                   <label className="flex items-center gap-2">
@@ -479,7 +540,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
                     No
                   </label>
                 </div>
-              </div>
+              </div> */}
               <div className="text-xs text-muted-foreground mt-2">
                 <strong>Note:</strong> For package plans, rewards can be a free wash or similar service from your service table. For credit plans, rewards are typically bonus credits or discounts.
               </div>
@@ -580,10 +641,12 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
                     <div>
                       <strong>Allowed Locations:</strong>{" "}
                       {formData.locations.length > 0
-                        ? mockLocations
-                            .filter((loc) => formData.locations.includes(loc.id))
-                            .map((loc) => loc.name)
-                            .join(", ")
+                        ? (permittedLocations.length > 0
+                            ? permittedLocations
+                                .filter((loc) => formData.locations.includes(loc.id))
+                                .map((loc) => loc.name)
+                                .join(", ")
+                            : formData.locations.join(", "))
                         : <span className="text-muted-foreground">Not set</span>}
                     </div>
                   </div>
@@ -720,11 +783,25 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
         <Button
           variant="outline"
           onClick={handleNext}
+          disabled={isCreating || isCooldown}
         >
-          {currentStep === steps.length ? 'Create Scheme' : 'Next'}
+          {currentStep === steps.length ? (isCreating || isCooldown ? 'Creating…' : 'Create Scheme') : 'Next'}
           {currentStep < steps.length && <ArrowRight className="w-4 h-4 ml-2" />}
         </Button>
       </div>
+
+      {/* Success overlay */}
+      {showSuccess && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 animate-fade-in">
+          <div className="bg-white rounded-xl p-8 shadow-2xl text-center animate-scale-in">
+            <div className="mx-auto mb-4 w-16 h-16 rounded-full bg-green-100 border border-green-200 flex items-center justify-center">
+              <Check className="w-8 h-8 text-green-600 animate-fade-in" />
+            </div>
+            <div className="text-lg font-semibold text-foreground mb-1">Scheme Created</div>
+            <div className="text-sm text-muted-foreground">Redirecting to schemes…</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
