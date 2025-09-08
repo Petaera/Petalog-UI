@@ -199,7 +199,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
   const [selectedModel, setSelectedModel] = useState('');
   const [selectedModelId, setSelectedModelId] = useState('');
   const [availableVehicleBrands, setAvailableVehicleBrands] = useState<string[]>([]);
-  const [availableModels, setAvailableModels] = useState<{ name: string, id: string, brand: string }[]>([]);
+  const [availableModels, setAvailableModels] = useState<{ name: string, id: string, brand: string, type?: string }[]>([]);
   const [vehicleData, setVehicleData] = useState<any[]>([]);
 
 
