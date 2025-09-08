@@ -852,7 +852,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
         setIsLoadingVehicleData(true);
         const { data, error } = await supabase
           .from('logs-man')
-          .select('Name, Phone_no, Location, "D.O.B", vehicle_brand, vehicle_model, Brand_id, wheel_type, created_at')
+          .select('Name, Phone_no, Location, "D.O.B", vehicle_brand, vehicle_model, Brand_id, wheel_type, vehicle_type, created_at')
           .ilike('vehicle_number', `%${plate}%`)
           .order('created_at', { ascending: false })
           .limit(1);
@@ -915,6 +915,11 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
             setSelectedModelId(last.Brand_id || '');
           }
         }, 200);
+
+        // Vehicle type (from last visit)
+        if (last.vehicle_type) {
+          setVehicleType(last.vehicle_type);
+        }
 
         if (!last.wheel_type && (last.vehicle_brand || last.vehicle_model) && vehicleData.length > 0) {
           try {

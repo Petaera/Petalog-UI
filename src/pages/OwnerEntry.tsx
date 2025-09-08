@@ -886,7 +886,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         // Pull latest matching manual log (any location) for this plate
         const { data, error } = await supabase
           .from('logs-man')
-          .select('Name, Phone_no, Location, "D.O.B", vehicle_brand, vehicle_model, Brand_id, wheel_type, created_at')
+          .select('Name, Phone_no, Location, "D.O.B", vehicle_brand, vehicle_model, Brand_id, wheel_type, vehicle_type, created_at')
           .ilike('vehicle_number', `%${plate}%`)
           .order('created_at', { ascending: false })
           .limit(1);
@@ -937,6 +937,11 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
             setSelectedModelId(last.Brand_id || '');
           }
         }, 200);
+
+        // Vehicle type (from last visit)
+        if (last.vehicle_type) {
+          setVehicleType(last.vehicle_type);
+        }
 
         // If wheel category still empty, try to derive from Vehicles_in_india type by brand+model
         if (!last.wheel_type && (last.vehicle_brand || last.vehicle_model) && vehicleData.length > 0) {
