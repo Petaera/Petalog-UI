@@ -27,7 +27,7 @@ const managers = [
   { id: 3, name: "Amit Kumar", email: "amit@carwash.com", location: "West Side Center", status: "Inactive", lastLogin: "3 days ago" },
 ];
 
-export default function ManagerAccess() {
+export default function ManagerAccess({ selectedLocation }: { selectedLocation?: string }) {
   const { signup, user } = useAuth();
   const [showSignupDialog, setShowSignupDialog] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -57,12 +57,17 @@ export default function ManagerAccess() {
     lastName: '',
     email: '',
     phone: '',
-    assignedLocation: '',
+    assignedLocation: selectedLocation || '',
+    role: 'manager',
     password: '',
     confirmPassword: '',
   });
 
   useEffect(() => {
+    // If Layout provided a selectedLocation and form has none, adopt it
+    if (selectedLocation && !formData.assignedLocation) {
+      setFormData(prev => ({ ...prev, assignedLocation: selectedLocation }));
+    }
     const fetchLocations = async () => {
       try {
         let allLocations: { id: string; name: string }[] = [];
@@ -131,6 +136,11 @@ export default function ManagerAccess() {
         if (uniqueLocations.length > 0) {
           console.log('✅ Total unique locations found:', uniqueLocations.length);
           setLocations(uniqueLocations);
+          // Prefer currently selectedLocation from Layout if available
+          if (!formData.assignedLocation) {
+            const defaultLoc = (selectedLocation && uniqueLocations.find(l => l.id === selectedLocation)?.id) || uniqueLocations[0].id;
+            setFormData(prev => ({ ...prev, assignedLocation: defaultLoc }));
+          }
         } else {
           console.log('ℹ️ No locations found for current user');
           setLocations([]);
@@ -142,7 +152,7 @@ export default function ManagerAccess() {
     };
     
     fetchLocations();
-  }, [user]);
+  }, [user, selectedLocation]);
 
     // Fetch all payment details for owners when component loads
   useEffect(() => {
@@ -489,7 +499,7 @@ export default function ManagerAccess() {
       await signup(
         formData.email, 
         formData.password, 
-        'manager', 
+        formData.role, 
         formData.assignedLocation,
         {
           first_name: formData.firstName,
@@ -507,6 +517,7 @@ export default function ManagerAccess() {
         email: '',
         phone: '',
         assignedLocation: '',
+        role: 'manager',
         password: '',
         confirmPassword: '',
       });
@@ -551,7 +562,7 @@ export default function ManagerAccess() {
                 Add Manager
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Create Manager Account</DialogTitle>
                 <DialogDescription>
@@ -605,6 +616,22 @@ export default function ManagerAccess() {
                     placeholder="+1 (555) 123-4567"
                     required
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="role">Role</Label>
+                  <Select 
+                    value={formData.role}
+                    onValueChange={(value) => handleInputChange('role', value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="manager">Manager</SelectItem>
+                      <SelectItem value="worker">Worker</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="space-y-2">

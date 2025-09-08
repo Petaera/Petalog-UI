@@ -144,6 +144,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signup = async (email: string, password: string, role: string, location?: string, userData?: { first_name?: string; last_name?: string; phone?: string }, autoLogin: boolean = true) => {
     setLoading(true);
     try {
+      // Preserve current session so owner remains logged in when creating staff
+      const { data: pre } = await supabase.auth.getSession();
+      const prevAccessToken = pre.session?.access_token || null;
+      const prevRefreshToken = pre.session?.refresh_token || null;
 
       
       // Validate email format
@@ -178,8 +182,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         role,
       };
 
-      // Add assigned_location for managers
-      if (role === 'manager' && location) {
+      // Add assigned_location for managers and workers
+      if ((role === 'manager' || role === 'worker') && location) {
         userInsertData.assigned_location = location;
       }
 
@@ -208,6 +212,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         // Sign out the created user so they're not logged in
         await supabase.auth.signOut();
+        // Restore previous session (owner stays logged in)
+        if (prevAccessToken && prevRefreshToken) {
+          try {
+            await supabase.auth.setSession({ access_token: prevAccessToken, refresh_token: prevRefreshToken });
+          } catch {}
+        }
       }
     } catch (error) {
       if (autoLogin) {
