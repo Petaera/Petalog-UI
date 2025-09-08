@@ -1615,26 +1615,6 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
             </div>
 
 
-
-            {/* Category */}
-            <div className="space-y-2">
-              <Label htmlFor="wheelCategory">Category</Label>
-              <Select value={wheelCategory} onValueChange={setWheelCategory}>
-                <SelectTrigger id="wheelCategory">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="2">2 Wheeler</SelectItem>
-                  <SelectItem value="4">4 Wheeler</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-
-
-
-
             {/* Vehicle Brand and Model */}
             <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
               <Label className="text-base font-semibold">Vehicle Details</Label>
@@ -1684,6 +1664,21 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* Category */}
+            <div className="space-y-2">
+              <Label htmlFor="wheelCategory">Category</Label>
+              <Select value={wheelCategory} onValueChange={setWheelCategory}>
+                <SelectTrigger id="wheelCategory">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="2">2 Wheeler</SelectItem>
+                  <SelectItem value="4">4 Wheeler</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Service Selection */}
