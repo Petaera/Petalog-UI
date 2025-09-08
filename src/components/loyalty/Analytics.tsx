@@ -29,7 +29,7 @@ export function Analytics() {
             <Filter className="w-4 h-4 mr-2" />
             Filters
           </Button>
-          <Button className="bg-gradient-primary text-white">
+          <Button className="bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg">
             <Download className="w-4 h-4 mr-2" />
             Export
           </Button>

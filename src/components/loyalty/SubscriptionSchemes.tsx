@@ -83,7 +83,7 @@ export function SubscriptionSchemes() {
           <p className="text-muted-foreground">Manage your loyalty and subscription programs</p>
         </div>
         <Button
-          className="bg-gradient-primary text-white shadow-loyalty hover:shadow-accent transition-all duration-300"
+          className="bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg transition-all duration-300"
           onClick={() => navigate('/loyalty/create')}
         >
           Create New Scheme
@@ -203,7 +203,7 @@ export function SubscriptionSchemes() {
           <p className="text-muted-foreground mb-4">
             Create your first subscription scheme to get started.
           </p>
-          <Button className="bg-gradient-primary text-white" onClick={() => navigate('/loyalty/create')}>
+          <Button className="bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg" onClick={() => navigate('/loyalty/create')}>
             Create New Scheme
           </Button>
         </Card>

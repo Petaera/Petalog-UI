@@ -665,16 +665,18 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
               </span>
               <span className="text-sm text-muted-foreground">{Math.round(progress)}% complete</span>
             </div>
-            <Progress value={progress} className="h-2" />
+            <Progress value={progress} className="h-2 [&>div]:bg-green-500" />
           </div>
 
           {/* Step Indicators */}
           <div className="flex justify-between mb-8">
             {steps.map((step) => (
-              <div
+              <button
                 key={step.id}
-                className={`flex flex-col items-center ${step.id <= currentStep ? 'opacity-100' : 'opacity-40'
-                  }`}
+                type="button"
+                onClick={() => setCurrentStep(step.id)}
+                className={`flex flex-col items-center cursor-pointer focus:outline-none ${step.id <= currentStep ? 'opacity-100' : 'opacity-60'} hover:opacity-100`}
+                aria-label={`Go to step ${step.id}: ${step.title}`}
               >
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-2 ${step.id < currentStep
                     ? 'bg-success text-white'
@@ -692,7 +694,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
                   <div className="text-xs font-medium">{step.title}</div>
                   <div className="text-xs text-muted-foreground hidden sm:block">{step.description}</div>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </CardContent>
@@ -716,8 +718,8 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
           Back
         </Button>
         <Button
+          variant="outline"
           onClick={handleNext}
-          className="bg-gradient-primary text-white"
         >
           {currentStep === steps.length ? 'Create Scheme' : 'Next'}
           {currentStep < steps.length && <ArrowRight className="w-4 h-4 ml-2" />}

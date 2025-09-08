@@ -331,7 +331,7 @@ export function Customers() {
           <Button variant="outline">
             Export Data
           </Button>
-          <Button className="bg-gradient-primary text-white shadow-loyalty" onClick={handleAddCustomerClick}>
+          <Button className="bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg" onClick={handleAddCustomerClick}>
             <Plus className="w-4 h-4 mr-2" />
             Add Customer
           </Button>
@@ -464,7 +464,7 @@ export function Customers() {
               variant={filterStatus === status ? 'default' : 'outline'}
               size="sm"
               onClick={() => setFilterStatus(status)}
-              className={filterStatus === status ? 'bg-gradient-primary text-white' : ''}
+              className={filterStatus === status ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm hover:shadow-md' : 'hover:bg-primary/10'}
             >
               {status === 'all' ? 'All' : status}
             </Button>
@@ -575,7 +575,7 @@ export function Customers() {
               : 'Start by adding your first customer'
             }
           </p>
-          <Button className="bg-gradient-primary text-white">
+          <Button className="bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg">
             <Plus className="w-4 h-4 mr-2" />
             Add Customer
           </Button>
