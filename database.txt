@@ -267,18 +267,31 @@ CREATE TABLE public.credit_transactions (
   CONSTRAINT fk_credit_transactions_account FOREIGN KEY (credit_account_id) REFERENCES public.credit_accounts(id),
   CONSTRAINT fk_credit_transactions_payment FOREIGN KEY (related_payment_id) REFERENCES public.subscription_payments(id)
 );
-CREATE TABLE public.customers (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  phone text NOT NULL UNIQUE,
-  name text,
-  email text,
-  default_vehicle_id uuid,
-  linked_user_id uuid,
-  notes text,
-  created_at timestamp with time zone DEFAULT now(),
-  own_id uuid,
-  CONSTRAINT customers_pkey PRIMARY KEY (id)
-);
+  id uuid not null default gen_random_uuid (),
+  phone text not null,
+  name text null,
+  email text null,
+  default_vehicle_id uuid null,
+  linked_user_id uuid null,
+  notes text null,
+  created_at timestamp with time zone null default now(),
+  owner_id uuid null,
+  "Vehicles" text[] null,
+  "Location" text null,
+  date_of_birth date null,
+  constraint customers_pkey primary key (id),
+  constraint customers_phone_key unique (phone)
+) TABLESPACE pg_default;
+create table public.subscription_vehicles (
+  id uuid not null default extensions.uuid_generate_v4 (),
+  number_plate text not null,
+  type text null,
+  owner_id uuid null,
+  visit_count integer not null default 0,
+  "Model" text null,
+  "Brand" text null,
+  "Location_id" jsonb[] null
+) TABLESPACE pg_default;
 CREATE TABLE public.location_owners (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   location_id uuid NOT NULL,
@@ -538,16 +551,19 @@ CREATE TABLE public.users (
   CONSTRAINT users_pkey PRIMARY KEY (id),
   CONSTRAINT users_assigned_location_fkey FOREIGN KEY (assigned_location) REFERENCES public.locations(id)
 );
-CREATE TABLE public.vehicles (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  number_plate text NOT NULL UNIQUE,
-  type text,
-  own_id uuid,
-  created_at timestamp with time zone DEFAULT now(),
-  visit_count integer NOT NULL DEFAULT 0,
-  CONSTRAINT vehicles_pkey PRIMARY KEY (id),
-  CONSTRAINT vehicles_own_id_fkey FOREIGN KEY (own_id) REFERENCES public.users(id)
-);
+create table public.vehicles (
+  id uuid not null default extensions.uuid_generate_v4 (),
+  number_plate text not null,
+  type text null,
+  owner_id uuid null,
+  created_at timestamp with time zone null default now(),
+  visit_count integer not null default 0,
+  "Model" text null,
+  "Brand" text null,
+  constraint vehicles_pkey primary key (id),
+  constraint vehicles_number_plate_key unique (number_plate),
+  constraint vehicles_owner_id_fkey foreign KEY (owner_id) references users (id)
+) TABLESPACE pg_default;
 CREATE TABLE public.workshop_prices (
   id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
   WORKSHOP text,

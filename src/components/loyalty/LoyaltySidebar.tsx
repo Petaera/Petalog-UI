@@ -10,7 +10,8 @@ import {
   Crown,
   Sparkles,
   ArrowLeft,
-  Home
+  Home,
+  Menu
 } from 'lucide-react';
 
 const sidebarItems = [
@@ -54,68 +55,50 @@ const sidebarItems = [
 export function LoyaltySidebar({ activeSection }: { activeSection: string }) {
   const navigate = useNavigate(); // Initialize navigate
   const location = useLocation();
-  const [sidebarWidth, setSidebarWidth] = React.useState<number>(() => {
-    try {
-      const stored = typeof window !== 'undefined' ? window.localStorage.getItem('loyalty_sidebar_width') : null;
-      const parsed = stored ? parseInt(stored, 10) : NaN;
-      return Number.isFinite(parsed) ? Math.min(Math.max(parsed, 240), 480) : 320;
-    } catch {
-      return 320;
-    }
-  });
-  const isDraggingRef = React.useRef(false);
-
-  React.useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isDraggingRef.current) return;
-      const sidebarEl = document.getElementById('loyalty-sidebar');
-      if (!sidebarEl) return;
-      const rect = sidebarEl.getBoundingClientRect();
-      const newWidth = e.clientX - rect.left;
-      const clamped = Math.min(Math.max(newWidth, 240), 480);
-      setSidebarWidth(clamped);
-    };
-    const handleMouseUp = () => {
-      if (!isDraggingRef.current) return;
-      isDraggingRef.current = false;
-      try {
-        window.localStorage.setItem('loyalty_sidebar_width', String(sidebarWidth));
-      } catch {}
-      document.body.style.userSelect = '';
-      document.body.style.cursor = '';
-    };
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [sidebarWidth]);
-
-  const onDragStart = (e: React.MouseEvent) => {
-    e.preventDefault();
-    isDraggingRef.current = true;
-    document.body.style.userSelect = 'none';
-    document.body.style.cursor = 'col-resize';
-  };
+  const [collapsed, setCollapsed] = React.useState(false);
 
   const handleBackToMainApp = () => {
     navigate('/dashboard');
   };
 
   return (
-    <div id="loyalty-sidebar" className="relative bg-white border-r border-border flex flex-col" style={{ width: `${sidebarWidth}px` }}>
+    <div className={cn(
+      "bg-white border-r border-border flex flex-col transition-all duration-300",
+      collapsed ? "w-20" : "w-80 lg:w-80 md:w-72 sm:w-64"
+    )}>
       
       {/* Header */}
       <div className="p-6 border-b border-border">
         <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 bg-gradient-loyalty rounded-xl flex items-center justify-center">
-            <Crown className="w-5 h-5 text-blue-500" />
-          </div>
-          <div>
-            <h1 className="font-bold text-lg text-foreground">PetaLog Loyalty</h1>
-            <p className="text-sm text-muted-foreground">Subscription & Rewards</p>
-          </div>
+          {!collapsed && (
+            <div className="w-10 h-10 bg-gradient-loyalty rounded-xl flex items-center justify-center">
+              <Crown className="w-5 h-5 text-blue-500" />
+            </div>
+          )}
+          {!collapsed && (
+            <div className="flex-1 flex items-center justify-between">
+              <div>
+                <h1 className="font-bold text-lg text-foreground">PetaLog Loyalty</h1>
+                <p className="text-sm text-muted-foreground">Subscription & Rewards</p>
+              </div>
+              <button
+                onClick={() => setCollapsed((v) => !v)}
+                className="p-2 rounded-md hover:bg-muted transition-colors"
+                aria-label="Toggle sidebar"
+              >
+                <Menu className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </div>
+          )}
+          {collapsed && (
+            <button
+              onClick={() => setCollapsed((v) => !v)}
+              className="ml-auto p-2 rounded-md hover:bg-muted transition-colors"
+              aria-label="Expand sidebar"
+            >
+              <Menu className="w-4 h-4 text-muted-foreground" />
+            </button>
+          )}
         </div>
         {/* <div className="flex items-center gap-1 text-xs text-accent font-medium">
           <Sparkles className="w-3 h-3" />
@@ -125,14 +108,22 @@ export function LoyaltySidebar({ activeSection }: { activeSection: string }) {
         {/* Back to Main App Button */}
         <button
           onClick={handleBackToMainApp}
-          className="w-full mt-4 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors text-left group"
+          className={cn(
+            "w-full mt-4 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors text-left group",
+            collapsed && "flex items-center justify-center"
+          )}
         >
           <div className="flex items-center gap-3">
-            <ArrowLeft className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
-            <div>
-              <div className="text-sm font-medium text-foreground">Back to Main Dashboard</div>
-              <div className="text-xs text-muted-foreground">Return to dashboard</div>
-            </div>
+            <ArrowLeft className={cn(
+              "w-4 h-4 text-muted-foreground group-hover:text-foreground",
+              collapsed && "mr-0"
+            )} />
+            {!collapsed && (
+              <div>
+                <div className="text-sm font-medium text-foreground">Back to Main Dashboard</div>
+                <div className="text-xs text-muted-foreground">Return to dashboard</div>
+              </div>
+            )}
           </div>
         </button>
       </div>
@@ -155,19 +146,21 @@ export function LoyaltySidebar({ activeSection }: { activeSection: string }) {
                   : "text-foreground hover:text-primary"
               )}
             >
-              <div className="flex items-center gap-3 mb-1">
+              <div className={cn("flex items-center gap-3 mb-1", collapsed && "justify-center mb-0")}>
                 <Icon className={cn(
                   "w-5 h-5 transition-colors",
                   isActive ? "text-primary" : "text-muted-foreground group-hover:text-primary"
                 )} />
-                <span className="font-medium">{item.label}</span>
+                {!collapsed && <span className="font-medium">{item.label}</span>}
               </div>
-              <p className={cn(
-                "text-xs pl-8",
-                isActive ? "text-primary/80" : "text-muted-foreground"
-              )}>
-                {item.description}
-              </p>
+              {!collapsed && (
+                <p className={cn(
+                  "text-xs pl-8",
+                  isActive ? "text-primary/80" : "text-muted-foreground"
+                )}>
+                  {item.description}
+                </p>
+              )}
             </button>
           );
         })}
@@ -182,12 +175,6 @@ export function LoyaltySidebar({ activeSection }: { activeSection: string }) {
           <div className="text-sm font-bold text-primary">v1.0.0</div>
         </div>
       </div> */}
-      {/* Resize handle */}
-      <div
-        onMouseDown={onDragStart}
-        className="absolute top-0 right-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-primary/20 transition-colors"
-        aria-label="Resize sidebar"
-      />
     </div>
   );
 }
