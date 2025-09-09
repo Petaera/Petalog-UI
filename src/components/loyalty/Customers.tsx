@@ -67,10 +67,56 @@ export function Customers() {
   const [customerDetailsMap, setCustomerDetailsMap] = useState<Record<string, any>>({});
   const [planDetailsMap, setPlanDetailsMap] = useState<Record<string, any>>({});
   const [vehicleInfoMap, setVehicleInfoMap] = useState<Record<string, any>>({});
+  const [creditAccountMap, setCreditAccountMap] = useState<Record<string, { id: string; balance: number; total_deposited: number }>>({});
+  const [usageHistoryMap, setUsageHistoryMap] = useState<Record<string, Array<{ id: string; purchase_id: string; service_type: string | null; use_date: string | null; notes: string | null }>>>({});
+  const [loyaltyVisitsMap, setLoyaltyVisitsMap] = useState<Record<string, Array<{ id: string; visit_type: string; service_rendered: string | null; amount_charged: number; visit_time: string | null; payment_method: string | null }>>>({});
   const [showViewModal, setShowViewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedPurchase, setSelectedPurchase] = useState<any | null>(null);
   const [editCustomerDraft, setEditCustomerDraft] = useState<{ id?: string; name?: string; phone?: string; email?: string; date_of_birth?: string }>({});
+  const [showTopupModal, setShowTopupModal] = useState(false);
+  const [topupAmount, setTopupAmount] = useState<string>('');
+  const [topupMethod, setTopupMethod] = useState<string>('cash');
+  const [topupUpiId, setTopupUpiId] = useState<string>('');
+  const [topupUpiAccounts, setTopupUpiAccounts] = useState<Array<{ id: string; account_name: string; upi_id: string; qr_code_url: string }>>([]);
+  const [topupSelectedUpiAccountId, setTopupSelectedUpiAccountId] = useState<string>('');
+  const [topupShowQr, setTopupShowQr] = useState<boolean>(false);
+  const [showMarkVisit, setShowMarkVisit] = useState(false);
+  const [visitNotes, setVisitNotes] = useState('');
+  const [visitService, setVisitService] = useState('');
+  const [showMarkEntry, setShowMarkEntry] = useState(false);
+  const [entryAmount, setEntryAmount] = useState('');
+  const [entryService, setEntryService] = useState('');
+  const [entryNotes, setEntryNotes] = useState('');
+
+  // Utility function to check and update expiry status for a specific purchase
+  const checkAndUpdateExpiry = async (purchaseId: string, customerId: string, planType: string) => {
+    if (planType !== 'credit') return;
+    
+    // Get current credit balance
+    const { data: creditAccount } = await supabase
+      .from('credit_accounts')
+      .select('balance')
+      .eq('customer_id', customerId)
+      .maybeSingle();
+    
+    const creditBalance = Number(creditAccount?.balance || 0);
+    
+    // If credit balance is zero or less, expire the plan
+    if (creditBalance <= 0) {
+      const { error } = await supabase
+        .from('subscription_purchases')
+        .update({ status: 'expired' })
+        .eq('id', purchaseId);
+      
+      if (!error) {
+        // Update local state
+        setSubscriptionCustomers(prev => 
+          prev.map(p => p.id === purchaseId ? { ...p, status: 'expired' } : p)
+        );
+      }
+    }
+  };
 
   const fetchPurchases = async () => {
     const { data } = await supabase
@@ -78,6 +124,85 @@ export function Customers() {
       .select('*')
       .order('created_at', { ascending: false })
       .limit(30);
+    
+    // Check for expired purchases and update their status
+    if (data && data.length > 0) {
+      const now = new Date();
+      
+      // Get plan details to identify credit plans
+      const planIds = Array.from(new Set(data.map(p => p.plan_id).filter(Boolean)));
+      const { data: plans } = await supabase
+        .from('subscription_plans')
+        .select('id, type')
+        .in('id', planIds);
+      
+      const planTypeMap: Record<string, string> = {};
+      (plans || []).forEach(plan => {
+        planTypeMap[plan.id] = plan.type;
+      });
+      
+      // Get credit balances for credit plans
+      const creditCustomerIds = data
+        .filter(p => planTypeMap[p.plan_id] === 'credit')
+        .map(p => p.customer_id)
+        .filter(Boolean);
+      
+      let creditBalanceMap: Record<string, number> = {};
+      if (creditCustomerIds.length > 0) {
+        const { data: creditAccounts } = await supabase
+          .from('credit_accounts')
+          .select('customer_id, balance')
+          .in('customer_id', creditCustomerIds);
+        
+        (creditAccounts || []).forEach(account => {
+          creditBalanceMap[account.customer_id] = Number(account.balance || 0);
+        });
+      }
+      
+      const expiredPurchases = data.filter(purchase => {
+        if (purchase.status !== 'active') return false;
+        
+        // Date-based expiry
+        if (purchase.expiry_date && new Date(purchase.expiry_date) < now) {
+          return true;
+        }
+        
+        // Visit-based expiry (for visit/package plans)
+        if (purchase.remaining_visits !== null && purchase.remaining_visits <= 0) {
+          return true;
+        }
+        
+        // Credit-based expiry (for credit plans)
+        const planType = planTypeMap[purchase.plan_id];
+        if (planType === 'credit' && purchase.customer_id) {
+          const creditBalance = creditBalanceMap[purchase.customer_id] || 0;
+          if (creditBalance <= 0) {
+            return true;
+          }
+        }
+        
+        return false;
+      });
+      
+      // Update expired purchases in batch
+      if (expiredPurchases.length > 0) {
+        const expiredIds = expiredPurchases.map(p => p.id);
+        await supabase
+          .from('subscription_purchases')
+          .update({ status: 'expired' })
+          .in('id', expiredIds);
+        
+        // Update local state
+        const updatedData = data.map(purchase => 
+          expiredIds.includes(purchase.id) 
+            ? { ...purchase, status: 'expired' }
+            : purchase
+        );
+        setSubscriptionCustomers(updatedData);
+        return;
+      }
+    }
+    
     setSubscriptionCustomers(data || []);
   };
 
@@ -111,7 +236,7 @@ export function Customers() {
   // Fetch available subscription plans
   useEffect(() => {
     async function fetchPlans() {
-      const { data, error } = await supabase.from('subscription_plans').select('id, name, type, price, active, duration_days, max_redemptions');
+      const { data, error } = await supabase.from('subscription_plans').select('id, name, type, price, active, duration_days, max_redemptions, plan_amount');
       if (!error) setSchemes(data || []);
     }
     fetchPlans();
@@ -196,6 +321,61 @@ export function Customers() {
         const map: Record<string, any> = {};
         (plans || []).forEach(p => { map[p.id] = p; });
         setPlanDetailsMap(map);
+      }
+
+      // Fetch credit accounts for these customers
+      if (customerIds.length > 0) {
+        const { data: credits } = await supabase
+          .from('credit_accounts')
+          .select('id, customer_id, balance, total_deposited')
+          .in('customer_id', customerIds);
+        const cmap: Record<string, any> = {};
+        (credits || []).forEach((r: any) => { cmap[r.customer_id] = { id: r.id, balance: Number(r.balance || 0), total_deposited: Number(r.total_deposited || 0) }; });
+        setCreditAccountMap(cmap);
+      }
+
+      // Fetch visit/package usage histories for current purchases
+      if (planIds.length > 0 && subscriptionCustomers.length > 0) {
+        const purchaseIdsForVisit = subscriptionCustomers
+          .filter(p => {
+            const pl = planDetailsMap[p.plan_id];
+            const t = String(pl?.type || '').toLowerCase();
+            return t === 'visit' || t === 'package';
+          })
+          .map(p => p.id);
+        if (purchaseIdsForVisit.length > 0) {
+          const { data: usages } = await supabase
+            .from('package_usages')
+            .select('id, purchase_id, service_type, use_date, notes')
+            .in('purchase_id', purchaseIdsForVisit)
+            .order('use_date', { ascending: false });
+          const umap: Record<string, any[]> = {};
+          (usages || []).forEach(u => {
+            if (!umap[u.purchase_id]) umap[u.purchase_id] = [];
+            umap[u.purchase_id].push(u);
+          });
+          setUsageHistoryMap(umap);
+        } else {
+          setUsageHistoryMap({});
+        }
+      }
+
+      // Fetch loyalty visits for all purchases
+      if (subscriptionCustomers.length > 0) {
+        const allPurchaseIds = subscriptionCustomers.map(p => p.id);
+        const { data: loyaltyVisits } = await supabase
+          .from('loyalty_visits')
+          .select('id, purchase_id, visit_type, service_rendered, amount_charged, visit_time, payment_method')
+          .in('purchase_id', allPurchaseIds)
+          .order('visit_time', { ascending: false })
+          .limit(50); // Limit to recent visits
+        
+        const lvmap: Record<string, any[]> = {};
+        (loyaltyVisits || []).forEach(lv => {
+          if (!lvmap[lv.purchase_id]) lvmap[lv.purchase_id] = [];
+          lvmap[lv.purchase_id].push(lv);
+        });
+        setLoyaltyVisitsMap(lvmap);
       }
     }
     if (subscriptionCustomers.length > 0) {
@@ -461,9 +641,11 @@ export function Customers() {
       const startDate = now.toISOString();
       const expiryDate = selPlan?.duration_days ? new Date(now.getTime() + (Number(selPlan.duration_days) || 0) * 24 * 60 * 60 * 1000).toISOString() : null;
       const totalValue = Number(selPlan?.price || 0);
-      const isCredit = String(selPlan?.type || '').toLowerCase() === 'credit';
+      const _planTypeNorm = String(selPlan?.type || '').toLowerCase().trim();
+      const isCredit = _planTypeNorm === 'credit' || _planTypeNorm.startsWith('credit');
       const remainingValue = isCredit ? totalValue : null;
       const remainingVisits = !isCredit && selPlan?.max_redemptions != null ? Number(selPlan.max_redemptions) : null;
+      const actualAmountPaid = selPlan?.plan_amount != null ? Number(selPlan.plan_amount) : totalValue;
 
       // Build payment method string
       let purchasePaymentMethod: string | null = null;
@@ -484,7 +666,7 @@ export function Customers() {
         }
       }
 
-      const { error: purchaseError } = await supabase
+      const { error: purchaseError, data: purchaseInsertOut } = await supabase
         .from('subscription_purchases')
         .insert([
           {
@@ -497,14 +679,136 @@ export function Customers() {
             start_date: startDate,
             expiry_date: expiryDate,
             total_value: totalValue,
+            amount: actualAmountPaid,
             remaining_value: remainingValue,
             remaining_visits: remainingVisits,
             source_payment_method: purchasePaymentMethod,
           }
-        ]);
+        ])
+        .select('id')
+        .limit(1);
+ 
+       if (purchaseError) {
+         throw new Error('Error creating subscription purchase');
+       }
 
-      if (purchaseError) {
-        throw new Error('Error creating subscription purchase');
+      // Create subscription_payments ledger for this purchase
+      if (customerId) {
+        const purchaseIdOut = (purchaseInsertOut && purchaseInsertOut[0]?.id) || null;
+        const normalizedMethod = (() => {
+          const m = String(purchasePaymentMethod || '').toLowerCase();
+          if (m.startsWith('upi')) return 'upi';
+          if (m === 'cash') return 'cash';
+          if (m === 'card') return 'card';
+          if (m === 'paylater' || m === 'credit') return 'credit';
+          if (m === 'mixed') return 'mixed';
+          return m || 'cash';
+        })();
+        const paymentMeta = (() => {
+          if (normalizedMethod !== 'upi') return null as any;
+          const sel = upiAccounts.find(a => a.id === selectedUpiAccountId);
+          return sel ? { upi_account_id: sel.id, upi_id: sel.upi_id, account_name: sel.account_name } : null;
+        })();
+        const { data: payIns, error: payErr } = await supabase
+          .from('subscription_payments')
+          .insert([
+            {
+              purchase_id: purchaseIdOut,
+              customer_id: customerId,
+              amount: Number(totalValue || 0),
+              payment_method: normalizedMethod,
+              payment_meta: paymentMeta,
+              created_by: user?.id || null,
+            }
+          ])
+          .select('id')
+          .limit(1);
+        if (payErr) {
+          console.error('[payment] insert error', payErr);
+        } else if (isCredit) {
+          // For credit plans, record a credit_transactions topup referencing this payment
+          const relatedPaymentId = payIns && payIns[0]?.id;
+          // Ensure credit account exists/updated first (handled below), then log transaction
+          const { data: creditAcc } = await supabase
+            .from('credit_accounts')
+            .select('id')
+            .eq('customer_id', customerId)
+            .maybeSingle();
+          if (creditAcc?.id) {
+            const { error: txErr } = await supabase
+              .from('credit_transactions')
+              .insert([
+                {
+                  credit_account_id: creditAcc.id,
+                  transaction_type: 'topup',
+                  amount: Number(totalValue || 0),
+                  related_payment_id: relatedPaymentId || null,
+                  created_by: user?.id || null,
+                }
+              ]);
+            if (txErr) console.error('[credit_tx] insert error', txErr);
+          }
+        }
+      }
+
+      // 5) If selected plan is credit, insert into credit_accounts (simple insert)
+      if (customerId) {
+        // Re-check plan type directly from DB using plan_id
+        const currentPlanId = selectedPlanId || selectedScheme;
+        if (currentPlanId) {
+          const { data: planRow, error: planErr } = await supabase
+            .from('subscription_plans')
+            .select('id, type, price')
+            .eq('id', currentPlanId)
+            .maybeSingle();
+          if (planErr) {
+            console.error('[credit] plan fetch error', planErr);
+          }
+          const typeNorm = String(planRow?.type || '').toLowerCase().trim();
+          if (typeNorm === 'credit') {
+            const amount = Number(selPlan?.price || planRow?.price || 0) || 0;
+            const nowIso = new Date().toISOString();
+            const insertPayload = {
+              customer_id: customerId,
+              total_deposited: amount,
+              balance: amount,
+              currency: 'INR',
+              last_topup_at: nowIso,
+            } as any;
+            const { error: insErr } = await supabase
+              .from('credit_accounts')
+              .insert([insertPayload]);
+            if (insErr) {
+              console.warn('[credit] insert error', insErr);
+              // If duplicate (already exists), increment totals
+              const duplicate = String(insErr?.message || '').toLowerCase().includes('duplicate') || insErr?.code === '23505';
+              if (duplicate) {
+                const { data: existing, error: selErr } = await supabase
+                  .from('credit_accounts')
+                  .select('id, total_deposited, balance')
+                  .eq('customer_id', customerId)
+                  .maybeSingle();
+                if (!selErr && existing) {
+                  const newTotalDeposited = Number(existing.total_deposited || 0) + amount;
+                  const newBalance = Number(existing.balance || 0) + amount;
+                  const { error: updErr } = await supabase
+                    .from('credit_accounts')
+                    .update({ total_deposited: newTotalDeposited, balance: newBalance, currency: 'INR', last_topup_at: nowIso })
+                    .eq('id', existing.id);
+                  if (updErr) {
+                    console.error('[credit] update after duplicate failed', updErr);
+                    alert('Failed to update existing credit balance');
+                  }
+                } else if (selErr) {
+                  console.error('[credit] select after duplicate failed', selErr);
+                  alert('Failed to update credit account');
+                }
+              } else {
+                alert('Failed to create credit account. Check permissions/policies.');
+              }
+            }
+          }
+        }
       }
 
       // Success overlay
@@ -521,6 +825,24 @@ export function Customers() {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    const loadTopupUpi = async () => {
+      if (topupMethod !== 'upi' || !selectedPurchase?.location_id) {
+        setTopupUpiAccounts([]);
+        setTopupSelectedUpiAccountId('');
+        return;
+      }
+      const { data } = await supabase
+        .from('upi_accounts_with_locations')
+        .select('id, account_name, upi_id, qr_code_url')
+        .eq('location_id', selectedPurchase.location_id)
+        .eq('is_active', true);
+      setTopupUpiAccounts(data || []);
+      if ((data || []).length === 1) setTopupSelectedUpiAccountId((data as any)[0].id);
+    };
+    loadTopupUpi();
+  }, [topupMethod, selectedPurchase?.location_id]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -762,7 +1084,7 @@ export function Customers() {
           { label: 'Total Customers', value: filteredCustomers.length, color: 'primary' },
           { label: 'Active', value: subscriptionCustomers.filter(c => String(c.status || '').toLowerCase() === 'active').length, color: 'success' },
           { label: 'Expiring Soon', value: subscriptionCustomers.filter(c => { const s = String(c.status || '').toLowerCase(); return s === 'expiring soon' || s === 'expiringsoon'; }).length, color: 'warning' },
-          { label: 'This Month', value: 12, color: 'accent' }
+          { label: 'Expired', value: subscriptionCustomers.filter(c => String(c.status || '').toLowerCase() === 'expired').length, color: 'destructive' }
         ].map((stat, index) => (
           <Card key={stat.label} className="animate-slide-up" style={{ animationDelay: `${index * 100}ms` }}>
             <CardContent className="p-4 text-center">
@@ -833,7 +1155,94 @@ export function Customers() {
                   {customer.remaining_visits !== null && (
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Visits Left:</span>
-                      <span className="text-success font-medium">{customer.remaining_visits}</span>
+                      <span className={`${Number(customer.remaining_visits) === 0 ? 'text-red-600' : 'text-success'} font-medium`}>{customer.remaining_visits}</span>
+                    </div>
+                  )}
+                  {String(plan.type || '').toLowerCase() === 'credit' && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Credit Balance:</span>
+                      <span className={`${Number(creditAccountMap[customer.customer_id]?.balance ?? 0) === 0 ? 'text-red-600' : 'text-success'} font-medium`}>₹{(creditAccountMap[customer.customer_id]?.balance ?? 0).toLocaleString()}</span>
+                    </div>
+                  )}
+                  {(String(plan.type || '').toLowerCase() === 'package' || String(plan.type || '').toLowerCase() === 'visit') && (
+                    <div className="mt-2">
+                      <div className="text-xs font-medium text-foreground mb-1">Visit History</div>
+                      <div className="space-y-1 max-h-28 overflow-auto">
+                        {(usageHistoryMap[customer.id] || []).slice(0, 5).map(u => (
+                          <div key={u.id} className="text-xs text-muted-foreground flex justify-between">
+                            <span>{u.service_type || 'full wash'}</span>
+                            <span>{u.use_date ? new Date(u.use_date).toLocaleDateString() : ''}</span>
+                          </div>
+                        ))}
+                        {!(usageHistoryMap[customer.id] || []).length && (
+                          <div className="text-xs text-muted-foreground">No visits yet</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Recent Loyalty Visits */}
+                  <div className="mt-2">
+                    <div className="text-xs font-medium text-foreground mb-1">Recent Activity</div>
+                    <div className="space-y-1 max-h-28 overflow-auto">
+                      {(loyaltyVisitsMap[customer.id] || []).slice(0, 3).map(lv => (
+                        <div key={lv.id} className="text-xs text-muted-foreground flex justify-between items-center">
+                          <div className="flex items-center gap-1">
+                            <span className={`px-1 py-0.5 rounded text-xs ${
+                              lv.visit_type === 'redemption' ? 'bg-blue-100 text-blue-700' :
+                              lv.visit_type === 'payment' ? 'bg-green-100 text-green-700' :
+                              'bg-gray-100 text-gray-700'
+                            }`}>
+                              {lv.visit_type}
+                            </span>
+                            <span>{lv.service_rendered || 'Service'}</span>
+                          </div>
+                          <div className="text-right">
+                            {lv.amount_charged > 0 && <span>₹{lv.amount_charged}</span>}
+                            <div className="text-xs text-muted-foreground">
+                              {lv.visit_time ? new Date(lv.visit_time).toLocaleDateString() : ''}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      {!(loyaltyVisitsMap[customer.id] || []).length && (
+                        <div className="text-xs text-muted-foreground">No recent activity</div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Show Remove from Plan button for expired customers below the details */}
+                  {(customer.status === 'expired' || 
+                    (customer.expiry_date && new Date(customer.expiry_date) < new Date()) ||
+                    (customer.remaining_visits !== null && customer.remaining_visits <= 0) ||
+                    (String(plan.type || '').toLowerCase() === 'credit' && Number(creditAccountMap[customer.customer_id]?.balance ?? 0) <= 0)) && (
+                    <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <div className="text-sm text-red-700 font-medium mb-2">
+                        {customer.status === 'expired' ? 'This plan has expired' :
+                         customer.expiry_date && new Date(customer.expiry_date) < new Date() ? 'This plan has expired (date)' :
+                         customer.remaining_visits !== null && customer.remaining_visits <= 0 ? 'This plan has expired (no visits left)' :
+                         String(plan.type || '').toLowerCase() === 'credit' && Number(creditAccountMap[customer.customer_id]?.balance ?? 0) <= 0 ? 'This plan has expired (no credit left)' :
+                         'This plan has expired'}
+                      </div>
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="text-red-600 border-red-300 hover:bg-red-50" 
+                        onClick={async () => {
+                          if (!confirm('Remove this customer from the plan? This will delete the subscription record but keep the customer and vehicle data.')) return;
+                          const { error: delErr } = await supabase
+                            .from('subscription_purchases')
+                            .delete()
+                            .eq('id', customer.id);
+                          if (delErr) { 
+                            alert('Failed to remove from plan'); 
+                            return; 
+                          }
+                          setSubscriptionCustomers(prev => prev.filter(p => p.id !== customer.id));
+                        }}
+                      >
+                        Remove from Plan
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -863,6 +1272,34 @@ export function Customers() {
                   }}>
                     Edit
                   </Button>
+                  {String(plan.type || '').toLowerCase() === 'credit' && (
+                    <Button size="sm" variant="outline" onClick={() => { setSelectedPurchase(customer); setTopupAmount(''); setTopupMethod('cash'); setTopupUpiId(''); setShowTopupModal(true); }}>
+                      Top-up
+                    </Button>
+                  )}
+                  {(String(plan.type || '').toLowerCase() === 'package' || String(plan.type || '').toLowerCase() === 'visit') && (
+                    <Button size="sm" variant="outline" onClick={() => { setSelectedPurchase(customer); setShowMarkVisit(true); setVisitNotes(''); setVisitService('full wash'); }}>
+                      Mark Visit
+                    </Button>
+                  )}
+                  {String(plan.type || '').toLowerCase() === 'credit' && (
+                    <Button size="sm" variant="outline" onClick={() => { setSelectedPurchase(customer); setShowMarkEntry(true); setEntryAmount(''); setEntryService('full wash'); setEntryNotes(''); }}>
+                      Mark Entry
+                    </Button>
+                  )}
+                  {customer.expiry_date && new Date(customer.expiry_date) < new Date() && (
+                    <Button size="sm" variant="outline" className="text-red-600 border-red-300" onClick={async () => {
+                      if (!confirm('Remove this customer from the plan?')) return;
+                      const { error: delErr } = await supabase
+                        .from('subscription_purchases')
+                        .delete()
+                        .eq('id', customer.id);
+                      if (delErr) { alert('Failed to remove from plan'); return; }
+                      setSubscriptionCustomers(prev => prev.filter(p => p.id !== customer.id));
+                    }}>
+                      Remove from Plan
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -1006,6 +1443,372 @@ export function Customers() {
                   }
                   setShowEditModal(false);
                 }}>Save</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Top-up Modal */}
+      {showTopupModal && selectedPurchase && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 transition-all duration-300 animate-fade-in" onClick={() => setShowTopupModal(false)}>
+          <Card className="w-full max-w-md p-0 overflow-hidden shadow-2xl animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <h2 className="text-xl font-bold">Top-up Credit</h2>
+              <Button variant="ghost" onClick={() => setShowTopupModal(false)}>Cancel</Button>
+            </div>
+            <CardContent className="p-6 space-y-4">
+              <div>
+                <label className="block mb-1 font-medium">Amount (INR)</label>
+                <Input type="number" min="1" value={topupAmount} onChange={(e) => setTopupAmount(e.target.value)} placeholder="Enter amount" />
+              </div>
+              <div>
+                <label className="block mb-1 font-medium">Payment Method</label>
+                <select className="w-full border rounded px-2 py-1" value={topupMethod} onChange={(e) => setTopupMethod(e.target.value)}>
+                  <option value="cash">Cash</option>
+                  <option value="card">Card</option>
+                  <option value="upi">UPI</option>
+                  <option value="credit">Credit</option>
+                  <option value="mixed">Mixed</option>
+                </select>
+              </div>
+              {topupMethod === 'upi' && (
+                <div className="space-y-2">
+                  <div>
+                    <label className="block mb-1 font-medium">UPI Account</label>
+                    <select className="w-full border rounded px-2 py-1" value={topupSelectedUpiAccountId} onChange={(e) => setTopupSelectedUpiAccountId(e.target.value)}>
+                      <option value="">Select UPI account</option>
+                      {topupUpiAccounts.map(a => (
+                        <option key={a.id} value={a.id}>{a.account_name} ({a.upi_id})</option>
+                      ))}
+                    </select>
+                  </div>
+                  {topupSelectedUpiAccountId && (
+                    <button type="button" className="text-blue-600 underline" onClick={() => setTopupShowQr(true)}>
+                      View QR code
+                    </button>
+                  )}
+                </div>
+              )}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setShowTopupModal(false)}>Close</Button>
+                <Button onClick={async () => {
+                  const amount = Number(topupAmount || '0');
+                  if (!amount || amount <= 0) { alert('Enter valid amount'); return; }
+                  try {
+                    // Create payment row
+                    const paymentMeta = (() => {
+                      if (topupMethod !== 'upi') return null;
+                      const sel = topupUpiAccounts.find(a => a.id === topupSelectedUpiAccountId);
+                      return sel ? { upi_account_id: sel.id, upi_id: sel.upi_id, account_name: sel.account_name } : null;
+                    })();
+                    const { data: payIns, error: payErr } = await supabase
+                      .from('subscription_payments')
+                      .insert([
+                        {
+                          purchase_id: selectedPurchase.id,
+                          customer_id: selectedPurchase.customer_id,
+                          amount,
+                          payment_method: topupMethod,
+                          payment_meta: paymentMeta,
+                          created_by: user?.id || null,
+                        }
+                      ])
+                      .select('id')
+                      .limit(1);
+                    if (payErr) { alert('Payment insert failed'); return; }
+                    const relatedPaymentId = payIns && payIns[0]?.id;
+                    // Ensure/create credit account
+                    const { data: creditAcc } = await supabase
+                      .from('credit_accounts')
+                      .select('id, total_deposited, balance')
+                      .eq('customer_id', selectedPurchase.customer_id)
+                      .maybeSingle();
+                    if (creditAcc?.id) {
+                      const { error: updErr } = await supabase
+                        .from('credit_accounts')
+                        .update({ total_deposited: Number(creditAcc.total_deposited || 0) + amount, balance: Number(creditAcc.balance || 0) + amount, last_topup_at: new Date().toISOString(), currency: 'INR' })
+                        .eq('id', creditAcc.id);
+                      if (updErr) { alert('Credit account update failed'); return; }
+                    } else {
+                      const { error: insErr } = await supabase
+                        .from('credit_accounts')
+                        .insert([{ customer_id: selectedPurchase.customer_id, total_deposited: amount, balance: amount, currency: 'INR', last_topup_at: new Date().toISOString() }]);
+                      if (insErr) { alert('Credit account create failed'); return; }
+                    }
+                    // Insert credit transaction
+                    const { data: creditAcc2 } = await supabase
+                      .from('credit_accounts')
+                      .select('id')
+                      .eq('customer_id', selectedPurchase.customer_id)
+                      .maybeSingle();
+                    if (creditAcc2?.id) {
+                      const { error: txErr } = await supabase
+                        .from('credit_transactions')
+                        .insert([{ credit_account_id: creditAcc2.id, transaction_type: 'topup', amount, related_payment_id: relatedPaymentId || null, created_by: user?.id || null }]);
+                      if (txErr) { alert('Credit transaction insert failed'); return; }
+                    }
+                    // Refresh credit account map for this customer
+                    const { data: refreshed } = await supabase
+                      .from('credit_accounts')
+                      .select('id, customer_id, balance, total_deposited')
+                      .eq('customer_id', selectedPurchase.customer_id)
+                      .maybeSingle();
+                    if (refreshed) {
+                      setCreditAccountMap(prev => ({ ...prev, [selectedPurchase.customer_id]: { id: refreshed.id, balance: Number(refreshed.balance || 0), total_deposited: Number(refreshed.total_deposited || 0) } }));
+                    }
+                    setShowTopupModal(false);
+                    alert('Top-up successful');
+                  } catch (e) {
+                    alert('Top-up failed');
+                  }
+                }}>Top-up</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Top-up UPI QR */}
+      {topupShowQr && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setTopupShowQr(false)}>
+          <div className="bg-white p-4 rounded shadow-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-2">
+              <div className="font-semibold">UPI QR</div>
+              <button className="text-sm text-muted-foreground" onClick={() => setTopupShowQr(false)}>Close</button>
+            </div>
+            {(() => {
+              const sel = topupUpiAccounts.find(a => a.id === topupSelectedUpiAccountId);
+              if (!sel?.qr_code_url) return <div className="text-sm text-muted-foreground">No QR available</div>;
+              return <img src={sel.qr_code_url} alt="UPI QR" className="w-full h-auto" />;
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* Mark Visit Modal */}
+      {showMarkVisit && selectedPurchase && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 transition-all duration-300 animate-fade-in" onClick={() => setShowMarkVisit(false)}>
+          <Card className="w-full max-w-md p-0 overflow-hidden shadow-2xl animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <h2 className="text-xl font-bold">Mark Visit</h2>
+              <Button variant="ghost" onClick={() => setShowMarkVisit(false)}>Cancel</Button>
+            </div>
+            <CardContent className="p-6 space-y-4">
+              <div>
+                <label className="block mb-1 font-medium">Service Type</label>
+                <Input value={visitService} onChange={(e) => setVisitService(e.target.value)} placeholder="e.g., Premium Wash" />
+              </div>
+              <div>
+                <label className="block mb-1 font-medium">Notes</label>
+                <Input value={visitNotes} onChange={(e) => setVisitNotes(e.target.value)} placeholder="Optional notes" />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setShowMarkVisit(false)}>Close</Button>
+                <Button onClick={async () => {
+                  try {
+                    const payload: any = {
+                      purchase_id: selectedPurchase.id,
+                      service_type: visitService || null,
+                      service_value: null,
+                      created_by: user?.id || null,
+                      notes: visitNotes || null,
+                    };
+                    const { error: insErr } = await supabase
+                      .from('package_usages')
+                      .insert([payload]);
+                    if (insErr) { alert('Failed to mark visit'); return; }
+                    
+                    // Also insert into loyalty_visits for audit log
+                    const loyaltyVisitPayload = {
+                      purchase_id: selectedPurchase.id,
+                      vehicle_id: selectedPurchase.vehicle_id,
+                      customer_id: selectedPurchase.customer_id,
+                      location_id: selectedPurchase.location_id,
+                      visit_type: 'redemption',
+                      service_rendered: visitService || 'full wash',
+                      amount_charged: 0, // Visit-based plans don't charge per visit
+                      payment_method: 'subscription',
+                      created_by: user?.id || null,
+                    };
+                    const { error: loyaltyErr } = await supabase
+                      .from('loyalty_visits')
+                      .insert([loyaltyVisitPayload]);
+                    if (loyaltyErr) { console.warn('Failed to log loyalty visit:', loyaltyErr); }
+                    // Decrement remaining_visits on the purchase
+                    const current = subscriptionCustomers.find(p => p.id === selectedPurchase.id);
+                    const newRemaining = Math.max(0, Number(current?.remaining_visits ?? 0) - 1);
+                    
+                    // Check if plan should be expired after this visit
+                    const shouldExpire = newRemaining <= 0;
+                    const updateData: any = { remaining_visits: newRemaining };
+                    if (shouldExpire) {
+                      updateData.status = 'expired';
+                    }
+                    
+                    const { error: updErr } = await supabase
+                      .from('subscription_purchases')
+                      .update(updateData)
+                      .eq('id', selectedPurchase.id);
+                    if (updErr) { console.warn('remaining_visits update failed', updErr); }
+                    
+                    // Update local state: usage history and remaining_visits
+                    setUsageHistoryMap(prev => ({
+                      ...prev,
+                      [selectedPurchase.id]: [
+                        { id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), purchase_id: selectedPurchase.id, service_type: visitService || 'full wash', use_date: new Date().toISOString(), notes: visitNotes || null },
+                        ...((prev[selectedPurchase.id] || []))
+                      ]
+                    }));
+                    
+                    // Update loyalty visits map
+                    setLoyaltyVisitsMap(prev => ({
+                      ...prev,
+                      [selectedPurchase.id]: [
+                        { id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), purchase_id: selectedPurchase.id, visit_type: 'redemption', service_rendered: visitService || 'full wash', amount_charged: 0, visit_time: new Date().toISOString(), payment_method: 'subscription' },
+                        ...((prev[selectedPurchase.id] || []))
+                      ]
+                    }));
+                    
+                    setSubscriptionCustomers(prev => prev.map(p => p.id === selectedPurchase.id ? { ...p, remaining_visits: newRemaining, status: shouldExpire ? 'expired' : p.status } : p));
+                    setShowMarkVisit(false);
+                  } catch (e) {
+                    alert('Error while marking visit');
+                  }
+                }}>Mark</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Mark Entry Modal for Credit Plans */}
+      {showMarkEntry && selectedPurchase && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 transition-all duration-300 animate-fade-in" onClick={() => setShowMarkEntry(false)}>
+          <Card className="w-full max-w-md p-0 overflow-hidden shadow-2xl animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <h2 className="text-xl font-bold">Mark Entry (Credit)</h2>
+              <Button variant="ghost" onClick={() => setShowMarkEntry(false)}>Cancel</Button>
+            </div>
+            <CardContent className="p-6 space-y-4">
+              <div>
+                <label className="block mb-1 font-medium">Service Type</label>
+                <Input value={entryService} onChange={(e) => setEntryService(e.target.value)} placeholder="e.g., Premium Wash" />
+              </div>
+              <div>
+                <label className="block mb-1 font-medium">Amount to Deduct (₹)</label>
+                <Input 
+                  type="number" 
+                  min="0" 
+                  step="0.01"
+                  value={entryAmount} 
+                  onChange={(e) => setEntryAmount(e.target.value)} 
+                  placeholder="Enter amount to deduct from credit" 
+                />
+              </div>
+              <div>
+                <label className="block mb-1 font-medium">Notes</label>
+                <Input value={entryNotes} onChange={(e) => setEntryNotes(e.target.value)} placeholder="Optional notes" />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setShowMarkEntry(false)}>Close</Button>
+                <Button onClick={async () => {
+                  const amount = Number(entryAmount || '0');
+                  if (!amount || amount <= 0) { alert('Enter valid amount'); return; }
+                  
+                  try {
+                    // Check if customer has enough credit
+                    const { data: creditAccount } = await supabase
+                      .from('credit_accounts')
+                      .select('id, balance, total_deposited')
+                      .eq('customer_id', selectedPurchase.customer_id)
+                      .maybeSingle();
+                    
+                    if (!creditAccount) { alert('Credit account not found'); return; }
+                    
+                    const currentBalance = Number(creditAccount.balance || 0);
+                    if (currentBalance < amount) { 
+                      alert(`Insufficient credit. Available: ₹${currentBalance.toLocaleString()}`); 
+                      return; 
+                    }
+                    
+                    // Deduct from credit account
+                    const newBalance = currentBalance - amount;
+                    const { error: creditErr } = await supabase
+                      .from('credit_accounts')
+                      .update({ balance: newBalance })
+                      .eq('id', creditAccount.id);
+                    
+                    if (creditErr) { alert('Failed to deduct credit'); return; }
+                    
+                    // Insert credit transaction
+                    const { error: txErr } = await supabase
+                      .from('credit_transactions')
+                      .insert([{
+                        credit_account_id: creditAccount.id,
+                        transaction_type: 'deduction',
+                        amount: amount,
+                        created_by: user?.id || null,
+                      }]);
+                    
+                    if (txErr) { console.warn('Failed to log credit transaction:', txErr); }
+                    
+                    // Insert into loyalty_visits for audit log
+                    const loyaltyVisitPayload = {
+                      purchase_id: selectedPurchase.id,
+                      vehicle_id: selectedPurchase.vehicle_id,
+                      customer_id: selectedPurchase.customer_id,
+                      location_id: selectedPurchase.location_id,
+                      visit_type: 'payment',
+                      service_rendered: entryService || 'full wash',
+                      amount_charged: amount,
+                      payment_method: 'credit',
+                      created_by: user?.id || null,
+                    };
+                    const { error: loyaltyErr } = await supabase
+                      .from('loyalty_visits')
+                      .insert([loyaltyVisitPayload]);
+                    
+                    if (loyaltyErr) { console.warn('Failed to log loyalty visit:', loyaltyErr); }
+                    
+                    // Update local credit balance
+                    setCreditAccountMap(prev => ({
+                      ...prev,
+                      [selectedPurchase.customer_id]: {
+                        ...prev[selectedPurchase.customer_id],
+                        balance: newBalance
+                      }
+                    }));
+                    
+                    // Update loyalty visits map
+                    setLoyaltyVisitsMap(prev => ({
+                      ...prev,
+                      [selectedPurchase.id]: [
+                        { id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), purchase_id: selectedPurchase.id, visit_type: 'payment', service_rendered: entryService || 'full wash', amount_charged: amount, visit_time: new Date().toISOString(), payment_method: 'credit' },
+                        ...((prev[selectedPurchase.id] || []))
+                      ]
+                    }));
+                    
+                    // Check if plan should be expired after this deduction
+                    if (newBalance <= 0) {
+                      const { error: expireErr } = await supabase
+                        .from('subscription_purchases')
+                        .update({ status: 'expired' })
+                        .eq('id', selectedPurchase.id);
+                      
+                      if (!expireErr) {
+                        setSubscriptionCustomers(prev => 
+                          prev.map(p => p.id === selectedPurchase.id ? { ...p, status: 'expired' } : p)
+                        );
+                      }
+                    }
+                    
+                    setShowMarkEntry(false);
+                    alert('Entry marked successfully');
+                  } catch (e) {
+                    alert('Error while marking entry');
+                  }
+                }}>Mark Entry</Button>
               </div>
             </CardContent>
           </Card>
