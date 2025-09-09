@@ -66,7 +66,7 @@ export function SubscriptionSchemes() {
 
   const filteredSchemes = schemes.filter((scheme) => {
     const matchesSearch = scheme.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          scheme.short_description.toLowerCase().includes(searchTerm.toLowerCase());
+                          (scheme.short_description || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesFilter =
       filterType === 'all' ||
       (filterType === 'subscription' && (scheme.type === 'subscription' || scheme.type === 'package')) || // Include 'package' as 'subscription'
@@ -179,7 +179,7 @@ export function SubscriptionSchemes() {
                     <Edit className="w-4 h-4 mr-2" />
                     Edit
                   </Button>
-                  <Button size="sm" variant="outline" className="flex-1">
+                  <Button size="sm" variant="outline" className="flex-1" onClick={() => navigate(`/loyalty/analytics?plan=${scheme.id}`)}>
                     <BarChart3 className="w-4 h-4 mr-2" />
                     Analytics
                   </Button>

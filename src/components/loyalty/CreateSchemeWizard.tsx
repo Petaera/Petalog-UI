@@ -6,7 +6,7 @@ import { ArrowLeft, ArrowRight, Check, Currency } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { Input } from '@/components/ui/input';
 import { Select, SelectTrigger, SelectContent, SelectItem } from '@/components/ui/select';
-import { useNavigate } from 'react-router-dom'; // Import useNavigate for navigation
+import { useNavigate, useParams } from 'react-router-dom'; // Import useNavigate for navigation and useParams for edit mode
 import { useAuth } from '@/contexts/AuthContext';
 
 interface CreateSchemeWizardProps {
@@ -27,6 +27,9 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
+  const params = useParams();
+  const planId = params.id as string | undefined;
+  const isEditMode = Boolean(planId);
   const [currentStep, setCurrentStep] = useState(1);
   const [permittedLocations, setPermittedLocations] = useState<Array<{ id: string; name: string }>>([]);
   const [isLoadingLocations, setIsLoadingLocations] = useState(false);
@@ -50,9 +53,43 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
     multiple_locations: 'no',
     max_redemptions: '',
     enable_reminders: 'no',
-  });
+  } as any);
 
   const progress = (currentStep / steps.length) * 100;
+
+  // Load existing plan in edit mode
+  React.useEffect(() => {
+    const loadPlan = async () => {
+      if (!isEditMode || !planId) return;
+      const { data: plan, error } = await supabase
+        .from('subscription_plans')
+        .select('id, name, type, duration_days, price, short_description, currency, allow_multiple_locations, max_redemptions, allowed_payment_methods, allowed_locations, mixed_handling, allow_mixed_handling, expiry, refund_policy')
+        .eq('id', planId)
+        .maybeSingle();
+      if (error || !plan) {
+        toast({ title: 'Error', description: 'Failed to load scheme for editing', status: 'error' });
+        return;
+      }
+      setFormData((prev: any) => ({
+        ...prev,
+        name: plan.name || '',
+        type: plan.type || '',
+        duration_days: plan.duration_days != null ? String(plan.duration_days) : '',
+        price: plan.price != null ? String(plan.price) : '',
+        description: plan.short_description || '',
+        paymentModes: plan.allowed_payment_methods ? String(plan.allowed_payment_methods).split(',').map((s: string) => s.trim()).filter(Boolean) : [],
+        allowMixed: plan.allow_mixed_handling ? 'yes' : 'no',
+        mixedHandling: plan.mixed_handling || '',
+        expiryRule: plan.expiry == null ? 'unlimited' : 'auto',
+        refundPolicy: plan.refund_policy ? 'manual-override' : 'no-refund',
+        locations: Array.isArray(plan.allowed_locations) ? plan.allowed_locations : [],
+        reward_description: '',
+        multiple_locations: plan.allow_multiple_locations ? 'yes' : 'no',
+        max_redemptions: plan.max_redemptions != null ? String(plan.max_redemptions) : '',
+      }));
+    };
+    loadPlan();
+  }, [isEditMode, planId]);
 
   const handleNext = async () => {
     if (currentStep < steps.length) {
@@ -61,11 +98,57 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
       if (isCreating || isCooldown) return;
       setIsCreating(true);
       if (!user?.id) {
-        toast({ title: 'Not authenticated', description: 'Please sign in again to create a scheme.', status: 'error' });
+        toast({ title: 'Not authenticated', description: 'Please sign in again to save the scheme.', status: 'error' });
         setIsCreating(false);
         return;
       }
-      // Use logged-in user's id from users table as owner
+      if (isEditMode && planId) {
+        // Update existing plan
+        const updateObj: any = {
+          name: formData.name.trim(),
+          type: formData.type,
+          duration_days: formData.duration_days ? Number(formData.duration_days) : null,
+          max_redemptions:
+            (formData.type === 'visit' || formData.type === 'package') && String(formData.max_redemptions || '').trim() !== ''
+              ? Number(formData.max_redemptions)
+              : null,
+          price: String(formData.price || '').trim() !== '' ? Number(formData.price) : 0,
+          short_description: formData.description.trim() || null,
+          allow_multiple_locations: formData.multiple_locations === 'yes',
+          mixed_handling: formData.mixedHandling || null,
+          allow_mixed_handling: formData.allowMixed === 'yes',
+          expiry: formData.expiryRule === 'unlimited' ? null : (formData.duration_days ? Number(formData.duration_days) : null),
+          refund_policy: formData.refundPolicy === 'manual-override',
+          allowed_payment_methods: formData.paymentModes.length > 0 ? formData.paymentModes.join(',') : null,
+          allowed_locations: formData.locations.length > 0 ? formData.locations.map(String) : null,
+        };
+        const { error: upErr } = await supabase
+          .from('subscription_plans')
+          .update(updateObj)
+          .eq('id', planId);
+        if (!upErr && updateObj.allow_multiple_locations) {
+          // Sync subscription_plan_locations
+          await supabase.from('subscription_plan_locations').delete().eq('plan_id', planId);
+          if (formData.locations.length > 0) {
+            await supabase.from('subscription_plan_locations').insert(
+              formData.locations.map((locId: string) => ({ plan_id: planId, location_id: locId }))
+            );
+          }
+        }
+        if (!upErr) {
+          setShowSuccess(true);
+          setIsCooldown(true);
+          setTimeout(() => setIsCooldown(false), 3000);
+          setTimeout(() => {
+            navigate('/loyalty/schemes');
+          }, 1200);
+        } else {
+          toast({ title: 'Error', description: 'There was an error saving changes. Please try again.', status: 'error' });
+          setIsCreating(false);
+        }
+        return;
+      }
+      // Create new plan (existing logic)
       const owner_id: string = user.id;
 
       const insertObj = {
@@ -88,7 +171,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
         refund_policy: formData.refundPolicy === 'manual-override',
         allowed_payment_methods: formData.paymentModes.length > 0 ? formData.paymentModes.join(',') : null,
         allowed_locations: formData.locations.length > 0
-          ? formData.locations.map(String) // <-- send as array for text[] column
+          ? formData.locations.map(String)
           : null,
         allowed_services: formData.reward_description
           ? formData.reward_description.split(',').map((desc) => desc.trim()).filter(Boolean)
@@ -100,7 +183,6 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
         .insert([insertObj])
         .select();
 
-      // If multiple locations, insert into plan_locations link table
       if (!error && insertObj.allow_multiple_locations && data && data[0]?.id && formData.locations.length > 0) {
         await supabase
           .from('subscription_plan_locations')
@@ -113,7 +195,6 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
       }
 
       if (!error) {
-        // Show animated success, disable button for 5s, then navigate
         setShowSuccess(true);
         setIsCooldown(true);
         setTimeout(() => setIsCooldown(false), 5000);
@@ -137,19 +218,72 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
     }
   };
 
+  // Save immediately in edit mode without progressing steps
+  const handleQuickSave = async () => {
+    if (!isEditMode || !planId) return;
+    if (isCreating || isCooldown) return;
+    setIsCreating(true);
+    if (!user?.id) {
+      toast({ title: 'Not authenticated', description: 'Please sign in again to save the scheme.', status: 'error' });
+      setIsCreating(false);
+      return;
+    }
+    const updateObj: any = {
+      name: formData.name.trim(),
+      type: formData.type,
+      duration_days: formData.duration_days ? Number(formData.duration_days) : null,
+      max_redemptions:
+        (formData.type === 'visit' || formData.type === 'package') && String(formData.max_redemptions || '').trim() !== ''
+          ? Number(formData.max_redemptions)
+          : null,
+      price: String(formData.price || '').trim() !== '' ? Number(formData.price) : 0,
+      short_description: formData.description.trim() || null,
+      allow_multiple_locations: formData.multiple_locations === 'yes',
+      mixed_handling: formData.mixedHandling || null,
+      allow_mixed_handling: formData.allowMixed === 'yes',
+      expiry: formData.expiryRule === 'unlimited' ? null : (formData.duration_days ? Number(formData.duration_days) : null),
+      refund_policy: formData.refundPolicy === 'manual-override',
+      allowed_payment_methods: formData.paymentModes.length > 0 ? formData.paymentModes.join(',') : null,
+      allowed_locations: formData.locations.length > 0 ? formData.locations.map(String) : null,
+    };
+    const { error: upErr } = await supabase
+      .from('subscription_plans')
+      .update(updateObj)
+      .eq('id', planId);
+    if (!upErr && updateObj.allow_multiple_locations) {
+      await supabase.from('subscription_plan_locations').delete().eq('plan_id', planId);
+      if (formData.locations.length > 0) {
+        await supabase.from('subscription_plan_locations').insert(
+          formData.locations.map((locId: string) => ({ plan_id: planId, location_id: locId }))
+        );
+      }
+    }
+    if (!upErr) {
+      setShowSuccess(true);
+      setIsCooldown(true);
+      setTimeout(() => setIsCooldown(false), 3000);
+      setTimeout(() => {
+        navigate('/loyalty/schemes');
+      }, 1200);
+    } else {
+      toast({ title: 'Error', description: 'There was an error saving changes. Please try again.', status: 'error' });
+      setIsCreating(false);
+    }
+  };
+
   const handleChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormData((prev: any) => ({ ...prev, [field]: value }));
   };
 
   const paymentMethodOptions = ['cash', 'card', 'UPI', 'Pay later'];
   React.useEffect(() => {
     if (currentStep === 2 && formData.paymentModes.length === 0) {
-      setFormData((prev) => ({
+      setFormData((prev: any) => ({
         ...prev,
         paymentModes: paymentMethodOptions.filter((m) => m !== 'Pay later')
       }));
     }
-  }, [currentStep, formData.paymentModes.length]);
+  }, [currentStep, (formData as any).paymentModes?.length]);
 
   // Fetch permitted locations for the logged-in owner when entering Step 4
   React.useEffect(() => {
@@ -157,28 +291,20 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
       if (currentStep !== 4 || !user?.id) return;
       setIsLoadingLocations(true);
       try {
-        // Get location ids the owner has access to
-        const { data: ownerships, error: ownersError } = await supabase
+        const { data: ownerships } = await supabase
           .from('location_owners')
           .select('location_id')
           .eq('owner_id', user.id);
-
-        if (ownersError) throw ownersError;
-
         const locationIds = (ownerships || []).map((o: any) => o.location_id).filter(Boolean);
         if (locationIds.length === 0) {
           setPermittedLocations([]);
           setIsLoadingLocations(false);
           return;
         }
-
-        const { data: locations, error: locError } = await supabase
+        const { data: locations } = await supabase
           .from('locations')
           .select('id, name')
           .in('id', locationIds);
-
-        if (locError) throw locError;
-
         setPermittedLocations((locations || []).map((l: any) => ({ id: l.id, name: l.name })));
       } catch (e) {
         setPermittedLocations([]);
@@ -274,7 +400,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
                         type="checkbox"
                         checked={formData.paymentModes.includes(method)}
                         onChange={(e) => {
-                          setFormData((prev) => ({
+                          setFormData((prev: any) => ({
                             ...prev,
                             paymentModes: e.target.checked
                               ? [...prev.paymentModes, method]
@@ -296,7 +422,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
                       name="allowMixed"
                       value="yes"
                       checked={formData.allowMixed === 'yes'}
-                      onChange={() => setFormData((prev) => ({ ...prev, allowMixed: 'yes' }))}
+                      onChange={() => setFormData((prev: any) => ({ ...prev, allowMixed: 'yes' }))}
                     />
                     Yes
                   </label>
@@ -306,7 +432,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
                       name="allowMixed"
                       value="no"
                       checked={formData.allowMixed === 'no'}
-                      onChange={() => setFormData((prev) => ({ ...prev, allowMixed: 'no' }))}
+                      onChange={() => setFormData((prev: any) => ({ ...prev, allowMixed: 'no' }))}
                     />
                     No
                   </label>
@@ -319,7 +445,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
                     className="w-full border rounded px-2 py-1"
                     value={formData.mixedHandling || ''}
                     onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, mixedHandling: e.target.value }))
+                      setFormData((prev: any) => ({ ...prev, mixedHandling: e.target.value }))
                     }
                   >
                     <option value="">Select handling</option>
@@ -347,7 +473,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
                       value="auto"
                       checked={formData.expiryRule === 'auto'}
                       onChange={() =>
-                        setFormData((prev) => ({
+                        setFormData((prev: any) => ({
                           ...prev,
                           expiryRule: 'auto'
                         }))
@@ -362,7 +488,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
                       value="unlimited"
                       checked={formData.expiryRule === 'unlimited'}
                       onChange={() =>
-                        setFormData((prev) => ({
+                        setFormData((prev: any) => ({
                           ...prev,
                           expiryRule: 'unlimited'
                         }))
@@ -378,7 +504,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
                   className="w-full border rounded px-2 py-1"
                   value={formData.refundPolicy || ''}
                   onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, refundPolicy: e.target.value }))
+                    setFormData((prev: any) => ({ ...prev, refundPolicy: e.target.value }))
                   }
                 >
                   <option value="">Select refund policy</option>
@@ -404,7 +530,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
                       name="multiple_locations"
                       value="yes"
                       checked={formData.multiple_locations === 'yes'}
-                      onChange={() => setFormData((prev) => ({ ...prev, multiple_locations: 'yes', locations: [] }))}
+                      onChange={() => setFormData((prev: any) => ({ ...prev, multiple_locations: 'yes', locations: [] }))}
                     />
                     Yes
                   </label>
@@ -414,7 +540,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
                       name="multiple_locations"
                       value="no"
                       checked={formData.multiple_locations === 'no'}
-                      onChange={() => setFormData((prev) => ({ ...prev, multiple_locations: 'no', locations: [] }))}
+                      onChange={() => setFormData((prev: any) => ({ ...prev, multiple_locations: 'no', locations: [] }))}
                     />
                     No
                   </label>
@@ -436,14 +562,14 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
                           checked={formData.locations.includes(loc.id)}
                           onChange={(e) => {
                             if (formData.multiple_locations === 'yes') {
-                              setFormData((prev) => ({
+                              setFormData((prev: any) => ({
                                 ...prev,
                                 locations: e.target.checked
                                   ? [...prev.locations, loc.id]
                                   : prev.locations.filter((id: string) => id !== loc.id)
                               }));
                             } else {
-                              setFormData((prev) => ({
+                              setFormData((prev: any) => ({
                                 ...prev,
                                 locations: [loc.id]
                               }));
@@ -479,7 +605,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
                     placeholder="e.g. 10"
                     value={formData.max_redemptions || ''}
                     onChange={(e) =>
-                      setFormData((prev) => ({
+                      setFormData((prev: any) => ({
                         ...prev,
                         max_redemptions: e.target.value
                       }))
@@ -498,49 +624,14 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
                       : 'e.g. Bonus credits, discounts, etc.'
                   }
                   value={formData.reward_description || ''}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        reward_description: e.target.value
-                      }))
-                    }
-                  />
+                  onChange={(e) =>
+                    setFormData((prev: any) => ({
+                      ...prev,
+                      reward_description: e.target.value
+                    }))
+                  }
+                />
               </div>
-              {/* <div>
-                <label className="block text-sm font-medium mb-1">Enable Reward Reminders?</label>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="enable_reminders"
-                      value="yes"
-                      checked={formData.enable_reminders === 'yes'}
-                      onChange={() =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          enable_reminders: 'yes'
-                        }))
-                      }
-                    />
-                    Yes
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="enable_reminders"
-                      value="no"
-                      checked={formData.enable_reminders === 'no'}
-                      onChange={() =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          enable_reminders: 'no'
-                        }))
-                      }
-                    />
-                    No
-                  </label>
-                </div>
-              </div> */}
               <div className="text-xs text-muted-foreground mt-2">
                 <strong>Note:</strong> For package plans, rewards can be a free wash or similar service from your service table. For credit plans, rewards are typically bonus credits or discounts.
               </div>
@@ -551,7 +642,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
         return (
           <div className="space-y-6">
             <h3 className="text-xl font-semibold">Review & Confirm</h3>
-            <p className="text-muted-foreground">Please review your scheme details before creating.</p>
+            <p className="text-muted-foreground">Please review your scheme details before {isEditMode ? 'saving' : 'creating'}.</p>
             <div className="grid gap-4 md:grid-cols-2">
               {/* Step 1: Basic Info */}
               <Card>
@@ -563,13 +654,13 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
                     <div><strong>Name:</strong> {formData.name || <span className="text-muted-foreground">Not set</span>}</div>
                     <div><strong>Type:</strong> {formData.type ? formData.type.charAt(0).toUpperCase() + formData.type.slice(1) : <span className="text-muted-foreground">Not set</span>}</div>
                     <div>
-                      <strong>Duration:</strong>{" "}
-                      {formData.expiryRule === "unlimited" || !formData.duration_days
-                        ? "Unlimited"
+                      <strong>Duration:</strong>{' '}
+                      {formData.expiryRule === 'unlimited' || !formData.duration_days
+                        ? 'Unlimited'
                         : `${formData.duration_days} days`}
                     </div>
                     <div>
-                      <strong>Price:</strong>{" "}
+                      <strong>Price:</strong>{' '}
                       {formData.price ? `₹${formData.price}` : <span className="text-muted-foreground">Not set</span>}
                     </div>
                   </div>
@@ -583,22 +674,22 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
                 <CardContent>
                   <div className="space-y-2 text-sm">
                     <div>
-                      <strong>Allowed Methods:</strong>{" "}
+                      <strong>Allowed Methods:</strong>{' '}
                       {formData.paymentModes.length > 0
-                        ? formData.paymentModes.join(", ")
+                        ? formData.paymentModes.join(', ')
                         : <span className="text-muted-foreground">Not set</span>}
                     </div>
                     <div>
-                      <strong>Allow Mixed Payment:</strong>{" "}
-                      {formData.allowMixed === "yes" ? "Yes" : "No"}
+                      <strong>Allow Mixed Payment:</strong>{' '}
+                      {formData.allowMixed === 'yes' ? 'Yes' : 'No'}
                     </div>
-                    {formData.allowMixed === "yes" && (
+                    {formData.allowMixed === 'yes' && (
                       <div>
-                        <strong>Mixed Handling:</strong>{" "}
-                        {formData.mixedHandling === "credit-first"
-                          ? "First consume credit, remainder via cash/upi/card"
-                          : formData.mixedHandling === "cash-first"
-                          ? "Prioritize cash/direct payment first"
+                        <strong>Mixed Handling:</strong>{' '}
+                        {formData.mixedHandling === 'credit-first'
+                          ? 'First consume credit, remainder via cash/upi/card'
+                          : formData.mixedHandling === 'cash-first'
+                          ? 'Prioritize cash/direct payment first'
                           : <span className="text-muted-foreground">Not set</span>}
                       </div>
                     )}
@@ -613,16 +704,16 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
                 <CardContent>
                   <div className="space-y-2 text-sm">
                     <div>
-                      <strong>Expiry:</strong>{" "}
-                      {formData.expiryRule === "unlimited" || !formData.duration_days
-                        ? "Unlimited validity"
+                      <strong>Expiry:</strong>{' '}
+                      {formData.expiryRule === 'unlimited' || !formData.duration_days
+                        ? 'Unlimited validity'
                         : `Auto-expire after ${formData.duration_days} days`}
                     </div>
                     <div>
-                      <strong>Refund Policy:</strong>{" "}
-                      {formData.refundPolicy === "manual-override"
-                        ? "Allow refund under special conditions"
-                        : "No refunds"}
+                      <strong>Refund Policy:</strong>{' '}
+                      {formData.refundPolicy === 'manual-override'
+                        ? 'Allow refund under special conditions'
+                        : 'No refunds'}
                     </div>
                   </div>
                 </CardContent>
@@ -635,18 +726,18 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
                 <CardContent>
                   <div className="space-y-2 text-sm">
                     <div>
-                      <strong>Multiple Locations:</strong>{" "}
-                      {formData.multiple_locations === "yes" ? "Yes" : "No"}
+                      <strong>Multiple Locations:</strong>{' '}
+                      {formData.multiple_locations === 'yes' ? 'Yes' : 'No'}
                     </div>
                     <div>
-                      <strong>Allowed Locations:</strong>{" "}
+                      <strong>Allowed Locations:</strong>{' '}
                       {formData.locations.length > 0
                         ? (permittedLocations.length > 0
                             ? permittedLocations
                                 .filter((loc) => formData.locations.includes(loc.id))
                                 .map((loc) => loc.name)
-                                .join(", ")
-                            : formData.locations.join(", "))
+                                .join(', ')
+                            : formData.locations.join(', '))
                         : <span className="text-muted-foreground">Not set</span>}
                     </div>
                   </div>
@@ -659,23 +750,23 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2 text-sm">
-                    {(formData.type === "visit" || formData.type === "package") && (
+                    {(formData.type === 'visit' || formData.type === 'package') && (
                       <div>
-                        <strong>Max Redemptions:</strong>{" "}
+                        <strong>Max Redemptions:</strong>{' '}
                         {formData.max_redemptions
                           ? formData.max_redemptions
                           : <span className="text-muted-foreground">Not set</span>}
                       </div>
                     )}
                     <div>
-                      <strong>Reward Description:</strong>{" "}
+                      <strong>Reward Description:</strong>{' '}
                       {formData.reward_description
                         ? formData.reward_description
                         : <span className="text-muted-foreground">Not set</span>}
                     </div>
                     <div>
-                      <strong>Enable Reminders:</strong>{" "}
-                      {formData.enable_reminders === "yes" ? "Yes" : "No"}
+                      <strong>Enable Reminders:</strong>{' '}
+                      {formData.enable_reminders === 'yes' ? 'Yes' : 'No'}
                     </div>
                   </div>
                 </CardContent>
@@ -684,7 +775,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
             <div className="bg-success/10 p-6 rounded-lg border border-success/20 mt-6">
               <div className="flex items-center gap-2 mb-2">
                 <Check className="w-5 h-5 text-success" />
-                <span className="font-medium text-success">Ready to Create</span>
+                <span className="font-medium text-success">Ready to {isEditMode ? 'Save' : 'Create'}</span>
               </div>
               <p className="text-sm text-foreground">Your scheme configuration looks good!</p>
             </div>
@@ -709,7 +800,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
     <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-foreground mb-2">Create New Scheme</h1>
+        <h1 className="text-3xl font-bold text-foreground mb-2">{isEditMode ? 'Edit Scheme' : 'Create New Scheme'}</h1>
         <Button
           variant="outline"
           onClick={() => navigate('/loyalty/schemes')}
@@ -780,14 +871,23 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back
         </Button>
-        <Button
-          variant="outline"
-          onClick={handleNext}
-          disabled={isCreating || isCooldown}
-        >
-          {currentStep === steps.length ? (isCreating || isCooldown ? 'Creating…' : 'Create Scheme') : 'Next'}
-          {currentStep < steps.length && <ArrowRight className="w-4 h-4 ml-2" />}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleQuickSave}
+            disabled={isCreating || isCooldown}
+          >
+            Make changes
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleNext}
+            disabled={isCreating || isCooldown}
+          >
+            {currentStep === steps.length ? (isCreating || isCooldown ? (isEditMode ? 'Saving…' : 'Creating…') : (isEditMode ? 'Save Changes' : 'Create Scheme')) : 'Next'}
+            {currentStep < steps.length && <ArrowRight className="w-4 h-4 ml-2" />}
+          </Button>
+        </div>
       </div>
 
       {/* Success overlay */}
@@ -797,7 +897,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
             <div className="mx-auto mb-4 w-16 h-16 rounded-full bg-green-100 border border-green-200 flex items-center justify-center">
               <Check className="w-8 h-8 text-green-600 animate-fade-in" />
             </div>
-            <div className="text-lg font-semibold text-foreground mb-1">Scheme Created</div>
+            <div className="text-lg font-semibold text-foreground mb-1">{isEditMode ? 'Changes Saved' : 'Scheme Created'}</div>
             <div className="text-sm text-muted-foreground">Redirecting to schemes…</div>
           </div>
         </div>

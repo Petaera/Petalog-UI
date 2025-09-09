@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/lib/supabaseClient';
 import { 
   Users, 
@@ -16,6 +17,7 @@ import {
   Zap
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLocation } from 'react-router-dom';
 
 const typeColors = {
   Subscription: 'primary',
@@ -35,8 +37,11 @@ const statusColors = {
 
 export function Customers() {
   const { user } = useAuth();
+  const location = useLocation();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [expiringMode, setExpiringMode] = useState(false);
+  const [loyaltyMode, setLoyaltyMode] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [addStep, setAddStep] = useState<'selectPlan' | 'identify' | 'form'>('selectPlan');
   const [schemeType, setSchemeType] = useState('');
@@ -62,6 +67,10 @@ export function Customers() {
   const [customerDetailsMap, setCustomerDetailsMap] = useState<Record<string, any>>({});
   const [planDetailsMap, setPlanDetailsMap] = useState<Record<string, any>>({});
   const [vehicleInfoMap, setVehicleInfoMap] = useState<Record<string, any>>({});
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedPurchase, setSelectedPurchase] = useState<any | null>(null);
+  const [editCustomerDraft, setEditCustomerDraft] = useState<{ id?: string; name?: string; phone?: string; email?: string; date_of_birth?: string }>({});
 
   const fetchPurchases = async () => {
     const { data } = await supabase
@@ -75,6 +84,29 @@ export function Customers() {
   useEffect(() => {
     fetchPurchases();
   }, []);
+
+  // Parse query params for preset filters
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const filter = params.get('filter');
+    const loyalty = params.get('loyalty');
+    if (filter === 'active') {
+      setFilterStatus('Active');
+      setExpiringMode(false);
+      setLoyaltyMode(false);
+    } else if (filter === 'expiring') {
+      setFilterStatus('Expiring Soon');
+      setExpiringMode(true);
+      setLoyaltyMode(false);
+    } else if (loyalty === '1') {
+      setFilterStatus('all');
+      setLoyaltyMode(true);
+      setExpiringMode(false);
+    } else {
+      setExpiringMode(false);
+      setLoyaltyMode(false);
+    }
+  }, [location.search]);
 
   // Fetch available subscription plans
   useEffect(() => {
@@ -173,49 +205,62 @@ export function Customers() {
 
   useEffect(() => {
     async function fetchVehicleInfo() {
-      // Only for package/visit type plans
-      const relevantCustomers = subscriptionCustomers.filter(c => {
-        const plan = planDetailsMap[c.plan_id];
-        return plan && (plan.type === 'package' || plan.type === 'visit');
-      });
-
-      const vehicleNumbers = Array.from(new Set(
-        relevantCustomers.map(c => customerDetailsMap[c.customer_id]?.default_vehicle_id).filter(Boolean)
+      const vehicleIds = Array.from(new Set(
+        subscriptionCustomers
+          .map(c => customerDetailsMap[c.customer_id]?.default_vehicle_id)
+          .filter(Boolean)
       ));
 
-      if (vehicleNumbers.length > 0) {
-        // Fix: Use "D.O.B" (with dots) in select, and wrap in double quotes
-        const { data: logs } = await supabase
-          .from('logs_man')
-          .select('vehicle_number,vehicle_model,vehicle_brand,"D.O.B"')
-          .in('vehicle_number', vehicleNumbers);
+      if (vehicleIds.length > 0) {
+        const { data: vehicles } = await supabase
+          .from('subscription_vehicles')
+          .select('id, number_plate, "Model", "Brand", type')
+          .in('id', vehicleIds);
 
         const map: Record<string, any> = {};
-        (logs || []).forEach(l => { map[l.vehicle_number] = l; });
+        (vehicles || []).forEach(v => { map[v.id] = v; });
         setVehicleInfoMap(map);
+      } else {
+        setVehicleInfoMap({});
       }
     }
-    // Only fetch if planDetailsMap and customerDetailsMap are loaded
     if (
       subscriptionCustomers.length > 0 &&
-      Object.keys(planDetailsMap).length > 0 &&
       Object.keys(customerDetailsMap).length > 0
     ) {
       fetchVehicleInfo();
     }
-  }, [subscriptionCustomers, planDetailsMap, customerDetailsMap]);
+  }, [subscriptionCustomers, customerDetailsMap]);
 
-  const filteredCustomers = subscriptionCustomers.filter(customer => {
-    const name = customer.customers?.name || '';
-    const phone = customer.customers?.phone || '';
-    const scheme = customer.subscription_plans?.name || '';
-    const vehicleNumber = customer.customers?.default_vehicle_id || '';
-    const matchesSearch =
-      name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      phone.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      scheme.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      vehicleNumber.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFilter = filterStatus === 'all' || customer.status === filterStatus;
+  const filteredCustomers = subscriptionCustomers.filter(purchase => {
+    const cust = customerDetailsMap[purchase.customer_id] || {};
+    const plan = planDetailsMap[purchase.plan_id] || {};
+    const vehicle = vehicleInfoMap[cust.default_vehicle_id] || {};
+    const name = String(cust.name || '');
+    const phone = String(cust.phone || '');
+    const scheme = String(plan.name || '');
+    const vehicleNumber = String(vehicle.number_plate || '');
+    const term = searchTerm.trim().toLowerCase();
+    const matchesSearch = term.length === 0 ||
+      name.toLowerCase().includes(term) ||
+      phone.toLowerCase().includes(term) ||
+      scheme.toLowerCase().includes(term) ||
+      vehicleNumber.toLowerCase().includes(term);
+    const normalizedStatus = String(purchase.status || '').toLowerCase();
+    const filterNorm = filterStatus.toLowerCase();
+    let matchesFilter = filterStatus === 'all' || normalizedStatus === filterNorm.replace(' ', '');
+    // Expiring Soon derived filter mode
+    if (expiringMode) {
+      if (!purchase.expiry_date) return false;
+      const now = new Date();
+      const in7 = new Date(now.getTime() + 7*24*60*60*1000);
+      const d = new Date(purchase.expiry_date);
+      matchesFilter = d >= now && d <= in7;
+    }
+    // Loyalty mode: only visit-based plan purchases
+    if (loyaltyMode) {
+      matchesFilter = String(plan.type || '').toLowerCase() === 'visit';
+    }
     return matchesSearch && matchesFilter;
   });
 
@@ -714,9 +759,9 @@ export function Customers() {
       {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {[
-          { label: 'Total Customers', value: subscriptionCustomers.length, color: 'primary' },
-          { label: 'Active', value: subscriptionCustomers.filter(c => c.status === 'Active').length, color: 'success' },
-          { label: 'Expiring Soon', value: subscriptionCustomers.filter(c => c.status === 'Expiring Soon').length, color: 'warning' },
+          { label: 'Total Customers', value: filteredCustomers.length, color: 'primary' },
+          { label: 'Active', value: subscriptionCustomers.filter(c => String(c.status || '').toLowerCase() === 'active').length, color: 'success' },
+          { label: 'Expiring Soon', value: subscriptionCustomers.filter(c => { const s = String(c.status || '').toLowerCase(); return s === 'expiring soon' || s === 'expiringsoon'; }).length, color: 'warning' },
           { label: 'This Month', value: 12, color: 'accent' }
         ].map((stat, index) => (
           <Card key={stat.label} className="animate-slide-up" style={{ animationDelay: `${index * 100}ms` }}>
@@ -729,8 +774,8 @@ export function Customers() {
       </div>
 
       {/* Customers Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        {subscriptionCustomers.map((customer, index) => {
+       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+        {filteredCustomers.map((customer, index) => {
           const cust = customerDetailsMap[customer.customer_id] || {};
           const plan = planDetailsMap[customer.plan_id] || {};
           const vehicleInfo = vehicleInfoMap[cust.default_vehicle_id] || {};
@@ -749,21 +794,35 @@ export function Customers() {
                     <p className="text-sm text-muted-foreground">{cust.email ? `Email: ${cust.email}` : ''}</p>
                     {showVehicleInfo && (
                       <>
-                        <p className="text-sm text-muted-foreground">{vehicleInfo.vehicle_model ? `Model: ${vehicleInfo.vehicle_model}` : ''}</p>
-                        <p className="text-sm text-muted-foreground">{vehicleInfo.vehicle_brand ? `Brand: ${vehicleInfo.vehicle_brand}` : ''}</p>
+                        <p className="text-sm text-muted-foreground">{vehicleInfo.Model ? `Model: ${vehicleInfo.Model}` : ''}</p>
+                        <p className="text-sm text-muted-foreground">{vehicleInfo.Brand ? `Brand: ${vehicleInfo.Brand}` : ''}</p>
+                        <p className="text-sm text-muted-foreground">{vehicleInfo.number_plate ? `Vehicle: ${vehicleInfo.number_plate}` : ''}</p>
                       </>
                     )}
                   </div>
-                  <Button variant="ghost" size="sm">
-                    <MoreHorizontal className="w-4 h-4" />
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm">
+                        <MoreHorizontal className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => { setSelectedPurchase(customer); setShowViewModal(true); }}>View</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => {
+                        setSelectedPurchase(customer);
+                        const c = customerDetailsMap[customer.customer_id] || {};
+                        setEditCustomerDraft({ id: c.id, name: c.name || '', phone: c.phone || '', email: c.email || '', date_of_birth: c.date_of_birth || '' });
+                        setShowEditModal(true);
+                      }}>Edit</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium text-foreground">Status:</span>
-                    <Badge variant="outline">{customer.status}</Badge>
+                    <Badge variant="outline">{String(customer.status || '').charAt(0).toUpperCase() + String(customer.status || '').slice(1)}</Badge>
                   </div>
                   {customer.expiry_date && (
                     <div className="flex items-center justify-between">
@@ -792,9 +851,19 @@ export function Customers() {
                     </div>
                   </CardContent>
                 </Card>
-                <Button size="sm" variant="outline">
-                  View
-                </Button>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => { setSelectedPurchase(customer); setShowViewModal(true); }}>
+                    View
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => {
+                    setSelectedPurchase(customer);
+                    const c = customerDetailsMap[customer.customer_id] || {};
+                    setEditCustomerDraft({ id: c.id, name: c.name || '', phone: c.phone || '', email: c.email || '', date_of_birth: c.date_of_birth || '' });
+                    setShowEditModal(true);
+                  }}>
+                    Edit
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           );
@@ -819,6 +888,128 @@ export function Customers() {
             Add Customer
           </Button>
         </Card>
+      )}
+
+      {/* View Modal */}
+      {showViewModal && selectedPurchase && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 transition-all duration-300 animate-fade-in" onClick={() => setShowViewModal(false)}>
+          <Card className="w-full max-w-xl p-0 overflow-hidden shadow-2xl animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b">
+              <h2 className="text-xl font-bold">Customer Details</h2>
+            </div>
+            <CardContent className="p-6 space-y-4">
+              {(() => {
+                const cust = customerDetailsMap[selectedPurchase.customer_id] || {};
+                const plan = planDetailsMap[selectedPurchase.plan_id] || {};
+                const vehicle = vehicleInfoMap[cust.default_vehicle_id] || {};
+                return (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <div className="text-xs text-muted-foreground">Name</div>
+                        <div className="font-medium">{cust.name || '-'}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Phone</div>
+                        <div className="font-medium">{cust.phone || '-'}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Email</div>
+                        <div className="font-medium">{cust.email || '-'}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Status</div>
+                        <div className="font-medium">{String(selectedPurchase.status || '').charAt(0).toUpperCase() + String(selectedPurchase.status || '').slice(1)}</div>
+                      </div>
+                    </div>
+                    <Card className="bg-muted/30 border border-border">
+                      <CardHeader>
+                        <div className="font-semibold text-primary">Plan</div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-sm text-muted-foreground grid grid-cols-2 gap-2">
+                          <div>Name: {plan.name || '-'}</div>
+                          <div>Type: {plan.type || '-'}</div>
+                          <div>Price: {plan.price ? `₹${plan.price}` : '-'}</div>
+                          <div>Max Redemptions: {plan.max_redemptions ?? '-'}</div>
+                          <div>Expiry: {selectedPurchase.expiry_date ? selectedPurchase.expiry_date.slice(0,10) : '-'}</div>
+                          <div>Remaining Visits: {selectedPurchase.remaining_visits ?? '-'}</div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-muted/30 border border-border">
+                      <CardHeader>
+                        <div className="font-semibold text-primary">Vehicle</div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-sm text-muted-foreground grid grid-cols-2 gap-2">
+                          <div>Number: {vehicle.number_plate || '-'}</div>
+                          <div>Model: {vehicle.Model || '-'}</div>
+                          <div>Brand: {vehicle.Brand || '-'}</div>
+                          <div>Type: {vehicle.type || '-'}</div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                );
+              })()}
+              <div className="flex justify-end pt-2">
+                <Button variant="outline" onClick={() => setShowViewModal(false)}>Close</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {showEditModal && selectedPurchase && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 transition-all duration-300 animate-fade-in" onClick={() => setShowEditModal(false)}>
+          <Card className="w-full max-w-lg p-0 overflow-hidden shadow-2xl animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <h2 className="text-xl font-bold">Edit Customer</h2>
+              <Button variant="ghost" onClick={() => setShowEditModal(false)}>Cancel</Button>
+            </div>
+            <CardContent className="p-6 space-y-4">
+              <div>
+                <label className="block mb-1 font-medium">Name</label>
+                <Input value={editCustomerDraft.name || ''} onChange={e => setEditCustomerDraft({ ...editCustomerDraft, name: e.target.value })} />
+              </div>
+              <div>
+                <label className="block mb-1 font-medium">Phone</label>
+                <Input value={editCustomerDraft.phone || ''} onChange={e => setEditCustomerDraft({ ...editCustomerDraft, phone: e.target.value })} />
+              </div>
+              <div>
+                <label className="block mb-1 font-medium">Email</label>
+                <Input value={editCustomerDraft.email || ''} onChange={e => setEditCustomerDraft({ ...editCustomerDraft, email: e.target.value })} />
+              </div>
+              <div>
+                <label className="block mb-1 font-medium">Date of Birth</label>
+                <Input type="date" value={editCustomerDraft.date_of_birth || ''} onChange={e => setEditCustomerDraft({ ...editCustomerDraft, date_of_birth: e.target.value })} />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setShowEditModal(false)}>Close</Button>
+                <Button onClick={async () => {
+                  if (!editCustomerDraft.id) { setShowEditModal(false); return; }
+                  await supabase.from('customers').update({
+                    name: editCustomerDraft.name || null,
+                    phone: editCustomerDraft.phone || null,
+                    email: editCustomerDraft.email || null,
+                    date_of_birth: editCustomerDraft.date_of_birth || null,
+                  }).eq('id', editCustomerDraft.id);
+                  const { data: cust } = await supabase
+                    .from('customers')
+                    .select('id, name, phone, email, date_of_birth')
+                    .eq('id', editCustomerDraft.id)
+                    .limit(1);
+                  if (cust && cust[0]) {
+                    setCustomerDetailsMap(prev => ({ ...prev, [cust[0].id]: cust[0] }));
+                  }
+                  setShowEditModal(false);
+                }}>Save</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   );
