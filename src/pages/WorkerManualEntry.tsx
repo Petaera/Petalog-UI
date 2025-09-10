@@ -1,6 +1,5 @@
-
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Car, CreditCard, Banknote, ChevronDown, Calendar } from "lucide-react";
+import { Car, Banknote, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,6 +16,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import ReactSelect from 'react-select';
 import { getOrCreateVehicleId } from "@/lib/utils";
 import { useUpiAccounts } from '@/hooks/useUpiAccounts';
+
+import { ChevronDown, Calendar } from 'lucide-react';
 
 // Add SERVICE_PRICES fallback at the top-level
 const SERVICE_PRICES: { [key: string]: number } = {
@@ -122,11 +123,11 @@ const sortVehicleTypesWithPriority = (vehicleTypes: string[]) => {
   });
 };
 
-interface ManagerOwnerEntryProps {
+interface WorkerManualEntryProps {
   selectedLocation?: string;
 }
 
-export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntryProps) {
+export default function WorkerManualEntry({ selectedLocation }: WorkerManualEntryProps) {
 
   const [selectedDateOption, setSelectedDateOption] = useState('today');
   const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
@@ -237,7 +238,21 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
   // Store edit data for later use
   const [pendingEditData, setPendingEditData] = useState<any>(null);
   const [isApplyingEditData, setIsApplyingEditData] = useState(false);
-  const [editVehicleNumber, setEditVehicleNumber] = useState<string | null>(null);
+
+  // Reset UPI account selection when payment mode changes
+  useEffect(() => {
+    if (paymentMode !== 'upi') {
+      setSelectedUpiAccount('');
+    }
+  }, [paymentMode]);
+
+  // Reset UPI account selection when selectedLocation changes
+  useEffect(() => {
+    if (selectedLocation) {
+      setSelectedUpiAccount('');
+      console.log('📍 Location changed, resetting UPI account selection');
+    }
+  }, [selectedLocation]);
 
   // Check for edit data on component mount
   useEffect(() => {
@@ -246,103 +261,16 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
       try {
         const logData = JSON.parse(editData);
         console.log('Edit data found:', logData);
-        console.log('Edit data vehicleType:', logData.vehicleType, 'Type:', typeof logData.vehicleType);
-        console.log('Edit data service:', logData.service, 'Type:', typeof logData.service, 'Length:', Array.isArray(logData.service) ? logData.service.length : 'Not an array');
-        console.log('Full edit data keys:', Object.keys(logData));
-
-        // Store the edit data temporarily until vehicle data is loaded
         setPendingEditData(logData);
 
-        // Don't clear sessionStorage yet - we'll do it after applying the data
+        // Clear the sessionStorage
+        sessionStorage.removeItem('editLogData');
       } catch (error) {
         console.error('Error parsing edit data:', error);
         toast.error('Error loading edit data');
-        sessionStorage.removeItem('editLogData');
       }
     }
   }, []);
-
-  // Apply edit data after vehicle data is loaded
-  useEffect(() => {
-    if (pendingEditData && vehicleData.length > 0) {
-      const logData = pendingEditData;
-      console.log('Applying edit data after vehicle data loaded:', logData);
-
-      // Set flag to prevent race conditions
-      setIsApplyingEditData(true);
-
-      // Use setTimeout to ensure all data is properly loaded and state updates are applied in order
-      setTimeout(() => {
-        // Apply wheel category first if present
-        if (logData.wheel_type) {
-          const derivedFromLog = mapTypeToWheelCategory(normalizeTypeString(logData.wheel_type));
-          if (derivedFromLog) setWheelCategory(derivedFromLog);
-        }
-
-        // Pre-fill form fields with edit data
-        const editVehicleNum = logData.vehicleNumber || '';
-        setVehicleNumber(editVehicleNum);
-        setEditVehicleNumber(editVehicleNum); // Track the vehicle number from edit data
-        console.log('Setting vehicleType to:', logData.vehicleType || '', 'Type:', typeof logData.vehicleType);
-        setVehicleType(logData.vehicleType || '');
-        console.log('Setting service to:', logData.service || [], 'Type:', typeof logData.service, 'Length:', Array.isArray(logData.service) ? logData.service.length : 'Not an array');
-        setService(logData.service || []);
-        setAmount(logData.amount || '');
-        setEntryType(logData.entryType || 'customer');
-        setDiscount(logData.discount || '');
-        setRemarks(logData.remarks || '');
-        setPaymentMode(logData.paymentMode || 'cash');
-        setCustomerName(logData.customerName || '');
-        setPhoneNumber(logData.phoneNumber || '');
-        setDateOfBirth(logData.dateOfBirth || '');
-        setCustomerLocation(logData.customerLocation || '');
-        setWorkshop(logData.workshop || '');
-
-        // Handle custom entry date and time
-        if (logData.entry_time) {
-          const entryDateTime = new Date(logData.entry_time);
-          setCustomEntryDate(entryDateTime.toISOString().split('T')[0]);
-          setCustomEntryTime(entryDateTime.toTimeString().slice(0, 5));
-          setUseCustomDateTime(true);
-        } else {
-          // If no custom entry time, use current date/time
-          const now = new Date();
-          setCustomEntryDate(now.toISOString().split('T')[0]);
-          setCustomEntryTime(now.toTimeString().slice(0, 5));
-          setUseCustomDateTime(false);
-        }
-
-        // Set edit mode
-        setIsEditing(true);
-        setEditLogId(logData.id);
-
-        // Set brand and model selections after a delay to ensure wheel category and available options are populated
-        setTimeout(() => {
-          setSelectedVehicleBrand(logData.selectedVehicleBrand || '');
-          setSelectedModel(logData.selectedModel || '');
-          setSelectedModelId(logData.selectedModelId || '');
-
-          // Clear the flag after all data is applied and stable
-          setTimeout(() => {
-            setIsApplyingEditData(false);
-            console.log('Edit data application complete, cleared isApplyingEditData flag');
-
-            // Clear the edit vehicle number tracker after a delay to allow normal auto-fill for different vehicles
-            setTimeout(() => {
-              setEditVehicleNumber(null);
-              console.log('Cleared edit vehicle number tracker');
-            }, 10000); // Extended delay to 10 seconds to prevent interference
-          }, 5000); // Extended delay to 5 seconds to ensure auto-fill doesn't interfere
-        }, 1000); // Increased delay to ensure all state updates are complete
-
-        // Clear the sessionStorage and pending edit data
-        sessionStorage.removeItem('editLogData');
-        setPendingEditData(null);
-
-        toast.success('Edit mode activated. Please review and update the entry.');
-      }, 500); // Increased delay to ensure proper state updates
-    }
-  }, [pendingEditData, vehicleData]);
 
   // Fetch vehicle brands and models from Vehicles_in_india table
   useEffect(() => {
@@ -371,9 +299,13 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
         setVehicleData(data);
         console.log('Vehicle brands and models data:', data);
         console.log('Available fields:', Object.keys(data[0]));
+        console.log('Sample record:', data[0]);
+        console.log('Type field value:', data[0].type);
+        console.log('Type field type:', typeof data[0].type);
 
-        // Defer brand list population until wheel category is chosen
+        // Use the correct field names from Vehicles_in_india table
         if (data[0].hasOwnProperty('Vehicle Brands')) {
+          // Defer brand list until wheeler is selected; keep full dataset in state
           setAvailableVehicleBrands([]);
         } else {
           console.warn('Vehicle Brands field not found in data');
@@ -441,12 +373,16 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
 
     // Show all models from all categories
     const allModels = vehicleData
-      .map(item => ({
-        name: item['Models'],
-        id: item.id,
-        brand: item['Vehicle Brands'],
-        type: item.type
-      }))
+      .map(item => {
+        console.log('Processing item:', item);
+        console.log('Item type:', item.type);
+        return {
+          name: item['Models'],
+          id: item.id,
+          brand: item['Vehicle Brands'],
+          type: item.type
+        };
+      })
       .filter(item => item.name); // Filter out empty models
 
     // Remove duplicates based on model name but keep the id, brand, and type
@@ -502,6 +438,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
     if (selectedVehicleBrand && vehicleData.length > 0) {
       console.log('Filtering models for vehicle brand:', selectedVehicleBrand);
 
+      // Use the correct field names from Vehicles_in_india table
       if (vehicleData[0]?.hasOwnProperty('Vehicle Brands') && vehicleData[0]?.hasOwnProperty('Models')) {
         const modelsForBrand = vehicleData
           .filter(item => item['Vehicle Brands'] === selectedVehicleBrand)
@@ -518,8 +455,9 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
             id: item.id,
             brand: item['Vehicle Brands']
           }))
-          .filter(item => item.name);
+          .filter(item => item.name); // Filter out empty models
 
+        // Remove duplicates based on model name but keep the id and brand
         const uniqueModels = modelsForBrand.filter((model, index, arr) =>
           arr.findIndex(m => m.name === model.name) === index
         );
@@ -567,26 +505,71 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
     }
   }, [selectedVehicleBrand, vehicleData, isEditing, wheelCategory, selectedModel]);
 
-  // Derive wheel category from selected brand/model if not set
+  // Recompute vehicle types/services for customer flow when wheel category changes
   useEffect(() => {
-    // Don't derive wheel category if we're applying edit data
-    if (isApplyingEditData) return;
+    if (entryType !== 'customer') return;
+    if (!wheelCategory || isApplyingEditData) {
+      // Require wheeler selection first
+      setVehicleTypes([]);
+      setServiceOptions([]);
+      if (!isEditing) {
+        setVehicleType('');
+        setService([]);
+      }
+      return;
+    }
 
-    try {
-      if (vehicleData.length > 0 && selectedVehicleBrand && selectedModel) {
-        const matching = vehicleData.find(item =>
-          item['Vehicle Brands'] === selectedVehicleBrand &&
-          item['Models'] === selectedModel
-        );
-        if (matching && (matching as any).type != null) {
-          const derived = mapTypeToWheelCategory(normalizeTypeString((matching as any).type));
-          if (derived) setWheelCategory(derived);
+    const filteredRows = priceMatrix.filter(row => {
+      // If no wheel category is selected, show all rows
+      if (!wheelCategory) return true;
+
+      // If the row doesn't have a type field, show it (fallback)
+      if (!(row as any).type) return true;
+
+      // Otherwise, apply the type filtering
+      return doesTypeMatchWheelCategory((row as any).type, wheelCategory);
+    });
+
+    console.log('🔍 Service filtering debug:', {
+      wheelCategory,
+      totalRows: priceMatrix.length,
+      filteredRows: filteredRows.length,
+      sampleRows: priceMatrix.slice(0, 3).map(row => ({
+        VEHICLE: row.VEHICLE,
+        SERVICE: row.SERVICE,
+        type: (row as any).type
+      })),
+      filteredSampleRows: filteredRows.slice(0, 3).map(row => ({
+        VEHICLE: row.VEHICLE,
+        SERVICE: row.SERVICE,
+        type: (row as any).type
+      }))
+    });
+
+    const uniqueVehicles = [...new Set(filteredRows.map(row => row.VEHICLE && row.VEHICLE.trim()).filter(Boolean))];
+    const uniqueServices = [...new Set(filteredRows.map(row => row.SERVICE && row.SERVICE.trim()).filter(Boolean))];
+    setVehicleTypes(uniqueVehicles);
+    setServiceOptions(uniqueServices);
+
+    // Only reset vehicle type and service if the current selections are no longer valid
+    // for the new wheel category and not applying edit data
+    if (!isEditing && !isApplyingEditData) {
+      // Check if current vehicle type is still valid for the new wheel category
+      if (vehicleType && !uniqueVehicles.includes(vehicleType)) {
+        setVehicleType('');
+        setService([]);
+      }
+      // Check if current services are still valid for the new wheel category
+      if (service.length > 0) {
+        const validServices = uniqueServices.filter(s => service.includes(s));
+        if (validServices.length !== service.length) {
+          setService(validServices);
         }
       }
-    } catch (e) {
-      console.warn('Failed to derive wheeler from vehicle data:', e);
+      // For other, amount will be manual; keep as is
+      if (wheelCategory !== 'other') setAmount('');
     }
-  }, [vehicleData.length, selectedVehicleBrand, selectedModel, isApplyingEditData]);
+  }, [entryType, priceMatrix, isEditing, wheelCategory, isApplyingEditData]);
 
   useEffect(() => {
     const fetchServicePrices = async () => {
@@ -598,6 +581,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
         const uniqueServices = [...new Set(data.map(row => row.SERVICE && row.SERVICE.trim()).filter(Boolean))];
         console.log('Unique vehicles:', uniqueVehicles);
         console.log('Unique services:', uniqueServices);
+        console.log('Available service options:', uniqueServices);
         setVehicleTypes(uniqueVehicles);
         setServiceOptions(uniqueServices);
         setPriceMatrix(data);
@@ -617,21 +601,130 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
     fetchWorkshopPrices();
   }, []);
 
+  // Apply edit data after all required data is loaded
+  useEffect(() => {
+    if (pendingEditData && priceMatrix.length > 0 && vehicleData.length > 0) {
+      const logData = pendingEditData;
+      console.log('Applying edit data after data loaded:', logData);
+
+      // Set flag to prevent race conditions
+      setIsApplyingEditData(true);
+
+      // Use setTimeout to ensure all data is properly loaded
+      setTimeout(() => {
+        // Pre-fill form fields with edit data
+        setVehicleNumber(logData.vehicleNumber || '');
+        setEntryType(logData.entryType || 'normal');
+        setDiscount(logData.discount || '');
+        setRemarks(logData.remarks || '');
+        // Payment mode from edit data or default to cash
+        setPaymentMode(logData.payment_mode || 'cash');
+        setSelectedUpiAccount(logData.upi_account_id || '');
+        setCustomerName(logData.customerName || '');
+        setPhoneNumber(logData.phoneNumber || '');
+        setDateOfBirth(logData.dateOfBirth || '');
+        setCustomerLocation(logData.customerLocation || '');
+        setWorkshop(logData.workshop || '');
+
+        // Handle custom entry date and time
+        if (logData.entry_time) {
+          const entryDateTime = new Date(logData.entry_time);
+          setCustomEntryDate(entryDateTime.toISOString().split('T')[0]);
+          setCustomEntryTime(entryDateTime.toTimeString().slice(0, 5));
+          setUseCustomDateTime(true);
+        } else {
+          // If no custom entry time, use current date/time
+          const now = new Date();
+          setCustomEntryDate(now.toISOString().split('T')[0]);
+          setCustomEntryTime(now.toTimeString().slice(0, 5));
+          setUseCustomDateTime(false);
+        }
+
+        // If incoming edit data contains wheel_type, apply it first
+        if (logData.wheel_type) {
+          const derivedFromLog = mapTypeToWheelCategory(normalizeTypeString(logData.wheel_type));
+          if (derivedFromLog) setWheelCategory(derivedFromLog);
+        }
+
+        // Derive wheeler from Vehicles_in_india type if possible
+        try {
+          const matching = vehicleData.find(item =>
+            item['Vehicle Brands'] === (logData.selectedVehicleBrand || '') &&
+            item['Models'] === (logData.selectedModel || '')
+          );
+          if (matching && (matching as any).type != null) {
+            const derived = mapTypeToWheelCategory(normalizeTypeString((matching as any).type));
+            if (derived) setWheelCategory(derived);
+          }
+        } catch (e) {
+          console.warn('Failed to derive wheeler from vehicle data:', e);
+        }
+
+        // Set vehicle type first, then service after it's processed
+        setTimeout(() => {
+          console.log('Setting vehicle type:', logData.vehicleType);
+          setVehicleType(logData.vehicleType || '');
+
+          // Set service and amount after vehicle type is processed
+          setTimeout(() => {
+            console.log('Setting service:', logData.service);
+            console.log('Setting amount:', logData.amount);
+            console.log('Available service options at this time:', serviceOptions);
+            setService(logData.service || []);
+            setAmount(logData.amount || '');
+          }, 200);
+        }, 100);
+
+        // Set brand and model selections after a delay to ensure wheel category and available options are populated
+        setTimeout(() => {
+          setSelectedVehicleBrand(logData.selectedVehicleBrand || '');
+          setSelectedModel(logData.selectedModel || '');
+          setSelectedModelId(logData.selectedModelId || '');
+
+          // Clear the flag after all data is applied
+          setIsApplyingEditData(false);
+        }, 300);
+
+        // Set edit mode
+        setIsEditing(true);
+        setEditLogId(logData.id);
+
+        // Clear pending edit data
+        setPendingEditData(null);
+
+        toast.success('Edit mode activated. Please review and update the entry.');
+      }, 200);
+    }
+  }, [pendingEditData, priceMatrix.length, vehicleData.length]);
+
+  // Debug useEffect to log vehicle type changes
+  useEffect(() => {
+    console.log('Vehicle type changed to:', vehicleType);
+    console.log('Service changed to:', service);
+  }, [vehicleType, service]);
+
+  // Timer effect to re-enable submit button after 5 seconds
+  useEffect(() => {
+    if (isSubmitDisabled) {
+      const timer = setTimeout(() => {
+        setIsSubmitDisabled(false);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [isSubmitDisabled]);
+
   // Reset and repopulate dropdowns when entryType changes
   useEffect(() => {
-    // Don't reset if we're applying edit data or in edit mode
-    if (isApplyingEditData || isEditing) {
-      console.log('Skipping entryType reset due to isApplyingEditData flag or edit mode');
-      return;
-    }
+    // Don't reset if we're in edit mode or applying edit data
+    if (isEditing || isApplyingEditData) return;
 
-    console.log('EntryType changed, resetting form fields');
     setWorkshop('');
     setVehicleType('');
     setService([]); // Reset service to empty array
     setAmount('');
 
     if (entryType === 'customer') {
+      // Wait for wheeler selection to populate lists
       if (wheelCategory) {
         const filteredRows = priceMatrix.filter(row => {
           // If no wheel category is selected, show all rows
@@ -643,23 +736,6 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
           // Otherwise, apply the type filtering
           return doesTypeMatchWheelCategory((row as any).type, wheelCategory);
         });
-
-        console.log('🔍 Service filtering debug (Manager):', {
-          wheelCategory,
-          totalRows: priceMatrix.length,
-          filteredRows: filteredRows.length,
-          sampleRows: priceMatrix.slice(0, 3).map(row => ({
-            VEHICLE: row.VEHICLE,
-            SERVICE: row.SERVICE,
-            type: (row as any).type
-          })),
-          filteredSampleRows: filteredRows.slice(0, 3).map(row => ({
-            VEHICLE: row.VEHICLE,
-            SERVICE: row.SERVICE,
-            type: (row as any).type
-          }))
-        });
-
         const uniqueVehicles = [...new Set(filteredRows.map(row => row.VEHICLE && row.VEHICLE.trim()).filter(Boolean))];
         const uniqueServices = [...new Set(filteredRows.map(row => row.SERVICE && row.SERVICE.trim()).filter(Boolean))];
         setVehicleTypes(uniqueVehicles);
@@ -672,59 +748,14 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
       setVehicleTypes([]);
       setServiceOptions([]);
     }
-  }, [entryType, priceMatrix, wheelCategory, isApplyingEditData, isEditing]);
-
-  // Recompute vehicle types/services for customer flow when wheel category changes
-  useEffect(() => {
-    if (entryType !== 'customer') return;
-    if (!wheelCategory) {
-      setVehicleTypes([]);
-      setServiceOptions([]);
-      if (!isEditing && !isApplyingEditData) {
-        console.log('Resetting vehicleType and service due to no wheelCategory (not editing, not applying edit data)');
-        setVehicleType('');
-        setService([]);
-      } else if (isApplyingEditData || isEditing) {
-        console.log('Skipping vehicleType and service reset due to isApplyingEditData flag or edit mode');
-      }
-      return;
-    }
-
-    const filteredRows = priceMatrix.filter(row => {
-      // If no wheel category is selected, show all rows
-      if (!wheelCategory) return true;
-
-      // If the row doesn't have a type field, show it (fallback)
-      if (!(row as any).type) return true;
-
-      // Otherwise, apply the type filtering
-      return doesTypeMatchWheelCategory((row as any).type, wheelCategory);
-    });
-    const uniqueVehicles = [...new Set(filteredRows.map(row => row.VEHICLE && row.VEHICLE.trim()).filter(Boolean))];
-    const uniqueServices = [...new Set(filteredRows.map(row => row.SERVICE && row.SERVICE.trim()).filter(Boolean))];
-    setVehicleTypes(uniqueVehicles);
-    setServiceOptions(uniqueServices);
-
-    if (!isEditing && !isApplyingEditData) {
-      console.log('Resetting vehicleType and service due to wheelCategory change (not editing, not applying edit data)');
-      setVehicleType('');
-      setService([]);
-      if (wheelCategory !== 'other') setAmount('');
-    } else if (isApplyingEditData || isEditing) {
-      console.log('Skipping vehicleType and service reset due to isApplyingEditData flag or edit mode');
-    }
-  }, [wheelCategory, priceMatrix, entryType, isEditing, isApplyingEditData]);
+  }, [entryType, priceMatrix, isEditing, wheelCategory, isApplyingEditData]);
 
   // When workshop changes, update vehicle types
   useEffect(() => {
-    // Don't reset if we're applying edit data or in edit mode
-    if (isApplyingEditData || isEditing) {
-      console.log('Skipping workshop reset due to isApplyingEditData flag or edit mode');
-      return;
-    }
+    // Don't reset if we're in edit mode or applying edit data
+    if (isEditing || isApplyingEditData) return;
 
     if (entryType === 'workshop' && workshop) {
-      console.log('Workshop changed, resetting vehicleType and service');
       const filtered = workshopPriceMatrix.filter(row => row.WORKSHOP === workshop);
       const uniqueVehicles = [...new Set(filtered.map(row => row.VEHICLE && row.VEHICLE.trim()).filter(Boolean))];
       setVehicleTypes(uniqueVehicles);
@@ -733,16 +764,10 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
       setAmount('');
       setServiceOptions([]);
     }
-  }, [workshop, entryType, workshopPriceMatrix, isApplyingEditData, isEditing]);
+  }, [workshop, entryType, workshopPriceMatrix, isEditing, isApplyingEditData]);
 
   // Calculate amount based on entry type and selections
   useEffect(() => {
-    // Don't calculate amount if we're applying edit data or in edit mode
-    if (isApplyingEditData || isEditing) {
-      console.log('🛡️ Amount calculation blocked: isApplyingEditData=', isApplyingEditData, 'isEditing=', isEditing);
-      return;
-    }
-
     // If category is Other, allow manual amount entry and skip auto-calculation
     if (wheelCategory === 'other') {
       return;
@@ -776,31 +801,54 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
     } else {
       setAmount('');
     }
-  }, [entryType, vehicleType, service, workshop, priceMatrix, workshopPriceMatrix, wheelCategory, isApplyingEditData, isEditing]);
+  }, [entryType, vehicleType, service, workshop, priceMatrix, workshopPriceMatrix, wheelCategory]);
 
-  // Timer effect to re-enable submit button after 5 seconds
+  // Fetch number of manual visits from logs-man for the typed vehicle number
   useEffect(() => {
-    if (isSubmitDisabled) {
-      const timer = setTimeout(() => {
-        setIsSubmitDisabled(false);
-      }, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [isSubmitDisabled]);
+    let cancelled = false;
+    const fetchVisits = async () => {
+      const plate = vehicleNumber.trim();
+      if (!plate || plate.length < 3) {
+        if (!cancelled) setVisitCount(0);
+        return;
+      }
+      try {
+        // Resolve vehicle_id; if found, count by vehicle_id, else fallback to vehicle_number
+        const { data: veh, error: vehErr } = await supabase
+          .from('vehicles')
+          .select('id')
+          .eq('number_plate', plate)
+          .maybeSingle();
+        if (vehErr && vehErr.code !== 'PGRST116') {
+          console.warn('Visit count vehicles lookup error:', vehErr);
+        }
 
-  // Debug effect to monitor vehicleType and service changes
-  useEffect(() => {
-    console.log('🔍 vehicleType changed to:', vehicleType, 'isApplyingEditData:', isApplyingEditData);
-  }, [vehicleType, isApplyingEditData]);
+        let manualCount = 0;
+        const base = supabase.from('logs-man').select('id', { count: 'exact', head: true });
+        const withLocation = selectedLocation && selectedLocation.trim() !== ''
+          ? (q: any) => q.eq('location_id', selectedLocation)
+          : (q: any) => q;
 
-  useEffect(() => {
-    console.log('🔍 service changed to:', service, 'isApplyingEditData:', isApplyingEditData);
-  }, [service, isApplyingEditData]);
+        if (veh?.id) {
+          const { count, error } = await withLocation(base)
+            .or(`vehicle_id.eq.${veh.id},vehicle_number.ilike.%${plate}%`);
+          if (!error) manualCount = count || 0; else console.warn('Manual visit count error (by id or ilike number):', error);
+        } else {
+          const { count, error } = await withLocation(base)
+            .ilike('vehicle_number', `%${plate}%`);
+          if (!error) manualCount = count || 0; else console.warn('Manual visit count error (by ilike number):', error);
+        }
 
-  // Debug effect to monitor isApplyingEditData flag changes
-  useEffect(() => {
-    console.log('🔍 isApplyingEditData flag changed to:', isApplyingEditData);
-  }, [isApplyingEditData]);
+        if (!cancelled) setVisitCount(manualCount);
+      } catch (e) {
+        console.warn('Visit count error:', e);
+        if (!cancelled) setVisitCount(0);
+      }
+    };
+
+    const t = setTimeout(fetchVisits, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [vehicleNumber]);
 
   // Auto-fill customer and vehicle brand/model details from most recent manual log
   useEffect(() => {
@@ -920,76 +968,8 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
     return () => { cancelled = true; clearTimeout(t); };
   }, [vehicleNumber, isEditing, vehicleData]);
 
-  // Fetch number of manual visits from logs-man for the typed vehicle number
-  useEffect(() => {
-    let cancelled = false;
-    const fetchVisits = async () => {
-      const plate = vehicleNumber.trim();
-      if (!plate || plate.length < 3) {
-        if (!cancelled) setVisitCount(0);
-        return;
-      }
-      try {
-        // Resolve vehicle_id; if found, count by vehicle_id, else fallback to vehicle_number
-        const { data: veh, error: vehErr } = await supabase
-          .from('vehicles')
-          .select('id')
-          .eq('number_plate', plate)
-          .maybeSingle();
-        if (vehErr && vehErr.code !== 'PGRST116') {
-          console.warn('Visit count vehicles lookup error (manager):', vehErr);
-        }
-
-        let manualCount = 0;
-        const base = supabase.from('logs-man').select('id', { count: 'exact', head: true });
-        const withLocation = selectedLocation && selectedLocation.trim() !== ''
-          ? (q: any) => q.eq('location_id', selectedLocation)
-          : (q: any) => q;
-
-        if (veh?.id) {
-          const { count, error } = await withLocation(base)
-            .or(`vehicle_id.eq.${veh.id},vehicle_number.ilike.%${plate}%`);
-          if (!error) manualCount = count || 0; else console.warn('Manual visit count error (manager by id or ilike number):', error);
-        } else {
-          const { count, error } = await withLocation(base)
-            .ilike('vehicle_number', `%${plate}%`);
-          if (!error) manualCount = count || 0; else console.warn('Manual visit count error (manager by ilike number):', error);
-        }
-
-        if (!cancelled) setVisitCount(manualCount);
-      } catch (e) {
-        console.warn('Visit count (manager) error:', e);
-        if (!cancelled) setVisitCount(0);
-      }
-    };
-
-    const t = setTimeout(fetchVisits, 300);
-    return () => { cancelled = true; clearTimeout(t); };
-  }, [vehicleNumber]);
-
-  // Reset UPI account selection when payment mode changes
-  useEffect(() => {
-    if (paymentMode !== 'upi') {
-      setSelectedUpiAccount('');
-    }
-  }, [paymentMode]);
-
-  // Reset UPI account selection when selectedLocation changes
-  useEffect(() => {
-    if (selectedLocation) {
-      setSelectedUpiAccount('');
-      console.log('📍 Location changed, resetting UPI account selection');
-    }
-  }, [selectedLocation]);
-
   const handleVehicleNumberChange = (value: string) => {
-    const upperValue = value.toUpperCase();
-    setVehicleNumber(upperValue);
-
-    // Clear the edit vehicle number tracker when user manually changes the vehicle number
-    if (editVehicleNumber && upperValue !== editVehicleNumber) {
-      setEditVehicleNumber(null);
-    }
+    setVehicleNumber(value.toUpperCase());
   };
 
   // Handle service change for multi-select
@@ -1081,7 +1061,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
       // 2. Get public URL
       // const { data: publicUrlData } = supabase.storage.from('man-images').getPublicUrl(fileName);
       // const imageUrl = publicUrlData?.publicUrl;
-      const imageUrl = null; // Set to null since scratch marking is commented out
+      const imageUrl = null; // Temporarily set to null since scratch marking is disabled
       // Calculate final amount
       const priceNum = parseFloat(amount) || 0;
       const discountNum = discount === '' ? 0 : parseFloat(discount) || 0;
@@ -1109,7 +1089,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
       const approvalStatus = useCustomDateTime ? 'approved' : 'pending';
 
       if (useCustomDateTime) {
-        console.log('Custom DateTime Debug (Manager):', {
+        console.log('Custom DateTime Debug:', {
           userSelectedDate: customEntryDate,
           userSelectedTime: customEntryTime,
           combinedString: `${customEntryDate}T${customEntryTime}:00`,
@@ -1122,21 +1102,21 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
 
       // 3. Insert or update logs-man based on edit mode
       if (isEditing && editLogId) {
-        // Find the selected UPI account details
-        const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
-
-        // Update existing log entry
+        // Update existing log
         const { error: updateError } = await supabase
           .from('logs-man')
           .update({
             vehicle_id: vehicleId,
             vehicle_number: vehicleNumber,
+            location_id: selectedLocation,
             entry_type: entryType,
             image_url: imageUrl,
             Amount: finalAmount,
             discount: discountNum,
             remarks: remarks,
+            // Payment mode and UPI account information
             payment_mode: paymentMode,
+            upi_account_id: paymentMode === 'upi' ? selectedUpiAccount : null,
             service: service.join(','), // Store as comma-separated string
             vehicle_type: vehicleType,
             workshop: entryType === 'workshop' ? workshop : null,
@@ -1157,22 +1137,17 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
             ...createdAtData,
             // Custom exit time and approval data if specified
             ...exitTimeData,
-            // UPI account information if UPI is selected
-            ...(paymentMode === 'upi' && selectedAccount ? {
-              upi_account_id: selectedUpiAccount,
-              upi_account_name: selectedAccount.account_name,
-              upi_id: selectedAccount.upi_id,
-            } : {}),
           })
           .eq('id', editLogId);
 
         if (updateError) throw updateError;
         toast.success('Entry updated successfully!');
-      } else {
-        // Insert new log entry
-        // Find the selected UPI account details
-        const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
 
+        // Reset edit mode
+        setIsEditing(false);
+        setEditLogId(null);
+      } else {
+        // Insert new log
         const { error: insertError } = await supabase.from('logs-man').insert([
           {
             vehicle_id: vehicleId,
@@ -1184,7 +1159,9 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
             Amount: finalAmount,
             discount: discountNum,
             remarks: remarks,
+            // Payment mode and UPI account information
             payment_mode: paymentMode,
+            upi_account_id: paymentMode === 'upi' ? selectedUpiAccount : null,
             service: service.join(','), // Store as comma-separated string
             vehicle_type: vehicleType,
             workshop: entryType === 'workshop' ? workshop : null,
@@ -1202,23 +1179,17 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
             ...createdAtData,
             // Custom entry time if specified
             ...entryTimeData,
-            // Custom exit time and approval data if specified
-            ...exitTimeData,
             // Approval status - if custom date is used, go directly to approved
             approval_status: approvalStatus,
-            // UPI account information if UPI is selected
-            ...(paymentMode === 'upi' && selectedAccount ? {
-              upi_account_id: selectedUpiAccount,
-              upi_account_name: selectedAccount.account_name,
-              upi_id: selectedAccount.upi_id,
-            } : {}),
+            // Custom exit time and approval data if specified
+            ...exitTimeData,
           },
         ]);
         if (insertError) throw insertError;
 
         const statusMessage = useCustomDateTime
-          ? 'Manager entry submitted successfully! Ticket is now closed.'
-          : 'Manager entry submitted successfully!';
+          ? 'Worker entry submitted successfully! Ticket is now closed.'
+          : 'Worker entry submitted successfully!';
         toast.success(statusMessage);
 
         // No persistent counter increment; count is derived from logs-man only
@@ -1291,7 +1262,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
       // Use the utility function to get or create vehicle ID
       const vehicleId = await getOrCreateVehicleId(vehicleNumber, vehicleType);
 
-      const imageUrl = null; // Set to null since scratch marking is commented out
+      const imageUrl = null; // Temporarily set to null since scratch marking is disabled
 
       // Calculate final amount
       const priceNum = parseFloat(amount) || 0;
@@ -1300,9 +1271,6 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
 
       // For checkout, we directly set the ticket as approved and closed
       const currentTime = new Date().toISOString();
-
-      // Find the selected UPI account details
-      const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
 
       // Insert new log entry directly as approved
       const { error: insertError } = await supabase.from('logs-man').insert([
@@ -1316,7 +1284,9 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
           Amount: finalAmount,
           discount: discountNum,
           remarks: remarks,
+          // Payment mode and UPI account information
           payment_mode: paymentMode,
+          upi_account_id: paymentMode === 'upi' ? selectedUpiAccount : null,
           service: service.join(','), // Store as comma-separated string
           vehicle_type: vehicleType,
           workshop: entryType === 'workshop' ? workshop : null,
@@ -1338,12 +1308,6 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
           approved_at: currentTime,
           // Set payment date to current time
           payment_date: currentTime,
-          // UPI account information if UPI is selected
-          ...(paymentMode === 'upi' && selectedAccount ? {
-            upi_account_id: selectedUpiAccount,
-            upi_account_name: selectedAccount.account_name,
-            upi_id: selectedAccount.upi_id,
-          } : {}),
         },
       ]);
 
@@ -1351,30 +1315,28 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
 
       toast.success('Entry checked out successfully! Ticket is now closed.');
 
-      // Reset form only if not in edit mode
-      if (!isEditing) {
-        setVehicleNumber('');
-        setVehicleType('');
-        setService([]); // Reset service to empty array
-        setAmount('500');
-        setDiscount('');
-        setRemarks('');
-        // Reset payment mode and UPI account selection
-        setPaymentMode('cash');
-        setSelectedUpiAccount('');
-        // setScratchImage(null);
-        setCustomerName('');
-        setPhoneNumber('');
-        setDateOfBirth('');
-        setCustomerLocation('');
-        setSelectedVehicleBrand('');
-        setSelectedModel('');
-        setSelectedModelId('');
-        // Reset custom datetime
-        setUseCustomDateTime(false);
-        setCustomEntryDate(new Date().toISOString().split('T')[0]);
-        setCustomEntryTime(new Date().toTimeString().slice(0, 5));
-      }
+      // Reset form
+      setVehicleNumber('');
+      setVehicleType('');
+      setService([]); // Reset service to empty array
+      setAmount('500');
+      setDiscount('');
+      setRemarks('');
+      // Reset payment mode and UPI account selection
+      setPaymentMode('cash');
+      setSelectedUpiAccount('');
+      setCustomerName('');
+      setPhoneNumber('');
+      setDateOfBirth('');
+      setCustomerLocation('');
+      setSelectedVehicleBrand('');
+      setSelectedModel('');
+      setSelectedModelId('');
+      setWheelCategory('4 Wheeler');
+      setWorkshop('');
+      setUseCustomDateTime(false);
+      setCustomEntryDate(new Date().toISOString().split('T')[0]);
+      setCustomEntryTime(new Date().toTimeString().slice(0, 5));
 
     } catch (error) {
       console.error('Error checking out entry:', error);
@@ -1382,7 +1344,10 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
     } finally {
       setIsSubmitDisabled(false);
     }
+
+
   };
+
 
   return (
     <div className="flex-1 p-4 lg:p-6 space-y-4 lg:space-y-6">
@@ -1395,10 +1360,11 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
             </h1>
           </div>
           <Badge variant="outline" className="bg-primary/10 text-primary border-primary">
-            {isEditing ? 'Edit Mode' : 'Manager Access'}
+            {isEditing ? 'Edit Mode' : 'Worker Access'}
           </Badge>
         </div>
       </div>
+
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {/* Entry Form */}
@@ -1406,6 +1372,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
           <CardHeader>
             <CardTitle>Vehicle Entry Details</CardTitle>
           </CardHeader>
+
           <CardContent className="space-y-4">
             {/* Entry Type + Entry Date */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1560,6 +1527,12 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
               </div>
             </div>
 
+
+
+
+
+
+
             {/* Vehicle Number - Separate section below */}
             <div className="space-y-2">
               <Label htmlFor="vehicleNumber" className="text-base font-medium">Vehicle Number</Label>
@@ -1586,6 +1559,9 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                 </div>
               )}
             </div>
+
+
+
 
 
             {/* Vehicle Brand and Model */}
@@ -1639,6 +1615,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
               </div>
             </div>
 
+
             {/* Category */}
             <div className="space-y-2">
               <Label htmlFor="wheelCategory">Category</Label>
@@ -1653,6 +1630,12 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                 </SelectContent>
               </Select>
             </div>
+
+
+
+
+
+
 
             {/* Service Selection */}
             {entryType === 'customer' && (
@@ -1777,6 +1760,8 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                 </div>
               </div>
             )}
+
+
 
             {/* Amount and Payment */}
             <div className="space-y-4 p-4 border rounded-lg bg-muted/20">

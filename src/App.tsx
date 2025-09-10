@@ -37,6 +37,7 @@ import ManagerReports from "./pages/ManagerReports";
 import ManagerPriceSettings from "./pages/ManagerPriceSettings";
 import ManagerVehicleHistory from "./pages/ManagerVehicleHistory";
 import ManagerOwnerEntry from "./pages/ManagerOwnerEntry";
+import WorkerManualEntry from "./pages/WorkerManualEntry";
 import LocationPartnershipsPage from "./pages/LocationPartnershipsPage";
 
 import NotFound from "./pages/NotFound";
@@ -142,6 +143,28 @@ const App = () => (
                   <ProtectedRoute requiredRole="manager">
                     <Layout>
                       <ManagerOwnerEntry />
+                    </Layout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              {/* Worker routes */}
+              <Route 
+                path="/worker-portal" 
+                element={
+                  <ProtectedRoute requiredRole="worker">
+                    <Layout>
+                      <WorkerManualEntry />
+                    </Layout>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/worker-manual-entry" 
+                element={
+                  <ProtectedRoute requiredRole="worker">
+                    <Layout>
+                      <WorkerManualEntry />
                     </Layout>
                   </ProtectedRoute>
                 } 

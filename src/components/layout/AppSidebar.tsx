@@ -32,6 +32,7 @@ export function AppSidebar() {
   const { setOpenMobile } = useSidebar();
 
   const isManager = user?.role === 'manager';
+  const isWorker = user?.role === 'worker';
 
   const isActive = (path: string) => currentPath === path;
 
@@ -44,7 +45,11 @@ export function AppSidebar() {
     setOpenMobile(false);
   };
 
-  const navigationItems = isManager
+  const navigationItems = isWorker
+    ? [
+        { title: "Manual Entry", url: "/worker-manual-entry", icon: Car },
+      ]
+    : isManager
     ? [
         { title: "Dashboard", url: "/dashboard", icon: Home },
         { title: "Manual Entry", url: "/manager-owner-entry", icon: Car },
