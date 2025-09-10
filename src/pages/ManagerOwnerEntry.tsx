@@ -322,15 +322,29 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
         // Handle custom entry date and time
         if (logData.entry_time) {
           const entryDateTime = new Date(logData.entry_time);
-          setCustomEntryDate(entryDateTime.toISOString().split('T')[0]);
+          const entryDateYMD = entryDateTime.toISOString().split('T')[0];
+          setCustomEntryDate(entryDateYMD);
           setCustomEntryTime(entryDateTime.toTimeString().slice(0, 5));
           setUseCustomDateTime(true);
+          
+          // Determine the correct date option based on the entry date
+          const todayStr = todayYMD();
+          const yesterdayStr = yesterdayYMD();
+          
+          if (entryDateYMD === todayStr) {
+            setSelectedDateOption('today');
+          } else if (entryDateYMD === yesterdayStr) {
+            setSelectedDateOption('yesterday');
+          } else {
+            setSelectedDateOption('custom');
+          }
         } else {
           // If no custom entry time, use current date/time
           const now = new Date();
           setCustomEntryDate(now.toISOString().split('T')[0]);
           setCustomEntryTime(now.toTimeString().slice(0, 5));
           setUseCustomDateTime(false);
+          setSelectedDateOption('today');
         }
 
         // Set edit mode
