@@ -312,7 +312,11 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
         setEntryType(logData.entryType || 'customer');
         setDiscount(logData.discount || '');
         setRemarks(logData.remarks || '');
-        setPaymentMode(logData.paymentMode || 'cash');
+        // Payment mode from edit data or default to cash
+        const paymentModeValue = logData.payment_mode || logData.paymentMode || 'cash';
+        const validPaymentModes = ['cash', 'upi', 'credit'];
+        const normalizedPaymentMode = validPaymentModes.includes(paymentModeValue) ? paymentModeValue : 'cash';
+        setPaymentMode(normalizedPaymentMode);
         setCustomerName(logData.customerName || '');
         setPhoneNumber(logData.phoneNumber || '');
         setDateOfBirth(logData.dateOfBirth || '');

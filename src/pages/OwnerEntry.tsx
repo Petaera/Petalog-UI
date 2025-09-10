@@ -639,7 +639,10 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         setDiscount(logData.discount || '');
         setRemarks(logData.remarks || '');
         // Payment mode from edit data or default to cash
-        setPaymentMode(logData.payment_mode || 'cash');
+        const paymentModeValue = logData.payment_mode || logData.paymentMode || 'cash';
+        const validPaymentModes = ['cash', 'upi', 'credit'];
+        const normalizedPaymentMode = validPaymentModes.includes(paymentModeValue) ? paymentModeValue : 'cash';
+        setPaymentMode(normalizedPaymentMode);
         setSelectedUpiAccount(logData.upi_account_id || '');
         setCustomerName(logData.customerName || '');
         setPhoneNumber(logData.phoneNumber || '');
