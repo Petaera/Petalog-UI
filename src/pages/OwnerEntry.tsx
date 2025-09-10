@@ -170,6 +170,27 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
     }
   };
 
+  // Update customEntryDate when selectedDateOption changes
+  useEffect(() => {
+    switch (selectedDateOption) {
+      case 'today':
+        setCustomEntryDate(todayYMD());
+        setUseCustomDateTime(false);
+        break;
+      case 'yesterday':
+        setCustomEntryDate(yesterdayYMD());
+        setUseCustomDateTime(true);
+        break;
+      case 'custom':
+        // Keep current customEntryDate as is
+        setUseCustomDateTime(true);
+        break;
+      default:
+        setCustomEntryDate(todayYMD());
+        setUseCustomDateTime(false);
+    }
+  }, [selectedDateOption]);
+
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [vehicleTypes, setVehicleTypes] = useState<string[]>([]);
   const [serviceOptions, setServiceOptions] = useState<string[]>([]);
@@ -1455,19 +1476,49 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
 
                       {isDateDropdownOpen && (
                         <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-background border rounded-md shadow-lg">
-                          <div className="p-3">
-                            <Label className="text-xs text-muted-foreground mb-2 block">Custom Date</Label>
-                            <Input
-                              type="date"
-                              value={customEntryDate}
-                              onChange={(e) => {
-                                setCustomEntryDate(e.target.value);
-                                setSelectedDateOption('custom');
-                                setIsDateDropdownOpen(false);
-                              }}
-                              max={todayYMD()}
-                              className="w-full text-sm"
-                            />
+                          <div className="p-3 space-y-3">
+                            {/* Quick Date Options */}
+                            <div className="space-y-2">
+                              <Label className="text-xs text-muted-foreground">Quick Select</Label>
+                              <div className="grid grid-cols-2 gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedDateOption('today');
+                                    setIsDateDropdownOpen(false);
+                                  }}
+                                  className="px-3 py-2 text-sm border rounded-md hover:bg-muted/50 transition-colors"
+                                >
+                                  Today
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedDateOption('yesterday');
+                                    setIsDateDropdownOpen(false);
+                                  }}
+                                  className="px-3 py-2 text-sm border rounded-md hover:bg-muted/50 transition-colors"
+                                >
+                                  Yesterday
+                                </button>
+                              </div>
+                            </div>
+                            
+                            {/* Custom Date Input */}
+                            <div className="space-y-2">
+                              <Label className="text-xs text-muted-foreground">Custom Date</Label>
+                              <Input
+                                type="date"
+                                value={customEntryDate}
+                                onChange={(e) => {
+                                  setCustomEntryDate(e.target.value);
+                                  setSelectedDateOption('custom');
+                                  setIsDateDropdownOpen(false);
+                                }}
+                                max={todayYMD()}
+                                className="w-full text-sm"
+                              />
+                            </div>
                           </div>
                         </div>
                       )}
