@@ -1,0 +1,416 @@
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
+
+Expense Schema:
+
+CREATE TABLE expenses.expense_categories (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  branch_id uuid NOT NULL,
+  name text NOT NULL,
+  description text,
+  CONSTRAINT expense_categories_pkey PRIMARY KEY (id),
+  CONSTRAINT expense_categories_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.locations(id)
+);
+CREATE TABLE expenses.expenses (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  branch_id uuid NOT NULL,
+  date date NOT NULL,
+  month character,
+  amount numeric NOT NULL,
+  payment_mode text CHECK (payment_mode = ANY (ARRAY['Cash'::text, 'UPI'::text])),
+  category_id uuid NOT NULL,
+  notes text,
+  is_monthly boolean DEFAULT false,
+  monthly_allocation_days integer,
+  created_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT expenses_pkey PRIMARY KEY (id),
+  CONSTRAINT expenses_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id),
+  CONSTRAINT expenses_category_id_fkey FOREIGN KEY (category_id) REFERENCES expenses.expense_categories(id),
+  CONSTRAINT expenses_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.locations(id)
+);
+
+Payroll_schema:
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
+
+CREATE TABLE payroll.activity_logs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  branch_id uuid NOT NULL,
+  kind text CHECK (kind = ANY (ARRAY['Advance'::text, 'Expense'::text, 'SalaryPayment'::text])),
+  ref_table text,
+  ref_id uuid,
+  date timestamp with time zone NOT NULL DEFAULT now(),
+  description text,
+  amount numeric,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT activity_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT activity_logs_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.locations(id)
+);
+CREATE TABLE payroll.advances (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  staff_id uuid NOT NULL,
+  date date NOT NULL,
+  month character,
+  amount numeric NOT NULL,
+  payment_mode text CHECK (payment_mode = ANY (ARRAY['Cash'::text, 'UPI'::text])),
+  notes text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT advances_pkey PRIMARY KEY (id),
+  CONSTRAINT advances_staff_id_fkey FOREIGN KEY (staff_id) REFERENCES payroll.staff(id)
+);
+CREATE TABLE payroll.attendance (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  staff_id uuid NOT NULL,
+  date date NOT NULL,
+  status text NOT NULL CHECK (status = ANY (ARRAY['Present'::text, 'Absent'::text, 'Paid Leave'::text, 'Unpaid Leave'::text])),
+  notes text,
+  CONSTRAINT attendance_pkey PRIMARY KEY (id),
+  CONSTRAINT attendance_staff_id_fkey FOREIGN KEY (staff_id) REFERENCES payroll.staff(id)
+);
+CREATE TABLE payroll.payroll_lines (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  period_id uuid NOT NULL,
+  staff_id uuid NOT NULL,
+  base_salary numeric,
+  present_days integer DEFAULT 0,
+  paid_leaves integer DEFAULT 0,
+  unpaid_leaves integer DEFAULT 0,
+  advances_total numeric DEFAULT 0,
+  net_payable numeric,
+  payment_status text DEFAULT 'pending'::text CHECK (payment_status = ANY (ARRAY['pending'::text, 'paid'::text])),
+  paid_via text CHECK (paid_via = ANY (ARRAY['Cash'::text, 'UPI'::text])),
+  paid_at timestamp with time zone,
+  payment_ref text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT payroll_lines_pkey PRIMARY KEY (id),
+  CONSTRAINT payroll_lines_period_id_fkey FOREIGN KEY (period_id) REFERENCES payroll.payroll_periods(id),
+  CONSTRAINT payroll_lines_staff_id_fkey FOREIGN KEY (staff_id) REFERENCES payroll.staff(id)
+);
+CREATE TABLE payroll.payroll_periods (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  branch_id uuid NOT NULL,
+  month character NOT NULL,
+  calc_method text CHECK (calc_method = ANY (ARRAY['30-day'::text, 'calendar'::text])),
+  closed_at timestamp with time zone,
+  created_by uuid,
+  CONSTRAINT payroll_periods_pkey PRIMARY KEY (id),
+  CONSTRAINT payroll_periods_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.locations(id),
+  CONSTRAINT payroll_periods_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
+);
+CREATE TABLE payroll.settings (
+  branch_id uuid NOT NULL,
+  salary_calc_method text CHECK (salary_calc_method = ANY (ARRAY['30-day'::text, 'calendar'::text])),
+  currency text DEFAULT 'INR'::text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT settings_pkey PRIMARY KEY (branch_id),
+  CONSTRAINT settings_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.locations(id)
+);
+CREATE TABLE payroll.staff (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  branch_id uuid NOT NULL,
+  name text NOT NULL,
+  role_title text,
+  contact text,
+  date_of_joining date NOT NULL,
+  monthly_salary numeric NOT NULL,
+  default_payment_mode text CHECK (default_payment_mode = ANY (ARRAY['Cash'::text, 'UPI'::text])),
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT staff_pkey PRIMARY KEY (id),
+  CONSTRAINT staff_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.locations(id)
+);
+CREATE TABLE payroll.staff_leave_periods (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  staff_id uuid NOT NULL,
+  start_date date NOT NULL,
+  end_date date NOT NULL,
+  leave_type text CHECK (leave_type = ANY (ARRAY['Paid'::text, 'Unpaid'::text])),
+  notes text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT staff_leave_periods_pkey PRIMARY KEY (id),
+  CONSTRAINT staff_leave_periods_staff_id_fkey FOREIGN KEY (staff_id) REFERENCES payroll.staff(id)
+);
+
+Branch,revenue,recent activity&staff attendance View:
+create or replace view payroll.v_recent_activity as
+select a.created_at as date,
+       'Advance' as kind,
+       a.notes as description,
+       a.amount,
+       s.branch_id,
+       a.id as ref_id
+from payroll.advances a
+join payroll.staff s on s.id = a.staff_id
+
+union all
+
+select e.created_at,
+       'Expense',
+       e.notes,
+       e.amount,
+       e.branch_id,
+       e.id
+from expenses.expenses e;
+
+Monthly staff advance summary:
+create or replace view payroll.v_staff_monthly_attendance as
+select a.staff_id,
+       to_char(a.date, 'YYYY-MM') as month,
+       count(*) filter (where a.status = 'Present') as present_days,
+       count(*) filter (where a.status = 'Absent') as absent_days,
+       count(*) filter (where a.status = 'Paid Leave') as paid_leaves,
+       count(*) filter (where a.status = 'Unpaid Leave') as unpaid_leaves
+from payroll.attendance a
+group by a.staff_id, to_char(a.date, 'YYYY-MM');
+
+Monthly Branch Revenue View:
+-- Make sure schema "integration" exists
+create schema if not exists integration;
+
+-- Create or replace the view using the quoted table and column names
+create or replace view integration.v_branch_revenue_monthly as
+select l.id as branch_id,
+       to_char(lm."entry_time", 'YYYY-MM') as month,
+       sum(lm."Amount") as total_revenue
+from public."logs-man" lm
+join public.locations l on l.id = lm."location_id"
+group by l.id, to_char(lm."entry_time", 'YYYY-MM');
+
+📚 Database Structure & Usage Guide
+1. Schema: public
+
+This is your core operational data layer.
+It stores parking logs, locations, vehicles, users, and transactional data directly tied to PetaLog.
+
+🔹 Table: public."logs-man"
+
+Purpose: Stores every vehicle entry/exit log at parking/branches.
+
+Key Fields:
+
+id → Primary key
+
+vehicle_id → Link to vehicles
+
+location_id → Which branch/location
+
+entry_time, exit_time → Timestamps for session
+
+duration → Auto-calculated stay time
+
+"Amount" → Parking fee / charge collected
+
+discount, payment_mode, payment_date → Payment details
+
+remarks, service, vehicle_type, workshop → Metadata
+
+"Name", "Phone_no", "D.O.B" → Customer info (optional)
+
+"Total" → Final billed amount after discount
+
+Usage:
+
+Backend: When vehicles enter/exit.
+
+Frontend (owner app): Revenue reports, customer history, invoices.
+
+integration.v_branch_revenue_monthly depends on this.
+
+🔹 Table: public.locations
+
+Purpose: Stores branch/parking location details.
+
+Key Fields:
+
+id → Primary key
+
+name, address → Branch details
+
+own_id → User/owner who owns this branch
+
+Usage:
+
+Backend: Link logs-man.location_id to branch.
+
+Frontend: Show branch names, reports by branch.
+
+2. Schema: payroll
+
+This is your staff/payroll management layer.
+
+🔹 Table: payroll.staff
+
+Purpose: Stores staff details assigned to branches.
+
+Key Fields:
+
+id → Primary key
+
+name, phone, role → Staff profile
+
+branch_id → Which branch they work at
+
+Usage:
+
+Backend: Staff allocation, attendance, salary.
+
+Frontend (staff dashboard): Profiles, role assignment.
+
+🔹 Table: payroll.attendance
+
+Purpose: Daily attendance logs for staff.
+
+Key Fields:
+
+staff_id → Link to staff
+
+date → Attendance date
+
+status → Present / Absent / Paid Leave / Unpaid Leave
+
+Usage:
+
+Backend: Salary calculation.
+
+Frontend: Attendance view, monthly reports.
+
+payroll.v_staff_monthly_attendance view depends on this.
+
+🔹 Table: payroll.advances
+
+Purpose: Logs advance payments given to staff (salary advances).
+
+Key Fields:
+
+id → Primary key
+
+staff_id → Which staff received advance
+
+amount → Advance amount
+
+created_at → Payment date
+
+notes → Reason/note
+
+Usage:
+
+Backend: Salary adjustment.
+
+Frontend: Advance payment records, logs in staff profile.
+
+payroll.v_recent_activity view depends on this.
+
+3. Schema: expenses
+
+This is your expense management layer.
+
+🔹 Table: expenses.expenses
+
+Purpose: Logs all branch/owner expenses.
+
+Key Fields:
+
+id → Primary key
+
+branch_id → Which branch the expense belongs to
+
+amount → Expense cost
+
+created_at → Date
+
+notes → Expense description (ex: repair, electricity)
+
+Usage:
+
+Backend: Monthly expense deduction.
+
+Frontend: Expense history, financial reports.
+
+payroll.v_recent_activity view depends on this.
+
+4. Schema: integration
+
+This is your analytics & reporting layer (views only).
+It connects raw data (logs, payroll, expenses) into frontend-friendly datasets.
+
+🔹 View: integration.v_branch_revenue_monthly
+
+Purpose: Summarizes monthly revenue per branch.
+
+Fields:
+
+branch_id
+
+month (YYYY-MM)
+
+total_revenue (sum of "Amount")
+
+Usage:
+
+Frontend: Branch-wise revenue charts (monthly).
+
+Dashboard: Owner reports.
+
+🔹 View: payroll.v_recent_activity
+
+Purpose: Unified activity log combining staff advances + branch expenses.
+
+Fields:
+
+date → created_at
+
+kind → "Advance" or "Expense"
+
+description → notes
+
+amount
+
+branch_id
+
+ref_id → Reference to advance/expense record
+
+Usage:
+
+Frontend: Recent activity widgets (top 5 events).
+
+Dashboard: Combined cash flow log.
+
+🔹 View: payroll.v_staff_monthly_attendance
+
+Purpose: Aggregates staff attendance by month.
+
+Fields:
+
+staff_id
+
+month
+
+present_days
+
+absent_days
+
+paid_leaves
+
+unpaid_leaves
+
+Usage:
+
+Frontend: Staff payroll calculation.
+
+Dashboard: Attendance summary graphs.
+
+⚡ Data Flow Summary
+
+Raw layer → public."logs-man", payroll.staff, payroll.attendance, payroll.advances, expenses.expenses.
+
+Integration layer (views) → Pre-joins & aggregates for easy frontend queries.
+
+Frontend usage:
+
+Owners → Revenue, expenses, activity logs, staff management.
+
+Staff → Attendance, salary, advances.
+
+System → Reports, analytics, dashboards.

@@ -40,10 +40,23 @@ const Sidebar: React.FC = () => {
 
   return (
     <>
+      {/* Mobile top bar with hamburger (avoids overlaying content) */}
+      <div className="fixed top-0 left-0 right-0 h-12 z-40 bg-primary text-primary-foreground flex items-center px-3 lg:hidden">
+        <button
+          onClick={toggleSidebar}
+          className="p-2 rounded-md hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-white/40"
+          aria-label="Open menu"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+      </div>
+      {/* Spacer to prevent content being hidden under the fixed top bar */}
+      <div className="h-12 lg:hidden" />
+
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          className="fixed inset-0 bg-black/40 z-40 lg:hidden"
           onClick={toggleSidebar}
         />
       )}
@@ -54,7 +67,7 @@ const Sidebar: React.FC = () => {
           fixed left-0 top-0 h-full bg-card border-r border-border z-50 
           transform transition-transform duration-300 ease-in-out
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-          ${sidebarOpen ? 'w-64' : 'lg:w-16'}
+          ${sidebarOpen ? 'w-64' : 'lg:w-64'}
           lg:translate-x-0
         `}
       >
@@ -137,13 +150,7 @@ const Sidebar: React.FC = () => {
         </div>
       </div>
 
-      {/* Mobile menu button */}
-      <button
-        onClick={toggleSidebar}
-        className="fixed top-4 left-4 z-50 p-2 bg-primary text-primary-foreground rounded-lg shadow-lg lg:hidden"
-      >
-        <Menu className="h-5 w-5" />
-      </button>
+      {/* Floating button removed in favor of top bar */}
     </>
   );
 };

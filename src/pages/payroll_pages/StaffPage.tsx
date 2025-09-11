@@ -19,7 +19,11 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
+import { useUpiAccounts } from '@/hooks/useUpiAccounts';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
 interface Staff {
   id: string;
@@ -29,6 +33,7 @@ interface Staff {
   monthlySalary: number;
   payableSalary: number;
   totalAdvances: number;
+  salaryPaid?: number;
   presentDays: number;
   absences: number;
   paidLeaves: number;
@@ -44,18 +49,343 @@ const StaffPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('');
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Add Staff form state
+  const [name, setName] = useState('');
+  const [roleTitle, setRoleTitle] = useState('');
+  const [contact, setContact] = useState('');
+  const [dateOfJoining, setDateOfJoining] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [monthlySalary, setMonthlySalary] = useState<string>('');
+  const [paymentMode, setPaymentMode] = useState<'Cash' | 'UPI' | ''>('');
+  const [selectedUpiAccountId, setSelectedUpiAccountId] = useState<string>('');
+  const [selectedLocationId, setSelectedLocationId] = useState<string>('');
+  // Payments state
+  const [showPaymentPanel, setShowPaymentPanel] = useState(false);
+  const [paymentStaffId, setPaymentStaffId] = useState<string>('');
+  const [paymentType, setPaymentType] = useState<'Advance' | 'Salary'>('Advance');
+  const [paymentAmount, setPaymentAmount] = useState<string>('');
+  const [paymentModeSel, setPaymentModeSel] = useState<'Cash' | 'UPI' | ''>('');
+  const [paymentNotes, setPaymentNotes] = useState<string>('');
+  const [savingPayment, setSavingPayment] = useState(false);
+  const [activities, setActivities] = useState<{ id: string; date: string; kind: 'Advance' | 'SalaryPayment'; description: string | null; amount: number; staffId?: string; staffName?: string }[]>([]);
+  const [activitiesPage, setActivitiesPage] = useState(0);
+  const [activitiesPageSize] = useState(10);
+  const [activitiesHasNext, setActivitiesHasNext] = useState(false);
+  const [activitiesLoading, setActivitiesLoading] = useState(false);
+
+  // Derive selected location for UPI hook
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      const stored = localStorage.getItem(`selectedLocation_${user.id}`);
+      setSelectedLocationId(stored || '');
+    } catch (_) {}
+  }, [user?.id]);
+
+  const { accounts: upiAccounts } = useUpiAccounts(selectedLocationId);
+  const [editMemberId, setEditMemberId] = useState<string | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const [useCustomRole, setUseCustomRole] = useState(false);
+
+  const getCurrentMonth = () => new Date().toISOString().slice(0, 7); // YYYY-MM
+  const getMonthEndDate = (yyyyMm: string) => {
+    const [yStr, mStr] = yyyyMm.split('-');
+    const y = Number(yStr);
+    const m = Number(mStr);
+    const lastDay = new Date(y, m, 0).getDate();
+    return `${yyyyMm}-${String(lastDay).padStart(2, '0')}`;
+  };
+
+  const mergeMonthlyAggregates = async (baseStaff: Staff[]) => {
+    if (!baseStaff.length) return baseStaff;
+    const month = getCurrentMonth();
+    const staffIds = baseStaff.map(s => s.id);
+
+    try {
+      // Helper: select with fallback
+      const selectWithFallback = async (tables: string[], builder: (q: any) => Promise<{ data: any | null }>) => {
+        for (const t of tables) {
+          try {
+            const q = supabase.from(t).select('*');
+            const { data } = await builder(q);
+            if (data) return data;
+          } catch (_) {}
+        }
+        return null;
+      };
+
+      // Attendance aggregates (prefer public view)
+      const attData = await selectWithFallback(
+        ['v_staff_monthly_attendance', 'payroll.v_staff_monthly_attendance'],
+        async (q) => await q.eq('month', month).in('staff_id', staffIds)
+      );
+
+      // Advances aggregates (include current month window)
+      const advData = await selectWithFallback(
+        ['payroll_advances', 'advances', 'payroll.advances'],
+        async (q) => await q.select('staff_id, amount, date')
+          .in('staff_id', staffIds)
+          .gte('date', month + '-01')
+          .lte('date', getMonthEndDate(month))
+      );
+
+      const attendanceByStaff: Record<string, { present_days: number; paid_leaves: number; unpaid_leaves: number; absent_days: number; }> = {};
+      (attData || []).forEach((row: any) => {
+        attendanceByStaff[row.staff_id] = {
+          present_days: Number(row.present_days || 0),
+          paid_leaves: Number(row.paid_leaves || 0),
+          unpaid_leaves: Number(row.unpaid_leaves || 0),
+          absent_days: Number(row.absent_days || 0),
+        };
+      });
+
+      const advancesByStaff: Record<string, number> = {};
+      (advData || []).forEach((row: any) => {
+        const sid = row.staff_id;
+        advancesByStaff[sid] = (advancesByStaff[sid] || 0) + Number(row.amount || 0);
+      });
+
+      // Salary paid aggregates via activity logs
+      const salaryPaidByStaff: Record<string, number> = {};
+      const salLogs = await selectWithFallback(
+        ['payroll_activity_logs', 'activity_logs', 'payroll.activity_logs'],
+        async (q) => await q.select('ref_id, amount, date, kind')
+          .eq('kind', 'SalaryPayment')
+          .gte('date', month + '-01')
+          .lte('date', getMonthEndDate(month))
+      );
+      (salLogs || []).forEach((row: any) => {
+        const sid = row.ref_id;
+        if (!sid) return;
+        salaryPaidByStaff[sid] = (salaryPaidByStaff[sid] || 0) + Number(row.amount || 0);
+      });
+
+      const merged = baseStaff.map(s => {
+        const att = attendanceByStaff[s.id] || { present_days: 0, paid_leaves: 0, unpaid_leaves: 0, absent_days: 0 };
+        const advances = advancesByStaff[s.id] || 0;
+        const paid = salaryPaidByStaff[s.id] || 0;
+        const payable = Math.max(0, (s.monthlySalary || 0) - advances - paid);
+        return {
+          ...s,
+          presentDays: att.present_days,
+          paidLeaves: att.paid_leaves,
+          unpaidLeaves: att.unpaid_leaves,
+          absences: att.absent_days,
+          totalAdvances: advances,
+          salaryPaid: paid,
+          payableSalary: payable,
+        } as Staff;
+      });
+
+      return merged;
+    } catch (_) {
+      return baseStaff;
+    }
+  };
+
+  // Helper to insert into public views or underlying schema tables to avoid 404s
+  const insertWithFallback = async (
+    tableNames: string[],
+    payload: any,
+    returning?: string
+  ): Promise<{ data: any[] | null; error: any | null }> => {
+    for (const table of tableNames) {
+      try {
+        if (returning) {
+          const { data, error } = await supabase.from(table).insert(payload).select(returning);
+          if (error) throw error;
+          return { data: data || null, error: null };
+        } else {
+          const { error } = await supabase.from(table).insert(payload);
+          if (error) throw error;
+          return { data: null, error: null };
+        }
+      } catch (e) {
+        // try next candidate
+      }
+    }
+    return { data: null, error: { message: 'Insert failed for all candidates' } };
+  };
+
+  const loadActivities = async (page: number) => {
+    try {
+      setActivitiesLoading(true);
+      // Try public-friendly names first
+      const candidates = ['payroll_activity_logs', 'activity_logs', 'payroll.activity_logs'];
+      let rows: any[] | null = null;
+      for (const t of candidates) {
+        try {
+          const q = supabase
+            .from(t)
+            .select('id, date, kind, description, amount, ref_id, branch_id')
+            .in('kind', ['Advance', 'SalaryPayment'] as any)
+            .order('date', { ascending: false } as any)
+            .range(page * activitiesPageSize, page * activitiesPageSize + activitiesPageSize);
+          if (selectedLocationId) {
+            (q as any).eq('branch_id', selectedLocationId);
+          }
+          const { data, error } = await q;
+          if (error) throw error;
+          rows = data || [];
+          break;
+        } catch (_) {}
+      }
+      // If we fetched pageSize+1 for hasNext check, trim to pageSize for render
+      if ((rows || []).length > activitiesPageSize) {
+        rows = rows!.slice(0, activitiesPageSize);
+      }
+
+      const baseActs = (rows || []).map((r: any) => ({
+        id: r.id,
+        date: r.date,
+        kind: r.kind as 'Advance' | 'SalaryPayment',
+        description: r.description || null,
+        amount: Number(r.amount || 0),
+        ref_id: r.ref_id as string | null,
+        branch_id: (r as any).branch_id as string | null,
+      }));
+
+      // Resolve staff IDs for advances (need to look up advance rows)
+      const advanceIds = baseActs.filter(a => a.kind === 'Advance' && a.ref_id).map(a => a.ref_id as string);
+      let advanceMap: Record<string, string> = {};
+      if (advanceIds.length > 0) {
+        const advSources = ['payroll_advances', 'advances', 'payroll.advances'];
+        for (const t of advSources) {
+          try {
+            const { data, error } = await supabase.from(t).select('id, staff_id').in('id', advanceIds);
+            if (error) throw error;
+            (data || []).forEach((row: any) => { advanceMap[row.id] = row.staff_id; });
+            if (Object.keys(advanceMap).length === advanceIds.length) break;
+          } catch (_) {}
+        }
+      }
+
+      // Determine staff IDs per activity
+      const withStaffIds = baseActs.map(a => ({
+        ...a,
+        staffId: a.kind === 'SalaryPayment' ? (a.ref_id || undefined) : (advanceMap[a.ref_id || ''] || undefined)
+      }));
+
+      // Build staffId -> name map from current staff state; collect missing ids
+      const staffIdToName: Record<string, string> = {};
+      staff.forEach(s => { staffIdToName[s.id] = s.name; });
+      const missingIds = withStaffIds.map(a => a.staffId).filter((id): id is string => !!id && !staffIdToName[id]);
+      const uniqueMissing = Array.from(new Set(missingIds));
+      if (uniqueMissing.length > 0) {
+        const staffSources = ['payroll_staff', 'payroll.staff'];
+        for (const t of staffSources) {
+          try {
+            const { data, error } = await supabase.from(t).select('id, name').in('id', uniqueMissing);
+            if (error) throw error;
+            (data || []).forEach((row: any) => { staffIdToName[row.id] = row.name; });
+            if (uniqueMissing.every(id => staffIdToName[id])) break;
+          } catch (_) {}
+        }
+      }
+
+      let finalActs = withStaffIds.map(a => ({
+        id: a.id,
+        date: a.date,
+        kind: a.kind,
+        description: a.description,
+        amount: a.amount,
+        staffId: a.staffId,
+        staffName: a.staffId ? (staffIdToName[a.staffId] || undefined) : undefined
+      }));
+      if (selectedLocationId) {
+        const currentStaffIds = new Set(staff.map(s => s.id));
+        finalActs = finalActs.filter(a => !a.staffId || currentStaffIds.has(a.staffId));
+      }
+      setActivities(finalActs);
+      // Determine if next page exists by probing one extra row
+      setActivitiesHasNext((rows || []).length > activitiesPageSize);
+      setActivitiesPage(page);
+    } catch (_) {
+      setActivities([]);
+      setActivitiesHasNext(false);
+    } finally {
+      setActivitiesLoading(false);
+    }
+  };
+
+  // Also react to location id changes directly
+  useEffect(() => {
+    if (!user?.id) return;
+    loadActivities(0);
+  }, [selectedLocationId]);
+
+  const toggleActive = async (memberId: string, current: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('payroll_staff')
+        .update({ is_active: !current })
+        .eq('id', memberId);
+      if (error) throw error;
+      toast({ title: current ? 'Staff deactivated' : 'Staff activated' });
+      await refreshStaff();
+    } catch (e: any) {
+      toast({ title: 'Failed to update status', description: e?.message, variant: 'destructive' });
+    }
+  };
+
+  const deleteStaff = async (memberId: string) => {
+    try {
+      // Try deleting via public view first
+      let { error } = await supabase.from('payroll_staff').delete().eq('id', memberId);
+      if (error) {
+        // Fallback to underlying table
+        const resp = await supabase.from('payroll.staff').delete().eq('id', memberId);
+        if (resp.error) throw resp.error;
+      }
+      toast({ title: 'Staff deleted' });
+      await refreshStaff();
+    } catch (e: any) {
+      toast({ title: 'Failed to delete staff', description: e?.message, variant: 'destructive' });
+    }
+  };
 
   useEffect(() => {
     const loadStaff = async () => {
       try {
         setLoading(true);
-        const { data: staffData, error } = await supabase
-          .from('staff')
-          .select('*')
-          .eq('is_active', true);
-        
-        if (error) throw error;
-        setStaff(staffData || []);
+        if (!user?.id) {
+          setStaff([]);
+          return;
+        }
+
+        // Determine selected location from localStorage (set by top bar)
+        let selectedLocation = '';
+        try {
+          const stored = localStorage.getItem(`selectedLocation_${user.id}`);
+          selectedLocation = stored || '';
+        } catch (_) {}
+
+        // Use a public updatable view to expose payroll.staff: public.payroll_staff
+        const tableName = 'payroll_staff';
+        const baseQuery = supabase.from(tableName).select('*');
+        const { data: staffData, error: staffError } = selectedLocation ? await baseQuery.eq('branch_id', selectedLocation) : await baseQuery;
+        if (staffError) throw staffError;
+
+        let mapped = (staffData || []).map((row: any) => ({
+          id: row.id,
+          name: row.name,
+          role: row.role_title || row.role || '',
+          isActive: typeof row.is_active === 'boolean' ? row.is_active : row.isActive,
+          monthlySalary: Number((row.monthly_salary ?? row.monthlySalary) || 0),
+          payableSalary: Number((row.monthly_salary ?? row.monthlySalary) || 0),
+          totalAdvances: 0,
+          presentDays: 0,
+          absences: 0,
+          paidLeaves: 0,
+          unpaidLeaves: 0,
+          contact: row.contact || '',
+          dateOfJoining: row.date_of_joining || row.dateOfJoining,
+          paymentMode: row.default_payment_mode || row.payment_mode || row.paymentMode || ''
+        }));
+        mapped = await mergeMonthlyAggregates(mapped);
+        setStaff(mapped);
       } catch (error) {
         console.error('Error loading staff:', error);
         toast({
@@ -69,7 +399,95 @@ const StaffPage: React.FC = () => {
     };
 
     loadStaff();
-  }, []);
+    loadActivities(0);
+  }, [user?.id]);
+
+  const refreshStaff = async () => {
+    if (!user?.id) return;
+    setLoading(true);
+    try {
+      let selectedLocation = '';
+      try {
+        const stored = localStorage.getItem(`selectedLocation_${user.id}`);
+        selectedLocation = stored || '';
+      } catch (_) {}
+      const tableName = 'payroll_staff';
+      const baseQuery = supabase.from(tableName).select('*');
+      const { data: staffData } = selectedLocation ? await baseQuery.eq('branch_id', selectedLocation) : await baseQuery;
+      let mapped = (staffData || []).map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        role: row.role_title || row.role || '',
+        isActive: typeof row.is_active === 'boolean' ? row.is_active : row.isActive,
+        monthlySalary: Number((row.monthly_salary ?? row.monthlySalary) || 0),
+        payableSalary: Number((row.monthly_salary ?? row.monthlySalary) || 0),
+        totalAdvances: 0,
+        presentDays: 0,
+        absences: 0,
+        paidLeaves: 0,
+        unpaidLeaves: 0,
+        contact: row.contact || '',
+        dateOfJoining: row.date_of_joining || row.dateOfJoining,
+        paymentMode: row.default_payment_mode || row.payment_mode || row.paymentMode || ''
+      }));
+      mapped = await mergeMonthlyAggregates(mapped);
+      setStaff(mapped);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddStaff = async () => {
+    if (!user?.id) return;
+    if (!name.trim() || !roleTitle.trim() || !dateOfJoining || !monthlySalary || !paymentMode) {
+      toast({ title: 'Missing fields', description: 'Please fill all required fields', variant: 'destructive' });
+      return;
+    }
+
+    let selectedLocation = '';
+    try {
+      const stored = localStorage.getItem(`selectedLocation_${user.id}`);
+      selectedLocation = stored || '';
+    } catch (_) {}
+    if (!selectedLocation) {
+      toast({ title: 'No location selected', description: 'Select a location from the top bar', variant: 'destructive' });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // Do not embed UPI account into contact anymore
+      const contactToSave = (contact || '').trim();
+      let lastError: any = null;
+      const payloadSnake = {
+        branch_id: selectedLocation,
+        name: name.trim(),
+        role_title: roleTitle.trim(),
+        contact: contactToSave || null,
+        date_of_joining: dateOfJoining,
+        monthly_salary: Number(monthlySalary),
+        default_payment_mode: paymentMode,
+        is_active: true
+      } as any;
+      const { error: insertError } = await supabase.from('payroll_staff').insert(payloadSnake);
+      if (insertError) throw insertError;
+      toast({ title: 'Staff added', description: 'New staff member has been created' });
+      setShowAddForm(false);
+      setName('');
+      setRoleTitle('');
+      setContact('');
+      setDateOfJoining(new Date().toISOString().split('T')[0]);
+      setMonthlySalary('');
+      setPaymentMode('');
+      setSelectedUpiAccountId('');
+      await refreshStaff();
+    } catch (e: any) {
+      console.error(e);
+      toast({ title: 'Failed to add staff', description: e?.message || 'Insert blocked by policy or invalid data', variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const filteredStaff = staff.filter(member => {
     const matchesSearch = member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -85,6 +503,29 @@ const StaffPage: React.FC = () => {
 
   const formatDate = (dateString: string) => 
     new Date(dateString).toLocaleDateString('en-IN');
+
+  const sanitizeContact = (raw: string) => {
+    if (!raw) return '';
+    // Remove any embedded upi:account tags
+    return raw.replace(/\s*\|\s*?upi:[^|]+/gi, '').replace(/upi:[^|]+/i, '').trim();
+  };
+
+  const formatTelHref = (raw: string) => {
+    const clean = (raw || '').replace(/\s+/g, '');
+    // allow leading + and digits only
+    const matched = clean.match(/^\+?[0-9]+$/) ? clean : clean.replace(/[^0-9+]/g, '');
+    return `tel:${matched}`;
+  };
+
+  const renderPaymentMethod = (member: Staff) => {
+    const mode = (member.paymentMode || '').trim();
+    if (mode.toUpperCase() === 'UPI') {
+      const match = (member.contact || '').match(/upi:([^|]+)/i);
+      const account = match && match[1] ? match[1].trim() : '';
+      return account ? `UPI: ${account}` : 'UPI';
+    }
+    return mode || '—';
+  };
 
   if (loading) {
     return (
@@ -104,14 +545,377 @@ const StaffPage: React.FC = () => {
             Manage your team members, attendance, and salary information
           </p>
         </div>
-        
+
         {user?.role === 'owner' && (
-          <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Staff Member
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={() => setShowPaymentPanel((v) => !v)} variant="outline" className="hover:bg-muted">
+              <CreditCard className="h-4 w-4 mr-2" />
+              {showPaymentPanel ? 'Close Payments' : 'Make Payment'}
+            </Button>
+            <Button onClick={() => setShowAddForm((v) => !v)} className="bg-primary text-primary-foreground hover:bg-primary/90">
+              <Plus className="h-4 w-4 mr-2" />
+              {showAddForm ? 'Close' : 'Add Staff Member'}
+            </Button>
+          </div>
         )}
       </div>
+
+      {showAddForm && (
+        <Card className="p-6">
+          <h3 className="text-lg font-semibold mb-4">Add Staff Member</h3>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="name">Full Name</Label>
+              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Ramesh Kumar" />
+            </div>
+            <div className="grid gap-2">
+              <Label>Role/Title</Label>
+              <div className="grid gap-2">
+                <Select
+                  value={useCustomRole ? '__custom__' : (roleTitle || '')}
+                  onValueChange={(val) => {
+                    if (val === '__custom__') {
+                      setUseCustomRole(true);
+                      setRoleTitle('');
+                    } else {
+                      setUseCustomRole(false);
+                      setRoleTitle(val);
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={uniqueRoles.length ? 'Choose existing role' : 'Enter new role'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {uniqueRoles.map(r => (
+                      <SelectItem key={r} value={r}>{r}</SelectItem>
+                    ))}
+                    <SelectItem value="__custom__">+ Add new role…</SelectItem>
+                  </SelectContent>
+                </Select>
+                {useCustomRole && (
+                  <Input value={roleTitle} onChange={(e) => setRoleTitle(e.target.value)} placeholder="Type new role" />
+                )}
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="contact">Contact</Label>
+              <Input id="contact" value={contact} onChange={(e) => setContact(e.target.value)} placeholder="Phone number" />
+            </div>
+            <div className="grid gap-2">
+              <Label>Date of Joining</Label>
+              <Input type="date" value={dateOfJoining} onChange={(e) => setDateOfJoining(e.target.value)} />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="salary">Monthly Salary (INR)</Label>
+              <Input id="salary" type="number" min="0" step="1" value={monthlySalary} onChange={(e) => setMonthlySalary(e.target.value)} placeholder="e.g., 15000" />
+            </div>
+            <div className="grid gap-2">
+              <Label>Default Payment Mode</Label>
+              <Select value={paymentMode} onValueChange={(v: any) => setPaymentMode(v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Cash">Cash</SelectItem>
+                  <SelectItem value="UPI">UPI</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {paymentMode === 'UPI' && (
+              <div className="grid gap-2 sm:col-span-2">
+                <Label>Select UPI Account (Location)</Label>
+                <Select value={selectedUpiAccountId} onValueChange={setSelectedUpiAccountId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={upiAccounts.length ? 'Choose UPI account' : 'No UPI accounts found'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {upiAccounts.map(acc => (
+                      <SelectItem key={acc.id} value={acc.id}>
+                        {acc.account_name} ({acc.location_name || 'N/A'})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Will be saved as upi:account in contact</p>
+              </div>
+            )}
+          </div>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setShowAddForm(false)} disabled={saving}>Cancel</Button>
+            <Button onClick={handleAddStaff} disabled={saving} className="bg-primary text-primary-foreground hover:bg-primary/90">
+              {saving ? 'Saving...' : 'Add Staff'}
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {showPaymentPanel && user?.role === 'owner' && (
+        <Card className="p-6">
+          <h3 className="text-lg font-semibold mb-4">Make Payment</h3>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label>Staff</Label>
+              <Select value={paymentStaffId} onValueChange={setPaymentStaffId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select staff" />
+                </SelectTrigger>
+                <SelectContent>
+                  {staff.map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.name} — {s.role}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Type</Label>
+              <Select value={paymentType} onValueChange={(v: any) => setPaymentType(v)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Advance">Advance</SelectItem>
+                  <SelectItem value="Salary">Salary</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Amount</Label>
+              <Input type="number" min="0" step="1" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Payment Mode</Label>
+              <Select value={paymentModeSel} onValueChange={(v: any) => setPaymentModeSel(v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Cash">Cash</SelectItem>
+                  <SelectItem value="UPI">UPI</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {paymentModeSel === 'UPI' && (
+              <div className="grid gap-2 sm:col-span-2">
+                <Label>Select UPI Account (Location)</Label>
+                <Select value={selectedUpiAccountId} onValueChange={setSelectedUpiAccountId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={upiAccounts.length ? 'Choose UPI account' : 'No UPI accounts found'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {upiAccounts.map(acc => (
+                      <SelectItem key={acc.id} value={acc.id}>
+                        {acc.account_name} ({acc.location_name || 'N/A'})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="grid gap-2 sm:col-span-2">
+              <Label>Notes</Label>
+              <Input value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} placeholder="Optional" />
+            </div>
+          </div>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setShowPaymentPanel(false)}>Close</Button>
+            <Button disabled={savingPayment} onClick={async () => {
+              if (!paymentStaffId || !paymentAmount || !paymentModeSel) {
+                toast({ title: 'Missing fields', description: 'Select staff, amount and mode', variant: 'destructive' });
+                return;
+              }
+              try {
+                setSavingPayment(true);
+                const amtNum = Number(paymentAmount);
+                const month = getCurrentMonth();
+                const today = new Date().toISOString().slice(0,10);
+                if (paymentType === 'Advance') {
+                  // Insert into advances (fallback to public view if available)
+                  const advancePayload = {
+                    staff_id: paymentStaffId,
+                    date: today,
+                    amount: amtNum,
+                    payment_mode: paymentModeSel,
+                    notes: paymentNotes || null
+                  };
+                  const { data: advRows, error: advErr } = await insertWithFallback([
+                    'payroll_advances',
+                    'advances',
+                    'payroll.advances'
+                  ] as string[], advancePayload, 'id');
+                  if (advErr) throw advErr;
+                  const advanceId = advRows && advRows[0] ? advRows[0].id : null;
+                  // Also log to activity_logs
+                  let selectedLocation = '';
+                  try { const stored = localStorage.getItem(`selectedLocation_${user?.id}` || ''); selectedLocation = stored || ''; } catch (_) {}
+                  const actPayload = {
+                    branch_id: selectedLocation || null,
+                    kind: 'Advance',
+                    ref_table: 'payroll.advances',
+                    ref_id: advanceId,
+                    date: new Date().toISOString(),
+                    description: paymentNotes || null,
+                    amount: amtNum
+                  };
+                  const { error: actErr } = await insertWithFallback([
+                    'payroll_activity_logs',
+                    'activity_logs',
+                    'payroll.activity_logs'
+                  ] as string[], actPayload);
+                  if (actErr) throw actErr;
+                } else {
+                  // Salary payment: log to activity_logs with ref_id = staff_id
+                  let selectedLocation = '';
+                  try { const stored = localStorage.getItem(`selectedLocation_${user?.id}` || ''); selectedLocation = stored || ''; } catch (_) {}
+                  const withUpi = paymentModeSel === 'UPI' && selectedUpiAccountId
+                    ? `${paymentNotes ? paymentNotes + ' | ' : ''}UPI:${upiAccounts.find(a => a.id === selectedUpiAccountId)?.account_name || ''}`
+                    : paymentNotes || null;
+                  const actPayload = {
+                    branch_id: selectedLocation || null,
+                    kind: 'SalaryPayment',
+                    ref_table: 'payroll.staff',
+                    ref_id: paymentStaffId,
+                    date: new Date().toISOString(),
+                    description: withUpi,
+                    amount: amtNum
+                  };
+                  const { error: salErr } = await insertWithFallback([
+                    'payroll_activity_logs',
+                    'activity_logs',
+                    'payroll.activity_logs'
+                  ] as string[], actPayload);
+                  if (salErr) throw salErr;
+                }
+                toast({ title: 'Payment recorded' });
+                setShowPaymentPanel(false);
+                setPaymentStaffId('');
+                setPaymentType('Advance');
+                setPaymentAmount('');
+                setPaymentModeSel('');
+                setPaymentNotes('');
+                setSelectedUpiAccountId('');
+                await refreshStaff();
+                // Ensure aggregates reflect the new advance/salary immediately
+                await loadActivities(0);
+              } catch (e: any) {
+                toast({ title: 'Failed to record payment', description: e?.message, variant: 'destructive' });
+              } finally {
+                setSavingPayment(false);
+              }
+            }} className="bg-primary text-primary-foreground hover:bg-primary/90">{savingPayment ? 'Saving…' : 'Record Payment'}</Button>
+          </div>
+        </Card>
+      )}
+
+      {user?.role === 'owner' && editMemberId && (
+        <Card className="p-6">
+          <h3 className="text-lg font-semibold mb-4">Edit Staff</h3>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label>Full Name</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Role/Title</Label>
+              <div className="grid gap-2">
+                <Select
+                  value={useCustomRole ? '__custom__' : (roleTitle || '')}
+                  onValueChange={(val) => {
+                    if (val === '__custom__') {
+                      setUseCustomRole(true);
+                      setRoleTitle('');
+                    } else {
+                      setUseCustomRole(false);
+                      setRoleTitle(val);
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={uniqueRoles.length ? 'Choose existing role' : 'Enter new role'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {uniqueRoles.map(r => (
+                      <SelectItem key={r} value={r}>{r}</SelectItem>
+                    ))}
+                    <SelectItem value="__custom__">+ Add new role…</SelectItem>
+                  </SelectContent>
+                </Select>
+                {useCustomRole && (
+                  <Input value={roleTitle} onChange={(e) => setRoleTitle(e.target.value)} placeholder="Type new role" />
+                )}
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label>Contact</Label>
+              <Input value={contact} onChange={(e) => setContact(e.target.value)} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Date of Joining</Label>
+              <Input type="date" value={dateOfJoining} onChange={(e) => setDateOfJoining(e.target.value)} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Monthly Salary (INR)</Label>
+              <Input type="number" min="0" step="1" value={monthlySalary} onChange={(e) => setMonthlySalary(e.target.value)} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Default Payment Mode</Label>
+              <Select value={paymentMode} onValueChange={(v: any) => setPaymentMode(v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Cash">Cash</SelectItem>
+                  <SelectItem value="UPI">UPI</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {paymentMode === 'UPI' && (
+              <div className="grid gap-2 sm:col-span-2">
+                <Label>Select UPI Account (Location)</Label>
+                <Select value={selectedUpiAccountId} onValueChange={setSelectedUpiAccountId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={upiAccounts.length ? 'Choose UPI account' : 'No UPI accounts found'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {upiAccounts.map(acc => (
+                      <SelectItem key={acc.id} value={acc.id}>
+                        {acc.account_name} ({acc.location_name || 'N/A'})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="outline" onClick={() => { setEditMemberId(null); }}>Cancel</Button>
+            <Button onClick={async () => {
+              if (!editMemberId) return;
+              setEditSaving(true);
+              try {
+                // build update payload
+                const updates: any = {
+                  name: name.trim(),
+                  role_title: roleTitle.trim(),
+                  contact: (contact || '').trim() || null,
+                  date_of_joining: dateOfJoining,
+                  monthly_salary: Number(monthlySalary),
+                  default_payment_mode: paymentMode,
+                };
+                const { error } = await supabase.from('payroll_staff').update(updates).eq('id', editMemberId);
+                if (error) throw error;
+                toast({ title: 'Staff updated' });
+                setEditMemberId(null);
+                await refreshStaff();
+              } catch (e: any) {
+                toast({ title: 'Failed to update staff', description: e?.message, variant: 'destructive' });
+              } finally {
+                setEditSaving(false);
+              }
+            }} disabled={editSaving} className="bg-primary text-primary-foreground hover:bg-primary/90">{editSaving ? 'Saving…' : 'Save Changes'}</Button>
+          </div>
+        </Card>
+      )}
 
       {/* Search and Filters */}
       <Card className="p-6">
@@ -208,7 +1012,12 @@ const StaffPage: React.FC = () => {
                 <th className="text-left p-4 font-medium text-foreground">Role</th>
                 <th className="text-left p-4 font-medium text-foreground">Contact</th>
                 <th className="text-left p-4 font-medium text-foreground">Joining Date</th>
+                <th className="text-left p-4 font-medium text-foreground">Payment Method</th>
                 <th className="text-right p-4 font-medium text-foreground">Salary</th>
+                <th className="text-center p-4 font-medium text-foreground">Attendance</th>
+                <th className="text-center p-4 font-medium text-foreground">Leaves</th>
+                <th className="text-center p-4 font-medium text-foreground">Advances</th>
+                <th className="text-right p-4 font-medium text-foreground">Payable</th>
                 <th className="text-center p-4 font-medium text-foreground">Status</th>
                 <th className="text-center p-4 font-medium text-foreground">Actions</th>
               </tr>
@@ -225,7 +1034,7 @@ const StaffPage: React.FC = () => {
                       </div>
                       <div>
                         <p className="font-medium text-foreground">{member.name}</p>
-                        <p className="text-sm text-muted-foreground">{member.paymentMode || 'N/A'}</p>
+                        {/* removed payment mode under name */}
                       </div>
                     </div>
                   </td>
@@ -233,13 +1042,46 @@ const StaffPage: React.FC = () => {
                   <td className="p-4">
                     <div className="flex items-center text-muted-foreground">
                       <Phone className="h-4 w-4 mr-2" />
-                      {member.contact || 'N/A'}
+                      {sanitizeContact(member.contact) ? (
+                        <a
+                          href={formatTelHref(sanitizeContact(member.contact))}
+                          className="hover:underline"
+                        >
+                          {sanitizeContact(member.contact)}
+                        </a>
+                      ) : 'N/A'}
                     </div>
                   </td>
                   <td className="p-4 text-foreground">{formatDate(member.dateOfJoining)}</td>
+                  <td className="p-4 text-foreground">{renderPaymentMethod(member)}</td>
                   <td className="p-4 text-right font-medium text-foreground">
-                    {formatCurrency(member.monthlySalary || 0)}
+                    <div className="flex flex-col items-end">
+                      <span>{formatCurrency(member.monthlySalary || 0)}</span>
+                      {member.salaryPaid && member.salaryPaid > 0 && (
+                        <span className={
+                          member.salaryPaid >= (member.monthlySalary || 0)
+                            ? 'text-green-600 text-xs'
+                            : 'text-amber-600 text-xs'
+                        }>
+                          {member.salaryPaid >= (member.monthlySalary || 0) ? 'Paid' : `Paid ${formatCurrency(member.salaryPaid)}`}
+                        </span>
+                      )}
+                    </div>
                   </td>
+                  <td className="p-4 text-center text-foreground">
+                    <div className="flex flex-col items-center">
+                      <span className="text-green-600 font-medium">{`${member.presentDays || 0}P`}</span>
+                      <span className="text-red-600 font-medium">{`${member.absences || 0}A`}</span>
+                    </div>
+                  </td>
+                  <td className="p-4 text-center text-foreground">
+                    <div className="flex flex-col items-center">
+                      <span className="text-green-600 font-medium">{`${member.paidLeaves || 0}PL`}</span>
+                      <span className="text-red-600 font-medium">{`${member.unpaidLeaves || 0}UL`}</span>
+                    </div>
+                  </td>
+                  <td className="p-4 text-center font-medium text-foreground">{formatCurrency(member.totalAdvances || 0)}</td>
+                  <td className="p-4 text-right font-semibold text-foreground">{formatCurrency(member.payableSalary || 0)}</td>
                   <td className="p-4 text-center">
                     {member.isActive ? (
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -247,7 +1089,7 @@ const StaffPage: React.FC = () => {
                       </span>
                     ) : (
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                        Inactive
+                        Deactive
                       </span>
                     )}
                   </td>
@@ -258,18 +1100,54 @@ const StaffPage: React.FC = () => {
                         size="sm"
                         className="text-muted-foreground hover:text-primary"
                         title="Edit Staff"
+                        onClick={() => {
+                          setEditMemberId(member.id);
+                          setName(member.name);
+                          setRoleTitle(member.role);
+                          setUseCustomRole(false);
+                          setContact(sanitizeContact(member.contact || ''));
+                          setDateOfJoining(member.dateOfJoining);
+                          setMonthlySalary(String(member.monthlySalary || ''));
+                          setPaymentMode((member.paymentMode as any) || '');
+                          setSelectedUpiAccountId('');
+                        }}
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleActive(member.id, member.isActive)}
+                        className={member.isActive ? 'text-amber-600 hover:text-amber-700' : 'text-green-600 hover:text-green-700'}
+                        title={member.isActive ? 'Deactivate Staff' : 'Activate Staff'}
+                      >
+                        {member.isActive ? <XCircle className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                      </Button>
                       {user?.role === 'owner' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-muted-foreground hover:text-destructive"
-                          title="Delete Staff"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-muted-foreground hover:text-destructive"
+                              title="Delete Staff"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete staff member?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This will permanently remove {member.name} from your staff list. This action cannot be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => deleteStaff(member.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       )}
                     </div>
                   </td>
@@ -287,13 +1165,59 @@ const StaffPage: React.FC = () => {
               {searchTerm || filterRole ? 'Try adjusting your search or filter criteria.' : 'Get started by adding your first staff member.'}
             </p>
             {user?.role === 'owner' && (
-              <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
+              <Button onClick={() => setShowAddForm((v) => !v)} className="bg-primary text-primary-foreground hover:bg-primary/90">
                 <Plus className="h-4 w-4 mr-2" />
-                Add Staff Member
+                {showAddForm ? 'Close' : 'Add Staff Member'}
               </Button>
             )}
           </div>
         )}
+      </Card>
+
+      {/* Activities pagination (Payments only) */}
+      <Card className="mt-6">
+        <div className="p-6 border-b border-border flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-foreground">Payment Activity</h3>
+            <p className="text-sm text-muted-foreground">Advance and salary payments</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" disabled={activitiesLoading || activitiesPage === 0} onClick={() => loadActivities(Math.max(0, activitiesPage - 1))}>Previous</Button>
+            <Button variant="outline" size="sm" disabled={activitiesLoading || !activitiesHasNext} onClick={() => loadActivities(activitiesPage + 1)}>Next</Button>
+          </div>
+        </div>
+        <div className="p-4">
+          {activitiesLoading ? (
+            <div className="text-sm text-muted-foreground">Loading…</div>
+          ) : activities.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No payment activity.</div>
+          ) : (
+            <ul className="divide-y divide-border">
+              {activities.map((a) => (
+                <li key={a.id} className="py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${a.kind === 'Advance' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
+                      {a.kind === 'Advance' ? 'A' : 'S'}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-foreground truncate">
+                        {a.kind === 'Advance'
+                          ? `Advance payment of ${formatCurrency(a.amount)} to ${a.staffName || 'staff'}`
+                          : `Salary payment of ${formatCurrency(a.amount)} to ${a.staffName || 'staff'}`}
+                      </div>
+                      {a.description && (
+                        <div className="text-xs text-muted-foreground truncate">{a.description}</div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-muted-foreground">{new Date(a.date).toLocaleString()}</div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </Card>
     </div>
   );
