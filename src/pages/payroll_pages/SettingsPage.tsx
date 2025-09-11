@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { 
   Settings, 
@@ -14,6 +14,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/lib/supabaseClient';
 
 const SettingsPage: React.FC = () => {
   const { user } = useAuth();
@@ -27,23 +28,98 @@ const SettingsPage: React.FC = () => {
   const [formData, setFormData] = useState({
     companyName: settings.companyName,
     salaryCalculationMethod: '30-day' as '30-day' | 'calendar',
+    currency: 'INR',
   });
 
   const [loading, setSaving] = useState(false);
+  const [selectedLocationId, setSelectedLocationId] = useState<string>('');
+  const [branchName, setBranchName] = useState<string>('');
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  // Load selected location
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      const stored = localStorage.getItem(`selectedLocation_${user.id}`);
+      setSelectedLocationId(stored || '');
+    } catch (_) {}
+  }, [user?.id]);
+
+  // Load payroll.settings for selected branch
+  useEffect(() => {
+    const loadSettings = async () => {
+      if (!selectedLocationId) return;
+      try {
+        // Load branch name
+        try {
+          const { data: loc, error: locErr } = await supabase
+            .from('locations')
+            .select('name')
+            .eq('id', selectedLocationId)
+            .maybeSingle();
+          if (!locErr && loc?.name) {
+            setBranchName(loc.name);
+            setFormData(prev => ({ ...prev, companyName: loc.name }));
+          }
+        } catch (_) {}
+
+        for (const table of ['payroll_settings', 'payroll.settings']) {
+          try {
+            const { data, error } = await supabase
+              .from(table)
+              .select('salary_calc_method, currency')
+              .eq('branch_id', selectedLocationId)
+              .maybeSingle();
+            if (error) throw error;
+            if (data) {
+              setFormData(prev => ({
+                ...prev,
+                salaryCalculationMethod: data.salary_calc_method === 'calendar' ? 'calendar' : '30-day',
+                currency: data.currency || 'INR',
+              }));
+              break;
+            }
+          } catch (_) {}
+        }
+      } catch (_) {
+        // ignore
+      }
+    };
+    loadSettings();
+  }, [selectedLocationId]);
+
   const handleSave = async () => {
     try {
       setSaving(true);
-      // Simulate persisting settings
-      await new Promise(resolve => setTimeout(resolve, 800));
+      if (!selectedLocationId) {
+        toast({ title: 'No location selected', description: 'Select a location to save settings for.', variant: 'destructive' });
+        return;
+      }
+      const payload = {
+        branch_id: selectedLocationId,
+        salary_calc_method: formData.salaryCalculationMethod,
+        currency: formData.currency || 'INR',
+      } as any;
+      let lastError: any = null;
+      for (const table of ['payroll_settings', 'payroll.settings']) {
+        try {
+          const { error } = await supabase.from(table).upsert(payload);
+          if (error) throw error;
+          lastError = null;
+          break;
+        } catch (e) {
+          lastError = e;
+        }
+      }
+      if (lastError) throw lastError;
       setSettings(prev => ({ ...prev, companyName: formData.companyName }));
       toast({
         title: 'Settings saved',
-        description: 'Your settings have been updated successfully.',
+        description: 'Branch payroll settings updated.',
+        duration: 3000,
       });
     } catch (error) {
       console.error('Error saving settings:', error);
@@ -82,13 +158,9 @@ const SettingsPage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="form-group">
               <label className="form-label">Company Name</label>
-              <Input
-                value={formData.companyName}
-                onChange={(e) => handleInputChange('companyName', e.target.value)}
-                className="form-input"
-                placeholder="Enter company name"
-                disabled={!isOwner}
-              />
+              <div className="form-input bg-muted/50">
+                {branchName || formData.companyName || '—'}
+              </div>
               <p className="text-xs text-muted-foreground mt-1">
                 This will appear on reports and documents
               </p>
@@ -161,6 +233,18 @@ const SettingsPage: React.FC = () => {
             </p>
           </div>
 
+          <div className="form-group">
+            <label className="form-label">Currency</label>
+            <Input
+              value={formData.currency}
+              onChange={(e) => handleInputChange('currency', e.target.value)}
+              className="form-input max-w-xs"
+              placeholder="INR"
+              disabled={!isOwner}
+            />
+            <p className="text-xs text-muted-foreground mt-1">Used for payroll calculations and reports</p>
+          </div>
+
           <div className="p-4 bg-primary-light border border-primary rounded-lg">
             <h4 className="font-medium text-primary mb-2">Calculation Example</h4>
             <div className="text-sm text-primary space-y-1">
@@ -169,8 +253,14 @@ const SettingsPage: React.FC = () => {
                 30-Day Method: ₹1,000/day ({formData.salaryCalculationMethod === '30-day' ? '✓ Selected' : ''})
               </p>
               <p>
-                Calendar Method: ₹{(30000 / new Date().getDate()).toFixed(0)}/day 
-                ({formData.salaryCalculationMethod === 'calendar' ? '✓ Selected' : ''})
+                {(() => {
+                  const ym = (settings.currentMonth || '').split('-');
+                  const y = Number(ym[0]) || new Date().getFullYear();
+                  const m = Number(ym[1]) || (new Date().getMonth() + 1);
+                  const daysInMonth = new Date(y, m, 0).getDate();
+                  const perDay = Math.round(30000 / daysInMonth);
+                  return `Calendar Method: ₹${perDay}/day ${formData.salaryCalculationMethod === 'calendar' ? '(✓ Selected)' : ''}`;
+                })()}
               </p>
             </div>
           </div>
