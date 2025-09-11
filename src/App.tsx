@@ -33,6 +33,15 @@ import { Customers } from "./components/loyalty/Customers";
 import { Analytics } from "./components/loyalty/Analytics";
 import { LoyaltyLayout } from "./components/loyalty/LoyaltyLayout";
 
+// Payroll pages
+import PayrollLayout from "./components/layout/PayrollLayout";
+import PayrollDashboard from "./pages/payroll_pages/Dashboard";
+import PayrollStaffPage from "./pages/payroll_pages/StaffPage";
+import PayrollAttendancePage from "./pages/payroll_pages/AttendancePage";
+import PayrollExpensesPage from "./pages/payroll_pages/ExpensesPage";
+import PayrollReportsPage from "./pages/payroll_pages/ReportsPage";
+import PayrollSettingsPage from "./pages/payroll_pages/SettingsPage";
+
 // Manager pages
 import ManagerPortal from "./pages/ManagerPortal";
 import DashboardManager from "./pages/DashboardManager";
@@ -308,6 +317,24 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
+              
+              {/* Payroll Routes */}
+              <Route 
+                path="/payroll" 
+                element={
+                  <ProtectedRoute requiredRole={["owner", "manager"]}>
+                    <PayrollLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<PayrollDashboard />} />
+                <Route path="dashboard" element={<PayrollDashboard />} />
+                <Route path="staff" element={<PayrollStaffPage />} />
+                <Route path="attendance" element={<PayrollAttendancePage />} />
+                <Route path="expenses" element={<PayrollExpensesPage />} />
+                <Route path="reports" element={<PayrollReportsPage />} />
+                <Route path="settings" element={<PayrollSettingsPage />} />
+              </Route>
               
               {/* Catch all route */}
               <Route path="*" element={<NotFound />} />
