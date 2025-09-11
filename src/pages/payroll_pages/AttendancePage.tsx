@@ -37,37 +37,128 @@ const AttendancePage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [dailyAttendance, setDailyAttendance] = useState<Record<string, DailyAttendance>>({});
   const [saving, setSaving] = useState(false);
+  const [showLongLeaveForm, setShowLongLeaveForm] = useState(false);
+  const [leaveStaffId, setLeaveStaffId] = useState<string>('');
+  const [leaveStartDate, setLeaveStartDate] = useState<string>('');
+  const [leaveEndDate, setLeaveEndDate] = useState<string>('');
+  const [leaveType, setLeaveType] = useState<'Paid' | 'Unpaid' | ''>('');
+  const [leaveNotes, setLeaveNotes] = useState<string>('');
+  const [leaveSaving, setLeaveSaving] = useState(false);
+
+  const submitLongLeave = async () => {
+    if (user?.role !== 'manager' && user?.role !== 'owner') {
+      toast({
+        title: 'Access Denied',
+        description: 'Only managers can apply long leaves',
+        variant: 'destructive'
+      });
+      return;
+    }
+    if (!leaveStaffId || !leaveStartDate || !leaveEndDate || !leaveType) {
+      toast({ title: 'Missing fields', description: 'Select staff, dates, and leave type.', variant: 'destructive' });
+      return;
+    }
+    try {
+      setLeaveSaving(true);
+      const { error } = await supabase
+        .from('staff_leave_periods')
+        .insert({
+          staff_id: leaveStaffId,
+          start_date: leaveStartDate,
+          end_date: leaveEndDate,
+          leave_type: leaveType,
+          notes: leaveNotes || null,
+        });
+      if (error) throw error;
+      toast({ title: 'Long leave added', description: 'Leave period saved successfully.' });
+      setShowLongLeaveForm(false);
+      setLeaveStaffId('');
+      setLeaveStartDate('');
+      setLeaveEndDate('');
+      setLeaveType('');
+      setLeaveNotes('');
+    } catch (err) {
+      console.error('Error applying long leave:', err);
+      toast({ title: 'Error', description: 'Failed to save long leave.', variant: 'destructive' });
+    } finally {
+      setLeaveSaving(false);
+    }
+  };
 
   useEffect(() => {
     const loadData = async () => {
       try {
         setLoading(true);
         
-        // Fetch staff from Supabase
-        const { data: staffData, error } = await supabase
-          .from('staff')
-          .select('*')
-          .eq('is_active', true);
+        // Fetch staff with schema fallback (payroll -> public)
+        const fetchStaff = async () => {
+          let q = supabase
+            .from('staff')
+            .select('id, name, role_title, is_active, branch_id')
+            .eq('is_active', true);
+          if (user?.role === 'manager' && user?.assigned_location) {
+            q = q.eq('branch_id', user.assigned_location);
+          }
+          const { data, error } = await q;
+          if (error) throw error;
+          return data || [];
+        };
+
+        const rawStaff = await fetchStaff();
         
-        if (error) throw error;
-        
-        setStaff(staffData || []);
-        
-        // Initialize attendance for today
-        const attendanceMap: Record<string, DailyAttendance> = {};
-        (staffData || []).forEach(member => {
-          attendanceMap[member.id] = {
+        // Map DB -> UI model
+        const mappedStaff: Staff[] = (rawStaff || []).map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          role: (s.role_title || s.role || ''),
+          isActive: !!(s.is_active ?? s.isActive),
+        }));
+
+        setStaff(mappedStaff);
+
+        // Initialize attendance map with defaults first
+        const defaultAttendanceMap: Record<string, DailyAttendance> = {};
+        mappedStaff.forEach(member => {
+          defaultAttendanceMap[member.id] = {
             staffId: member.id,
             status: 'Present',
             notes: ''
           };
+        });
+
+        // Load any existing attendance for the selected date and overlay (with fallback)
+        const staffIdsForFilter = mappedStaff.map(s => s.id);
+
+        const fetchAttendance = async () => {
+          const { data, error } = await supabase
+            .from('attendance')
+            .select('staff_id, status, notes')
+            .eq('date', selectedDate);
+          if (error) throw error;
+          // We store only non-Present rows; treat missing rows as Present
+          return data || [];
+        };
+
+        const existingAttendance = await fetchAttendance();
+
+        const attendanceMap: Record<string, DailyAttendance> = { ...defaultAttendanceMap };
+        (existingAttendance || [])
+          .filter((rec: any) => staffIdsForFilter.includes(rec.staff_id))
+          .forEach((rec: any) => {
+          if (attendanceMap[rec.staff_id]) {
+            attendanceMap[rec.staff_id] = {
+              staffId: rec.staff_id,
+              status: rec.status,
+              notes: rec.notes || ''
+            };
+          }
         });
         setDailyAttendance(attendanceMap);
       } catch (error) {
         console.error('Error loading data:', error);
         toast({
           title: "Error",
-          description: "Failed to load staff data",
+          description: "Failed to load staff/attendance data",
           variant: "destructive"
         });
       } finally {
@@ -77,6 +168,64 @@ const AttendancePage: React.FC = () => {
 
     loadData();
   }, []);
+
+  // Reload attendance when date changes (after staff is loaded)
+  useEffect(() => {
+    const loadAttendanceForDate = async () => {
+      if (staff.length === 0) return;
+      try {
+        setLoading(true);
+        // Start from defaults
+        const defaults: Record<string, DailyAttendance> = {};
+        staff.forEach(member => {
+          defaults[member.id] = {
+            staffId: member.id,
+            status: 'Present',
+            notes: ''
+          };
+        });
+
+        const staffIdsForFilter = staff.map(s => s.id);
+
+        // Attendance fetch with schema fallback
+        const fetchAttendance = async () => {
+          const { data, error } = await supabase
+            .from('attendance')
+            .select('staff_id, status, notes')
+            .eq('date', selectedDate);
+          if (error) throw error;
+          return data || [];
+        };
+
+        const existingAttendance = await fetchAttendance();
+
+        const attendanceMap: Record<string, DailyAttendance> = { ...defaults };
+        (existingAttendance || [])
+          .filter((rec: any) => staffIdsForFilter.includes(rec.staff_id))
+          .forEach((rec: any) => {
+          if (attendanceMap[rec.staff_id]) {
+            attendanceMap[rec.staff_id] = {
+              staffId: rec.staff_id,
+              status: rec.status,
+              notes: rec.notes || ''
+            };
+          }
+        });
+        setDailyAttendance(attendanceMap);
+      } catch (err) {
+        console.error('Error loading attendance for date:', err);
+        toast({
+          title: 'Error',
+          description: 'Failed to load attendance for selected date',
+          variant: 'destructive'
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadAttendanceForDate();
+  }, [selectedDate, staff]);
 
   const filteredStaff = staff.filter(member => 
     member.isActive && 
@@ -116,19 +265,44 @@ const AttendancePage: React.FC = () => {
     try {
       setSaving(true);
       
-      const attendanceRecords = Object.values(dailyAttendance).map(record => ({
+      const allRecords = Object.values(dailyAttendance).map(record => ({
         staff_id: record.staffId,
         date: selectedDate,
         status: record.status,
         notes: record.notes || null
       }));
+      // Store only non-Present rows; absence of a row means Present by default
+      const attendanceRecords = allRecords.filter(r => r.status !== 'Present');
 
-      // Save attendance records to Supabase
-      const { error } = await supabase
+      if (!selectedDate) {
+        toast({
+          title: 'Invalid date',
+          description: 'Please select a valid date.',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      // Replace attendance records for the selected date to avoid duplicates
+      // We clear for all visible staff to ensure old explicit 'Present' rows are removed
+      const staffIds = allRecords.map(r => r.staff_id);
+
+      // Save strictly to payroll schema; surface clear message if not exposed
+      const { error: delErr } = await supabase
         .from('attendance')
-        .insert(attendanceRecords);
+        .delete()
+        .eq('date', selectedDate)
+        .in('staff_id', staffIds);
+      if (delErr) {
+        throw delErr;
+      }
 
-      if (error) throw error;
+      if (attendanceRecords.length > 0) {
+        const { error } = await supabase
+          .from('attendance')
+          .insert(attendanceRecords);
+        if (error) throw error;
+      }
 
       toast({
         title: "Success",
@@ -192,6 +366,12 @@ const AttendancePage: React.FC = () => {
         </div>
         
         <div className="flex items-center gap-4">
+          <Button
+            variant="outline"
+            onClick={() => setShowLongLeaveForm((s) => !s)}
+          >
+            Apply Long Leave
+          </Button>
           <input
             type="date"
             value={selectedDate}
@@ -208,6 +388,52 @@ const AttendancePage: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      {showLongLeaveForm && (
+        <Card className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+            <div className="md:col-span-2">
+              <label className="text-sm text-muted-foreground">Staff</label>
+              <select
+                value={leaveStaffId}
+                onChange={(e) => setLeaveStaffId(e.target.value)}
+                className="form-input w-full"
+              >
+                <option value="">Select staff</option>
+                {staff.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground">Start date</label>
+              <input type="date" value={leaveStartDate} onChange={(e) => setLeaveStartDate(e.target.value)} className="form-input w-full" />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground">End date</label>
+              <input type="date" value={leaveEndDate} onChange={(e) => setLeaveEndDate(e.target.value)} className="form-input w-full" />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground">Type</label>
+              <select value={leaveType} onChange={(e) => setLeaveType(e.target.value as any)} className="form-input w-full">
+                <option value="">Select</option>
+                <option value="Paid">Paid</option>
+                <option value="Unpaid">Unpaid</option>
+              </select>
+            </div>
+            <div className="md:col-span-3">
+              <label className="text-sm text-muted-foreground">Notes</label>
+              <input type="text" value={leaveNotes} onChange={(e) => setLeaveNotes(e.target.value)} className="form-input w-full" placeholder="Optional" />
+            </div>
+            <div className="md:col-span-2 flex gap-2">
+              <Button onClick={submitLongLeave} disabled={leaveSaving} className="btn-primary w-full">
+                {leaveSaving ? 'Saving...' : 'Save Long Leave'}
+              </Button>
+              <Button variant="outline" onClick={() => setShowLongLeaveForm(false)} className="w-full">Cancel</Button>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Search */}
       <Card className="p-4">

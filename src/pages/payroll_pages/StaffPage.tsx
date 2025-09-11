@@ -74,6 +74,8 @@ const StaffPage: React.FC = () => {
   const [activitiesPageSize] = useState(10);
   const [activitiesHasNext, setActivitiesHasNext] = useState(false);
   const [activitiesLoading, setActivitiesLoading] = useState(false);
+  const [leaves, setLeaves] = useState<Array<{ id: string; staff_id: string; start_date: string; end_date: string; leave_type: 'Paid' | 'Unpaid'; notes: string | null }>>([]);
+  const [leavesLoading, setLeavesLoading] = useState(false);
 
   // Derive selected location for UPI hook
   useEffect(() => {
@@ -182,6 +184,35 @@ const StaffPage: React.FC = () => {
       return merged;
     } catch (_) {
       return baseStaff;
+    }
+  };
+
+  const loadLeavesForStaff = async (staffIds: string[]) => {
+    if (!staffIds.length) {
+      setLeaves([]);
+      return;
+    }
+    try {
+      setLeavesLoading(true);
+      const candidates = ['staff_leave_periods', 'payroll.staff_leave_periods'];
+      let rows: any[] | null = null;
+      for (const t of candidates) {
+        try {
+          const { data, error } = await supabase
+            .from(t)
+            .select('id, staff_id, start_date, end_date, leave_type, notes')
+            .in('staff_id', staffIds)
+            .order('start_date', { ascending: false } as any);
+          if (error) throw error;
+          rows = data || [];
+          break;
+        } catch (_) {}
+      }
+      setLeaves(rows || []);
+    } catch (_) {
+      setLeaves([]);
+    } finally {
+      setLeavesLoading(false);
     }
   };
 
@@ -400,6 +431,7 @@ const StaffPage: React.FC = () => {
 
     loadStaff();
     loadActivities(0);
+    // leaves will load after staff is set in a separate effect below
   }, [user?.id]);
 
   const refreshStaff = async () => {
@@ -436,6 +468,16 @@ const StaffPage: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // Load leaves whenever the visible staff list changes (e.g., location filter changes)
+  useEffect(() => {
+    if (staff.length === 0) {
+      setLeaves([]);
+      return;
+    }
+    const ids = staff.map(s => s.id);
+    loadLeavesForStaff(ids);
+  }, [staff.map(s => s.id).join(',')]);
 
   const handleAddStaff = async () => {
     if (!user?.id) return;
@@ -1218,6 +1260,52 @@ const StaffPage: React.FC = () => {
             </ul>
           )}
         </div>
+      </Card>
+
+      {/* Long Leaves */}
+      <Card className="mt-6">
+        <div className="p-6 border-b border-border flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-foreground">Long Leaves</h3>
+            <p className="text-sm text-muted-foreground">Approved leave periods for current staff</p>
+          </div>
+          <div className="text-sm text-muted-foreground">
+            {leavesLoading ? 'Loading…' : `${leaves.length} record${leaves.length === 1 ? '' : 's'}`}
+          </div>
+        </div>
+        {leavesLoading ? (
+          <div className="p-6 text-sm text-muted-foreground">Loading…</div>
+        ) : leaves.length === 0 ? (
+          <div className="p-6 text-sm text-muted-foreground">No long leaves found.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="text-left p-4 font-medium text-foreground">Staff</th>
+                  <th className="text-left p-4 font-medium text-foreground">Period</th>
+                  <th className="text-left p-4 font-medium text-foreground">Type</th>
+                  <th className="text-left p-4 font-medium text-foreground">Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leaves.map(l => {
+                  const s = staff.find(st => st.id === l.staff_id);
+                  const name = s ? s.name : l.staff_id.slice(0, 8);
+                  const period = `${new Date(l.start_date).toLocaleDateString('en-IN')} → ${new Date(l.end_date).toLocaleDateString('en-IN')}`;
+                  return (
+                    <tr key={l.id} className="border-b border-border hover:bg-muted/30">
+                      <td className="p-4 text-foreground">{name}</td>
+                      <td className="p-4 text-foreground">{period}</td>
+                      <td className="p-4 text-foreground">{l.leave_type}</td>
+                      <td className="p-4 text-muted-foreground">{l.notes || '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
     </div>
   );
