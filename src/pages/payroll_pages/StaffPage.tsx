@@ -43,11 +43,31 @@ interface Staff {
   paymentMode: string;
 }
 
+interface PayrollLine {
+  id: string;
+  staff_id: string;
+  base_salary: number;
+  present_days: number;
+  paid_leaves: number;
+  unpaid_leaves: number;
+  advances_total: number;
+  net_payable: number;
+  payment_status: 'pending' | 'paid';
+  paid_via?: string;
+  paid_at?: string;
+  payment_ref?: string;
+  month: string;
+  created_at: string;
+}
+
 const StaffPage: React.FC = () => {
   const { user } = useAuth();
   const [staff, setStaff] = useState<Staff[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [payrollHistory, setPayrollHistory] = useState<PayrollLine[]>([]);
+  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
+  const [showPayrollHistory, setShowPayrollHistory] = useState(false);
   const [filterRole, setFilterRole] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -557,6 +577,32 @@ const StaffPage: React.FC = () => {
     // allow leading + and digits only
     const matched = clean.match(/^\+?[0-9]+$/) ? clean : clean.replace(/[^0-9+]/g, '');
     return `tel:${matched}`;
+  };
+
+  const loadPayrollHistory = async (staffId: string) => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('payroll_lines')
+        .select('*')
+        .eq('staff_id', staffId)
+        .order('month', { ascending: false })
+        .limit(12); // Last 12 months
+      
+      if (error) throw error;
+      setPayrollHistory(data || []);
+      setSelectedStaffId(staffId);
+      setShowPayrollHistory(true);
+    } catch (error) {
+      console.error('Error loading payroll history:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load payroll history",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const renderPaymentMethod = (member: Staff) => {
@@ -1159,6 +1205,15 @@ const StaffPage: React.FC = () => {
                       <Button
                         variant="ghost"
                         size="sm"
+                        onClick={() => loadPayrollHistory(member.id)}
+                        className="text-blue-600 hover:text-blue-700"
+                        title="View Payroll History"
+                      >
+                        <CalendarDays className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => toggleActive(member.id, member.isActive)}
                         className={member.isActive ? 'text-amber-600 hover:text-amber-700' : 'text-green-600 hover:text-green-700'}
                         title={member.isActive ? 'Deactivate Staff' : 'Activate Staff'}
@@ -1307,6 +1362,109 @@ const StaffPage: React.FC = () => {
           </div>
         )}
       </Card>
+
+      {/* Payroll History Modal */}
+      {showPayrollHistory && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-background rounded-lg shadow-lg max-w-4xl w-full max-h-[80vh] overflow-hidden">
+            <div className="p-6 border-b border-border">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-foreground">
+                  Payroll History - {staff.find(s => s.id === selectedStaffId)?.name || 'Staff Member'}
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowPayrollHistory(false)}
+                >
+                  <XCircle className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              {payrollHistory.length === 0 ? (
+                <div className="text-center py-8">
+                  <CalendarDays className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">No payroll records found for this staff member.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="text-left p-3 text-foreground">Month</th>
+                        <th className="text-right p-3 text-foreground">Base Salary</th>
+                        <th className="text-center p-3 text-foreground">Present Days</th>
+                        <th className="text-center p-3 text-foreground">Paid Leaves</th>
+                        <th className="text-center p-3 text-foreground">Unpaid Leaves</th>
+                        <th className="text-right p-3 text-foreground">Advances</th>
+                        <th className="text-right p-3 text-foreground">Net Payable</th>
+                        <th className="text-center p-3 text-foreground">Status</th>
+                        <th className="text-center p-3 text-foreground">Payment Method</th>
+                        <th className="text-center p-3 text-foreground">Paid Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {payrollHistory.map((line) => (
+                        <tr key={line.id} className="border-b border-border hover:bg-muted/30">
+                          <td className="p-3 text-foreground font-medium">
+                            {new Date(line.month + '-01').toLocaleDateString('en-IN', { 
+                              month: 'long', 
+                              year: 'numeric' 
+                            })}
+                          </td>
+                          <td className="p-3 text-right text-foreground">
+                            {formatCurrency(line.base_salary)}
+                          </td>
+                          <td className="p-3 text-center text-foreground">
+                            {line.present_days}
+                          </td>
+                          <td className="p-3 text-center text-foreground">
+                            {line.paid_leaves}
+                          </td>
+                          <td className="p-3 text-center text-foreground">
+                            {line.unpaid_leaves}
+                          </td>
+                          <td className="p-3 text-right text-warning">
+                            {formatCurrency(line.advances_total)}
+                          </td>
+                          <td className="p-3 text-right text-success font-semibold">
+                            {formatCurrency(line.net_payable)}
+                          </td>
+                          <td className="p-3 text-center">
+                            <span className={`px-2 py-1 rounded-full text-xs ${
+                              line.payment_status === 'paid' 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {line.payment_status === 'paid' ? 'Paid' : 'Pending'}
+                            </span>
+                          </td>
+                          <td className="p-3 text-center text-muted-foreground">
+                            {line.paid_via || '—'}
+                          </td>
+                          <td className="p-3 text-center text-muted-foreground">
+                            {line.paid_at ? new Date(line.paid_at).toLocaleDateString('en-IN') : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            
+            <div className="p-6 border-t border-border">
+              <div className="flex justify-end">
+                <Button onClick={() => setShowPayrollHistory(false)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
