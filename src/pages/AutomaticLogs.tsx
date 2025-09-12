@@ -131,8 +131,52 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
         });
       }
 
-      if (!error && uniqueData) {
-        setLogs(uniqueData);
+      // Same-day de-duplication by vehicle number: keep only the longest duration
+      function getDurationMs(log: any) {
+        const entry = log?.entry_time ? new Date(log.entry_time).getTime() : NaN;
+        const exit = log?.exit_time ? new Date(log.exit_time).getTime() : NaN;
+        if (Number.isNaN(entry) || Number.isNaN(exit) || exit < entry) return 0;
+        return exit - entry;
+      }
+
+      function dedupeByVehicleLongestDuration(items: any[]) {
+        const bestByPlate = new Map<string, any>();
+        for (const item of items) {
+          const plate: string = item?.vehicles?.number_plate || String(item?.vehicle_id || 'unknown');
+          const currentBest = bestByPlate.get(plate);
+          const itemDur = getDurationMs(item);
+          if (!currentBest) {
+            bestByPlate.set(plate, item);
+            continue;
+          }
+          const bestDur = getDurationMs(currentBest);
+          if (itemDur > bestDur) {
+            bestByPlate.set(plate, item);
+          } else if (itemDur === bestDur) {
+            // Tie-breaker: pick the one with the later exit_time, then later entry_time
+            const itemExit = item?.exit_time ? new Date(item.exit_time).getTime() : 0;
+            const bestExit = currentBest?.exit_time ? new Date(currentBest.exit_time).getTime() : 0;
+            if (itemExit > bestExit) {
+              bestByPlate.set(plate, item);
+            } else if (itemExit === bestExit) {
+              const itemEntry = item?.entry_time ? new Date(item.entry_time).getTime() : 0;
+              const bestEntry = currentBest?.entry_time ? new Date(currentBest.entry_time).getTime() : 0;
+              if (itemEntry > bestEntry) {
+                bestByPlate.set(plate, item);
+              }
+            }
+          }
+        }
+        // Preserve overall ordering (entry_time desc) while filtering
+        const keep = new Set(Array.from(bestByPlate.values()).map(v => v.id));
+        const filtered = items.filter(it => keep.has(it.id));
+        return filtered.sort((a, b) => new Date(b.entry_time).getTime() - new Date(a.entry_time).getTime());
+      }
+
+      const dedupedData = dedupeByVehicleLongestDuration(uniqueData || []);
+
+      if (!error && dedupedData) {
+        setLogs(dedupedData);
       } else {
         setLogs([]);
       }
