@@ -32,12 +32,10 @@
       "runtime": "nodejs18.x"
     }
   },
-  "crons": {
-    "jobs": [
-      {
-        "path": "/api/sendReport",
-        "schedule": "30 15 * * *"
-      }
-    ]
-  }
+  "crons": [
+    {
+      "path": "/api/sendReport",
+      "schedule": "30 15 * * *"
+    }
+  ]
 } 
