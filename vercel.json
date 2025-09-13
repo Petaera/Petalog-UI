@@ -35,7 +35,7 @@
   "crons": [
     {
       "path": "/api/sendReport",
-      "schedule": "30 15 * * *"
+      "schedule": "45 15 * * *"
     }
   ]
 } 
