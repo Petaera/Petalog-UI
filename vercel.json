@@ -29,7 +29,7 @@
   ],
   "functions": {
     "api/sendReport.js": {
-      "runtime": "nodejs18.x"
+      "runtime": "nodejs@18.x"
     }
   },
   "crons": [
