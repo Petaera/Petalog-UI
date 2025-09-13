@@ -28,7 +28,9 @@
     }
   ],
   "functions": {
-    "api/sendReport.js": {}
+    "api/sendReport.js": {
+      "maxDuration": 30
+    }
   },
   "crons": [
     {
