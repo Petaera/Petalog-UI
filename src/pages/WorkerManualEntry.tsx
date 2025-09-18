@@ -296,7 +296,7 @@ export default function WorkerManualEntry({ selectedLocation }: WorkerManualEntr
   // Fetch vehicle brands and models from Vehicles_in_india table
   useEffect(() => {
     const fetchVehicleData = async () => {
-      console.log('Fetching from Vehicles_in_india table...');
+      console.log('Fetching from Vehicles');
 
       // Fetch all fields including id for Brand_id mapping
       let result = await supabase
