@@ -8,7 +8,8 @@ import {
   Users,
   Settings,
   Search,
-  Car
+  Car,
+  CreditCard
 } from "lucide-react";
 
 import {
@@ -62,7 +63,8 @@ export function AppSidebar() {
         { title: "Manual Logs", url: "/manual-logs", icon: PenTool },
         { title: "Comparison", url: "/comparison", icon: FileText },
         { title: "Reports & Statistics", url: "/reports", icon: BarChart3 },
-        { title: "Payment Details", url: "/payment-details", icon: Users },
+        { title: "Payment Details", url: "/payment-details", icon: CreditCard },
+        { title: "Manager Access", url: "/manager-access", icon: Users },
         // { title: "Partnerships", url: "/location-partnerships", icon: Users },
         { title: "Price Settings", url: "/price-settings", icon: Settings },
         { title: "Vehicle History", url: "/vehicle-history", icon: Search },

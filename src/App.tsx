@@ -21,6 +21,7 @@ import ManualLogs from "./pages/ManualLogs";
 import Comparison from "./pages/Comparison";
 import Reports from "./pages/Reports";
 import PaymentDetails from "./pages/paymentdetails";
+import ManagerAccess from "./pages/ManagerAccess";
 import PriceSettings from "./pages/PriceSettings";
 import VehicleHistory from "./pages/VehicleHistory";
 import OwnerEntry from "./pages/OwnerEntry";
@@ -227,6 +228,16 @@ const App = () => (
                   <ProtectedRoute requiredRole="owner">
                     <Layout>
                       <PaymentDetails />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route 
+                path="/manager-access" 
+                element={
+                  <ProtectedRoute requiredRole="owner">
+                    <Layout>
+                      <ManagerAccess />
                     </Layout>
                   </ProtectedRoute>
                 }
