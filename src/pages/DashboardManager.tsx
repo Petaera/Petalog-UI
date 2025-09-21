@@ -22,7 +22,11 @@ const DashboardManager = () => {
 
       let manQuery = supabase
         .from('logs-man')
-        .select('id, entry_time, location_id, vehicle_id, vehicles(number_plate)')
+        .select(`
+          id, entry_time, location_id, vehicle_id, 
+          vehicles(number_plate, type, Brand, model),
+          customers(name, phone, date_of_birth, location_id)
+        `)
         .eq('approval_status', 'approved') // Only show approved manual logs
         .order('entry_time', { ascending: false });
       let autoQuery = supabase

@@ -69,11 +69,28 @@ export default function ManagerVehicleHistory() {
     try {
       
 
+      // First get the vehicle ID for this plate
+      const { data: vehicleData, error: vehicleError } = await supabase
+        .from('vehicles')
+        .select('id')
+        .eq('number_plate', searchQuery.trim())
+        .maybeSingle();
+
+      if (vehicleError || !vehicleData) {
+        setVehicleHistory([]);
+        setLoading(false);
+        return;
+      }
+
       // Build query with location filter for manual logs
       let manualQuery = supabase
         .from('logs-man')
-        .select('*')
-        .ilike('vehicle_number', `%${searchQuery.trim()}%`)
+        .select(`
+          *,
+          vehicles(number_plate, type, Brand, model),
+          customers(name, phone, date_of_birth, location_id)
+        `)
+        .eq('vehicle_id', vehicleData.id)
         .eq('location_id', user.assigned_location);
 
       const { data: manualData, error: manualError } = await manualQuery.order('created_at', { ascending: false });
@@ -109,7 +126,7 @@ export default function ManagerVehicleHistory() {
       // Process manual logs data
       const processedManualHistory = manualData?.map(log => ({
         id: log.id,
-        vehicle_number: log.vehicle_number,
+        vehicle_number: log.vehicles?.number_plate,
         service: log.service,
         amount: log.Amount || 0,
         location: log.location,

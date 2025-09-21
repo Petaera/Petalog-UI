@@ -68,12 +68,27 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
   const fetchCustomerDetails = async (vehicleNumber: string) => {
     try {
       // Search in manual logs for customer details
+      // First get the vehicle ID for this plate
+      const { data: vehicleData, error: vehicleError } = await supabase
+        .from('vehicles')
+        .select('id')
+        .eq('number_plate', vehicleNumber.trim())
+        .maybeSingle();
+
+      if (vehicleError || !vehicleData) {
+        setCustomerDetails(null);
+        return;
+      }
+
       const { data: manualData, error: manualError } = await supabase
         .from('logs-man')
-        .select('Name, Phone_no, Location, "D.O.B", vehicle_brand, vehicle_model')
-        .ilike('vehicle_number', `%${vehicleNumber.trim()}%`)
+        .select(`
+          vehicles(Brand, model),
+          customers(name, phone, date_of_birth, location_id)
+        `)
+        .eq('vehicle_id', vehicleData.id)
         .eq('location_id', selectedLocation)
-        .not('Name', 'is', null)
+        .not('customer_id', 'is', null)
         .limit(1);
 
       if (manualError) {
@@ -84,12 +99,12 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
       if (manualData && manualData.length > 0) {
         const customer = manualData[0];
         return {
-          name: customer.Name || 'Not provided',
-          phone: customer.Phone_no || 'Not provided',
-          location: customer.Location || undefined,
-          dateOfBirth: customer['D.O.B'] || undefined,
-          vehicleBrand: customer.vehicle_brand || undefined,
-          vehicleModel: customer.vehicle_model || undefined,
+          name: customer.customers?.name || 'Not provided',
+          phone: customer.customers?.phone || 'Not provided',
+          location: customer.customers?.location_id || undefined,
+          dateOfBirth: customer.customers?.date_of_birth || undefined,
+          vehicleBrand: customer.vehicles?.Brand || undefined,
+          vehicleModel: customer.vehicles?.model || undefined,
         };
       }
 
@@ -119,11 +134,28 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
     try {
       console.log('🔍 Searching for vehicle:', searchQuery, 'in location:', selectedLocation);
 
+      // First get the vehicle ID for this plate
+      const { data: vehicleData, error: vehicleError } = await supabase
+        .from('vehicles')
+        .select('id')
+        .eq('number_plate', searchQuery.trim())
+        .maybeSingle();
+
+      if (vehicleError || !vehicleData) {
+        setVehicleHistory([]);
+        setLoading(false);
+        return;
+      }
+
       // Build query with location filter for manual logs only
       let manualQuery = supabase
         .from('logs-man')
-        .select('*')
-        .ilike('vehicle_number', `%${searchQuery.trim()}%`)
+        .select(`
+          *,
+          vehicles(number_plate, type, Brand, model),
+          customers(name, phone, date_of_birth, location_id)
+        `)
+        .eq('vehicle_id', vehicleData.id)
         .eq('location_id', selectedLocation);
 
       const { data: manualData, error: manualError } = await manualQuery.order('created_at', { ascending: false });
@@ -139,7 +171,7 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
       // Process manual logs data only
       const processedHistory = manualData?.map(log => ({
         id: log.id,
-        vehicle_number: log.vehicle_number,
+        vehicle_number: log.vehicles?.number_plate,
         service: log.service,
         amount: log.Amount || 0,
         location: log.location,
