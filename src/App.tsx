@@ -20,7 +20,7 @@ import AutomaticLogs from "./pages/AutomaticLogs";
 import ManualLogs from "./pages/ManualLogs";
 import Comparison from "./pages/Comparison";
 import Reports from "./pages/Reports";
-import ManagerAccess from "./pages/ManagerAccess";
+import PaymentDetails from "./pages/paymentdetails";
 import PriceSettings from "./pages/PriceSettings";
 import VehicleHistory from "./pages/VehicleHistory";
 import OwnerEntry from "./pages/OwnerEntry";
@@ -222,11 +222,11 @@ const App = () => (
                 }
               />
               <Route 
-                path="/manager-access" 
+                path="/payment-details" 
                 element={
                   <ProtectedRoute requiredRole="owner">
                     <Layout>
-                      <ManagerAccess />
+                      <PaymentDetails />
                     </Layout>
                   </ProtectedRoute>
                 }

@@ -27,7 +27,7 @@ const managers = [
   { id: 3, name: "Amit Kumar", email: "amit@carwash.com", location: "West Side Center", status: "Inactive", lastLogin: "3 days ago" },
 ];
 
-export default function ManagerAccess({ selectedLocation }: { selectedLocation?: string }) {
+export default function PaymentDetails({ selectedLocation }: { selectedLocation?: string }) {
   const { signup, user } = useAuth();
   const [showSignupDialog, setShowSignupDialog] = useState(false);
   const [loading, setLoading] = useState(false);
