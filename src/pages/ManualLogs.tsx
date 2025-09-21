@@ -210,7 +210,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
     // Navigate to owner entry with log data for editing
     const logData = {
       id: log.id,
-      vehicleNumber: log.vehicles?.number_plate || '',
+      vehicleNumber: log.vehicle_number || '',
       vehicleType: log.vehicle_type || '',
       service: log.service ? log.service.split(',') : [],
       amount: log.Amount?.toString() || '',
@@ -218,13 +218,13 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
       discount: log.discount?.toString() || '',
       remarks: log.remarks || '',
       paymentMode: log.payment_mode || 'cash',
-      customerName: log.customers?.name || '',
-      phoneNumber: log.customers?.phone || '',
-      dateOfBirth: log.customers?.date_of_birth || '',
-      customerLocation: log.customers?.location_id || '',
-      selectedVehicleBrand: log.vehicles?.Brand || '',
-      selectedModel: log.vehicles?.model || '',
-      selectedModelId: log.vehicles?.model || '',
+      customerName: log.Name || '',
+      phoneNumber: log.Phone_no || '',
+      dateOfBirth: log['D.O.B'] || '',
+      customerLocation: log.Location || '',
+      selectedVehicleBrand: log.vehicle_brand || '',
+      selectedModel: log.vehicle_model || '',
+      selectedModelId: log.Brand_id || '',
       workshop: log.workshop || '',
       wheel_type: log.wheel_type || '',
       entry_time: log.entry_time || log.created_at || null,
@@ -246,11 +246,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
       // Fetch pending logs (not approved yet)
       let pendingQuery = supabase
         .from("logs-man")
-        .select(`
-          *,
-          vehicles(number_plate, type, Brand, model),
-          customers(name, phone, date_of_birth, location_id)
-        `)
+        .select("*, vehicles(number_plate)")
         .eq("location_id", selectedLocation)
         .in("approval_status", ["pending", null])
         .order("created_at", { ascending: false });
@@ -275,11 +271,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
       if (selectedDate && pendingData?.length === 0) {
         let fallbackQuery = supabase
           .from("logs-man")
-          .select(`
-            *,
-            vehicles(number_plate, type, Brand, model),
-            customers(name, phone, date_of_birth, location_id)
-          `)
+          .select("*, vehicles(number_plate)")
           .eq("location_id", selectedLocation)
           .in("approval_status", ["pending", null])
           .order("created_at", { ascending: false });
@@ -304,11 +296,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
       // Fetch approved (closed) logs
       let approvedQuery = supabase
         .from("logs-man")
-        .select(`
-          *,
-          vehicles(number_plate, type, Brand, model),
-          customers(name, phone, date_of_birth, location_id)
-        `)
+        .select("*, vehicles(number_plate)")
         .eq("location_id", selectedLocation)
         .eq("approval_status", "approved")
         .order("created_at", { ascending: false });
@@ -330,11 +318,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
       if (selectedDate && approvedData?.length === 0) {
         let approvedFallbackQuery = supabase
           .from("logs-man")
-          .select(`
-            *,
-            vehicles(number_plate, type, Brand, model),
-            customers(name, phone, date_of_birth, location_id)
-          `)
+          .select("*, vehicles(number_plate)")
           .eq("location_id", selectedLocation)
           .eq("approval_status", "approved")
           .order("created_at", { ascending: false });
@@ -359,11 +343,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
       // Fetch Pay Later separately WITH date filter
       let payLaterQuery = supabase
         .from("logs-man")
-        .select(`
-          *,
-          vehicles(number_plate, type, Brand, model),
-          customers(name, phone, date_of_birth, location_id)
-        `)
+        .select("*, vehicles(number_plate)")
         .eq("location_id", selectedLocation)
         .eq("approval_status", "approved")
         .eq("payment_mode", "credit")
@@ -388,11 +368,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
       if (selectedDate && payLaterData?.length === 0) {
         let payLaterFallbackQuery = supabase
           .from("logs-man")
-          .select(`
-            *,
-            vehicles(number_plate, type, Brand, model),
-            customers(name, phone, date_of_birth, location_id)
-          `)
+          .select("*, vehicles(number_plate)")
           .eq("location_id", selectedLocation)
           .eq("approval_status", "approved")
           .eq("payment_mode", "credit")
@@ -633,17 +609,17 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                     ) : (
                       pendingLogs.map((log, idx) => (
                         <tr key={log.id || idx} className="hover:bg-muted/30">
-                          <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicles?.number_plate || "-"}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_type || "-"}</td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.customers?.name || "-"}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.Name || "-"}</td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {log.customers?.phone ? (
+                            {log.Phone_no ? (
                               <a
-                                href={`tel:${log.customers.phone}`}
+                                href={`tel:${log.Phone_no}`}
                                 className="text-blue-600 hover:underline"
-                                title={`Call ${log.customers.phone}`}
+                                title={`Call ${log.Phone_no}`}
                               >
-                                {log.customers.phone}
+                                {log.Phone_no}
                               </a>
                             ) : (
                               "-"
@@ -764,17 +740,17 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                     ) : (
                       payLaterLogs.map((log: any, idx: number) => (
                         <tr key={log.id || idx} className="hover:bg-muted/30">
-                          <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicles?.number_plate || "-"}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_type || "-"}</td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.customers?.name || "-"}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.Name || "-"}</td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {log.customers?.phone ? (
+                            {log.Phone_no ? (
                               <a
-                                href={`tel:${log.customers.phone}`}
+                                href={`tel:${log.Phone_no}`}
                                 className="text-blue-600 hover:underline"
-                                title={`Call ${log.customers.phone}`}
+                                title={`Call ${log.Phone_no}`}
                               >
-                                {log.customers.phone}
+                                {log.Phone_no}
                               </a>
                             ) : (
                               "-"
@@ -874,17 +850,17 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                     ) : (
                       approvedLogs.map((log, idx) => (
                         <tr key={log.id || idx} className="hover:bg-muted/30">
-                          <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicles?.number_plate || "-"}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_type || "-"}</td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.customers?.name || "-"}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.Name || "-"}</td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {log.customers?.phone ? (
+                            {log.Phone_no ? (
                               <a
-                                href={`tel:${log.customers.phone}`}
+                                href={`tel:${log.Phone_no}`}
                                 className="text-blue-600 hover:underline"
-                                title={`Call ${log.customers.phone}`}
+                                title={`Call ${log.Phone_no}`}
                               >
-                                {log.customers.phone}
+                                {log.Phone_no}
                               </a>
                             ) : (
                               "-"

@@ -107,11 +107,7 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
       // Only count approved/closed tickets for today's income (excluding Pay Later/credit)
       let todayQuery = supabase
         .from('logs-man')
-        .select(`
-          Amount, created_at, location_id, approval_status, payment_mode,
-          vehicles(number_plate, type, Brand, model),
-          customers(name, phone, date_of_birth, location_id)
-        `)
+        .select('Amount, created_at, location_id, approval_status, payment_mode')
         .eq('approval_status', 'approved') // Only count approved/closed tickets
         .neq('payment_mode', 'credit') // Exclude Pay Later/credit tickets
         .gte('created_at', startOfDay.toISOString())
@@ -135,11 +131,7 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
       // Only count pending tickets from today
       let activeQuery = supabase
         .from('logs-man')
-        .select(`
-          id, location_id, entry_time, created_at,
-          vehicles(number_plate, type, Brand, model),
-          customers(name, phone, date_of_birth, location_id)
-        `)
+        .select('id, location_id, entry_time, created_at')
         .eq('approval_status', 'pending')
         .gte('entry_time', startOfDay.toISOString())
         .lt('entry_time', endOfDay.toISOString());

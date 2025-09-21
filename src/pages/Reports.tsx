@@ -115,11 +115,7 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
       console.log('📡 Fetching from tables: vehicles, logs-man, locations, Service_prices, users');
       const [vehiclesRes, logsRes, locationsRes, servicePricesRes, usersRes] = await Promise.all([
         supabase.from('vehicles').select('*'),
-        supabase.from('logs-man').select(`
-          *,
-          vehicles(number_plate, type, Brand, model),
-          customers(name, phone, date_of_birth, location_id)
-        `),
+        supabase.from('logs-man').select('*'),
         supabase.from('locations').select('*'),
         supabase.from('Service_prices').select('*'),
         supabase.from('users').select('*')
@@ -243,9 +239,9 @@ useEffect(() => {
     // Apply search filter
     if (searchTerm) {
       filteredLogs = filteredLogs.filter(log =>
-        log.vehicles?.number_plate?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        log.customers?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        String(log.customers?.phone || '').includes(searchTerm)
+        log.vehicle_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        log.Name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        String(log.Phone_no || '').includes(searchTerm)
       );
       console.log('🔍 After search filter:', filteredLogs.length, 'records');
     }
@@ -389,7 +385,7 @@ useEffect(() => {
         original: paymentMode,
         normalized: normalizedMode,
         amount: log.Amount,
-        vehicleNumber: log.vehicles?.number_plate
+        vehicleNumber: log.vehicle_number
       });
 
       if (!acc[normalizedMode]) {
@@ -461,7 +457,7 @@ useEffect(() => {
       let calculatedPrice = log.Amount || 0; // Use the actual amount from the log
 
       console.log('🔍 Processing vehicle:', {
-        vehicleNumber: log.vehicles?.number_plate,
+        vehicleNumber: log.vehicle_number,
         service: log.service,
         vehicleType: log.vehicle_type,
         originalAmount: log.Amount,
@@ -501,11 +497,11 @@ useEffect(() => {
 
       return {
         id: log.id,
-        vehicle_number: log.vehicles?.number_plate,
+        vehicle_number: log.vehicle_number,
         vehicle_type: log.vehicle_type,
-        vehicle_model: log.vehicles?.model,
-        owner_name: log.customers?.name,
-        phone_number: log.customers?.phone,
+        vehicle_model: log.vehicle_model,
+        owner_name: log.Name,
+        phone_number: log.Phone_no,
         service_type: log.service,
         price: calculatedPrice,
         location_id: log.location_id,
@@ -565,10 +561,10 @@ useEffect(() => {
 
     // Create CSV data with all required fields
     const csvData = filteredLogs.map(log => ({
-      'Vehicle Number': escapeCSV(log.vehicles?.number_plate),
-      'Owner Name': escapeCSV(log.customers?.name),
-      'Phone': escapeCSV(log.customers?.phone),
-      'Vehicle Model': escapeCSV(log.vehicles?.model),
+      'Vehicle Number': escapeCSV(log.vehicle_number),
+      'Owner Name': escapeCSV(log.Name),
+      'Phone': escapeCSV(log.Phone_no),
+      'Vehicle Model': escapeCSV(log.vehicle_model),
       'Service Type': escapeCSV(log.service),
       'Price': escapeCSV(log.Amount),
       'Payment Mode': escapeCSV(log.payment_mode),

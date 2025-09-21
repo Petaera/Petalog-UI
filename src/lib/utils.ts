@@ -19,18 +19,12 @@ export function generateUUID() {
 }
 
 // Utility function to get or create vehicle ID
-export async function getOrCreateVehicleId(
-  vehicleNumber: string, 
-  vehicleType?: string, 
-  brand?: string, 
-  model?: string, 
-  customerId?: string | null
-) {
+export async function getOrCreateVehicleId(vehicleNumber: string, vehicleType?: string) {
   try {
     // First, check if vehicle already exists
     const { data: existingVehicle, error: lookupError } = await supabase
       .from('vehicles')
-      .select('id, type, Brand, model, owner_id')
+      .select('id, type')
       .eq('number_plate', vehicleNumber)
       .single();
 
@@ -41,24 +35,7 @@ export async function getOrCreateVehicleId(
     }
 
     if (existingVehicle && existingVehicle.id) {
-      // Vehicle exists, update it with new information if provided
-      const updateData: any = {};
-      if (vehicleType && vehicleType !== existingVehicle.type) updateData.type = vehicleType;
-      if (brand && brand !== existingVehicle.Brand) updateData.Brand = brand;
-      if (model && model !== existingVehicle.model) updateData.model = model;
-      if (customerId && customerId !== existingVehicle.owner_id) updateData.owner_id = customerId;
-
-      if (Object.keys(updateData).length > 0) {
-        const { error: updateError } = await supabase
-          .from('vehicles')
-          .update(updateData)
-          .eq('id', existingVehicle.id);
-
-        if (updateError) {
-          console.warn('Error updating vehicle:', updateError);
-        }
-      }
-
+      // Vehicle exists, return existing ID
       console.log(`Found existing vehicle: ${vehicleNumber} with ID: ${existingVehicle.id}`);
       return existingVehicle.id;
     } else {
@@ -67,15 +44,12 @@ export async function getOrCreateVehicleId(
       const vehicleData: any = {
         id: newVehicleId,
         number_plate: vehicleNumber,
-        created_at: new Date().toISOString(),
-        visit_count: 0
       };
       
-      // Add optional fields if provided
-      if (vehicleType) vehicleData.type = vehicleType;
-      if (brand) vehicleData.Brand = brand;
-      if (model) vehicleData.model = model;
-      if (customerId) vehicleData.owner_id = customerId;
+      // Add vehicle type if provided
+      if (vehicleType) {
+        vehicleData.type = vehicleType;
+      }
 
       const { error: insertError } = await supabase
         .from('vehicles')

@@ -69,11 +69,10 @@ export function useComparisonData({
       if (commonLogs.length > 0) {
         // Group by vehicle number and normalize timestamps
         const vehicleGroups = commonLogs.reduce((acc: any, log) => {
-          const vehicleNumber = log.vehicles?.number_plate || log.vehicle_number;
-          if (!acc[vehicleNumber]) {
-            acc[vehicleNumber] = [];
+          if (!acc[log.vehicle_number]) {
+            acc[log.vehicle_number] = [];
           }
-          acc[vehicleNumber].push(log);
+          acc[log.vehicle_number].push(log);
           return acc;
         }, {});
         

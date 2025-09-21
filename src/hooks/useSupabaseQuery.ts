@@ -88,11 +88,7 @@ export function useLogsQuery(table: 'logs-auto' | 'logs-man', options?: UseSupab
   const queryFn = useCallback(async () => {
     const query = supabase
       .from(table)
-      .select(`
-        id, entry_time, location_id, vehicle_id, 
-        vehicles(number_plate, type, Brand, model),
-        customers(name, phone, date_of_birth, location_id)
-      `)
+      .select('id, entry_time, location_id, vehicle_id, vehicles(number_plate)')
       .order('entry_time', { ascending: false })
       .limit(10);
 

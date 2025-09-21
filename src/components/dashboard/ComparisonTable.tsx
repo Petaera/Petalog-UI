@@ -189,13 +189,13 @@ const ComparisonTable: React.FC<ComparisonTableProps> = ({ loading, data, select
                           {log.log_type === 'automatic' ? (
                             <button
                               className="text-gray-900 cursor-pointer bg-transparent p-0 m-0 hover:opacity-80 focus:outline-none focus:ring-0"
-                              onClick={() => handleAutomaticClick(log.vehicles?.number_plate, log.entry_time)}
+                              onClick={() => handleAutomaticClick(log.vehicle_number, log.entry_time)}
                               title="View entry image"
                             >
-                              {log.vehicles?.number_plate || "-"}
+                              {log.vehicle_number || "-"}
                             </button>
                           ) : (
-                            log.vehicles?.number_plate || "-"
+                            log.vehicle_number || "-"
                           )}
                         </td>
                         <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">

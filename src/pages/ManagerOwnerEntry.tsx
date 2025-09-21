@@ -18,60 +18,6 @@ import ReactSelect from 'react-select';
 import { getOrCreateVehicleId } from "@/lib/utils";
 import { useUpiAccounts } from '@/hooks/useUpiAccounts';
 
-// Helper function to get or create customer ID
-const getOrCreateCustomerId = async (
-  name: string,
-  phone: string,
-  dateOfBirth: string,
-  location: string,
-  ownerId: string
-): Promise<string | null> => {
-  if (!name && !phone) return null;
-
-  try {
-    // First, try to find existing customer by phone
-    if (phone) {
-      const { data: existingCustomer, error: findError } = await supabase
-        .from('customers')
-        .select('id')
-        .eq('phone', phone)
-        .maybeSingle();
-
-      if (findError && findError.code !== 'PGRST116') {
-        console.warn('Error finding customer:', findError);
-      }
-
-      if (existingCustomer) {
-        return existingCustomer.id;
-      }
-    }
-
-    // Create new customer
-    const { data: newCustomer, error: createError } = await supabase
-      .from('customers')
-      .insert({
-        name: name || null,
-        phone: phone || null,
-        date_of_birth: dateOfBirth || null,
-        location_id: location || null,
-        owner_id: ownerId,
-        created_at: new Date().toISOString()
-      })
-      .select('id')
-      .single();
-
-    if (createError) {
-      console.error('Error creating customer:', createError);
-      return null;
-    }
-
-    return newCustomer.id;
-  } catch (error) {
-    console.error('Error in getOrCreateCustomerId:', error);
-    return null;
-  }
-};
-
 // Add SERVICE_PRICES fallback at the top-level
 const SERVICE_PRICES: { [key: string]: number } = {
   'basic': 200,
@@ -906,36 +852,10 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
         }
 
         setIsLoadingVehicleData(true);
-        // First get the vehicle ID for this plate
-        const { data: vehicleRecord, error: vehicleError } = await supabase
-          .from('vehicles')
-          .select('id')
-          .eq('number_plate', plate)
-          .maybeSingle();
-
-        if (vehicleError || !vehicleRecord) {
-          // No vehicle found, clear customer fields
-          if (!cancelled) {
-            setCustomerName('');
-            setPhoneNumber('');
-            setDateOfBirth('');
-            setCustomerLocation('');
-            setSelectedVehicleBrand('');
-            setSelectedModel('');
-            setSelectedModelId('');
-          }
-          return;
-        }
-
-        // Pull latest matching manual log for this vehicle
         const { data, error } = await supabase
           .from('logs-man')
-          .select(`
-            wheel_type, created_at,
-            vehicles(Brand, model),
-            customers(name, phone, date_of_birth, location_id)
-          `)
-          .eq('vehicle_id', vehicleRecord.id)
+          .select('Name, Phone_no, Location, "D.O.B", vehicle_brand, vehicle_model, Brand_id, wheel_type, created_at')
+          .ilike('vehicle_number', `%${plate}%`)
           .order('created_at', { ascending: false })
           .limit(1);
         if (error || !data || data.length === 0) {
@@ -975,17 +895,17 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
         const last = data[0] as any;
 
         // Always populate with the latest data for this vehicle number
-        setCustomerName(last.customers?.name || '');
-        setPhoneNumber(last.customers?.phone || '');
-        setCustomerLocation(last.customers?.location_id || '');
-        setDateOfBirth(last.customers?.date_of_birth || '');
+        setCustomerName(last.Name || '');
+        setPhoneNumber(last.Phone_no || '');
+        setCustomerLocation(last.Location || '');
+        setDateOfBirth(last['D.O.B'] || '');
 
         if (last.wheel_type) {
           const derived = mapTypeToWheelCategory(normalizeTypeString(last.wheel_type));
           if (derived) setWheelCategory(derived);
         }
 
-        setSelectedVehicleBrand(last.vehicles?.Brand || '');
+        setSelectedVehicleBrand(last.vehicle_brand || '');
         setTimeout(() => {
           if (!cancelled) {
             // Protection check before setting model
@@ -993,15 +913,15 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
               console.log('🛡️ Auto-fill model setting blocked: protection check failed');
               return;
             }
-            setSelectedModel(last.vehicles?.model || '');
-            setSelectedModelId(last.vehicles?.model || '');
+            setSelectedModel(last.vehicle_model || '');
+            setSelectedModelId(last.Brand_id || '');
           }
         }, 200);
 
-        if (!last.wheel_type && (last.vehicles?.Brand || last.vehicles?.model) && vehicleData.length > 0) {
+        if (!last.wheel_type && (last.vehicle_brand || last.vehicle_model) && vehicleData.length > 0) {
           try {
             const match = vehicleData.find(item =>
-              item['Vehicle Brands'] === (last.vehicles?.Brand || '') && item['Models'] === (last.vehicles?.model || '')
+              item['Vehicle Brands'] === (last.vehicle_brand || '') && item['Models'] === (last.vehicle_model || '')
             );
             if (match && (match as any).type != null) {
               const derived = mapTypeToWheelCategory(normalizeTypeString((match as any).type));
@@ -1177,26 +1097,8 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
     //   return;
     // }
     try {
-      // Auto-create customer if needed
-      let customerId = null;
-      if (trimmedCustomerName || phoneNumber) {
-        customerId = await getOrCreateCustomerId(
-          trimmedCustomerName,
-          phoneNumber,
-          dateOfBirth,
-          customerLocation,
-          selectedLocation
-        );
-      }
-
       // Use the utility function to get or create vehicle ID
-      const vehicleId = await getOrCreateVehicleId(
-        vehicleNumber, 
-        vehicleType, 
-        selectedVehicleBrand, 
-        selectedModel, 
-        customerId
-      );
+      const vehicleId = await getOrCreateVehicleId(vehicleNumber, vehicleType);
 
       // 1. Upload image to Supabase Storage
       // const safeVehicleNumber = vehicleNumber.replace(/[^a-zA-Z0-9_-]/g, '');
@@ -1303,7 +1205,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
         const { error: insertError } = await supabase.from('logs-man').insert([
           {
             vehicle_id: vehicleId,
-            customer_id: customerId,
+            vehicle_number: vehicleNumber,
             location_id: selectedLocation,
             entry_type: entryType,
             image_url: imageUrl,
@@ -1316,6 +1218,11 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
             vehicle_type: vehicleType,
             workshop: entryType === 'workshop' ? workshop : null,
             wheel_type: mapWheelCategoryToTypeCode(wheelCategory),
+            // Customer details
+            Name: trimmedCustomerName || null,
+            Phone_no: phoneNumber || null,
+            'D.O.B': dateOfBirth || null,
+            Location: customerLocation || null,
             // Vehicle details
             vehicle_brand: selectedVehicleBrand || null,
             vehicle_model: selectedModel || null,
@@ -1410,26 +1317,8 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
     }
 
     try {
-      // Auto-create customer if needed
-      let customerId = null;
-      if (trimmedCustomerName || phoneNumber) {
-        customerId = await getOrCreateCustomerId(
-          trimmedCustomerName,
-          phoneNumber,
-          dateOfBirth,
-          customerLocation,
-          selectedLocation
-        );
-      }
-
       // Use the utility function to get or create vehicle ID
-      const vehicleId = await getOrCreateVehicleId(
-        vehicleNumber, 
-        vehicleType, 
-        selectedVehicleBrand, 
-        selectedModel, 
-        customerId
-      );
+      const vehicleId = await getOrCreateVehicleId(vehicleNumber, vehicleType);
 
       const imageUrl = null; // Set to null since scratch marking is commented out
 
@@ -1448,7 +1337,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
       const { error: insertError } = await supabase.from('logs-man').insert([
         {
           vehicle_id: vehicleId,
-          customer_id: customerId,
+          vehicle_number: vehicleNumber,
           location_id: selectedLocation,
           entry_type: entryType,
           image_url: imageUrl,
@@ -1461,6 +1350,11 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
           vehicle_type: vehicleType,
           workshop: entryType === 'workshop' ? workshop : null,
           wheel_type: mapWheelCategoryToTypeCode(wheelCategory),
+          // Customer details
+          Name: trimmedCustomerName || null,
+          Phone_no: phoneNumber || null,
+          'D.O.B': dateOfBirth || null,
+          Location: customerLocation || null,
           // Vehicle details
           vehicle_brand: selectedVehicleBrand || null,
           vehicle_model: selectedModel || null,
