@@ -19,17 +19,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-const managers = [
-  { id: 1, name: "Raj Patel", email: "raj@carwash.com", location: "Main Branch", status: "Active", lastLogin: "2 hours ago" },
-  { id: 2, name: "Priya Sharma", email: "priya@carwash.com", location: "North Branch", status: "Active", lastLogin: "1 day ago" },
-  { id: 3, name: "Amit Kumar", email: "amit@carwash.com", location: "West Side Center", status: "Inactive", lastLogin: "3 days ago" },
-];
+// Fallback demo data removed; data will be fetched from Supabase
 
 export default function ManagerAccess({ selectedLocation }: { selectedLocation?: string }) {
   const { signup, user } = useAuth();
   const [showSignupDialog, setShowSignupDialog] = useState(false);
   const [loading, setLoading] = useState(false);
   const [locations, setLocations] = useState<{ id: string; name: string }[]>([]);
+  const [managers, setManagers] = useState<any[]>([]);
+  const [workers, setWorkers] = useState<any[]>([]);
+  const [listLoading, setListLoading] = useState<boolean>(false);
    
   // Form state
   const [formData, setFormData] = useState({
@@ -133,6 +132,53 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
     
     fetchLocations();
   }, [user, selectedLocation]);
+
+  useEffect(() => {
+    const fetchStaff = async () => {
+      if (!user) return;
+      setListLoading(true);
+      try {
+        // Build base query scoped by location if provided/selected
+        const locationId = selectedLocation || formData.assignedLocation || undefined;
+
+        let query = supabase
+          .from('users')
+          .select('id, email, role, assigned_location');
+
+        if (locationId) {
+          query = query.eq('assigned_location', locationId);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+
+        const normalized = (data || []).map((u: any) => ({
+          id: u.id,
+          email: u.email,
+          role: typeof u.role === 'string' ? u.role.trim() : u.role,
+          assigned_location: u.assigned_location,
+          // Placeholder fields for UI columns
+          name: u.email?.split('@')[0] || '—',
+          status: 'Active',
+          lastLogin: '—',
+        }));
+
+        setManagers(normalized.filter((u: any) => u.role === 'manager'));
+        setWorkers(normalized.filter((u: any) => u.role === 'worker'));
+      } catch (err) {
+        console.error('Failed to fetch staff:', err);
+        toast.error('Failed to load managers/workers');
+        setManagers([]);
+        setWorkers([]);
+      } finally {
+        setListLoading(false);
+      }
+    };
+
+    fetchStaff();
+    // Re-fetch when selected location changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, selectedLocation, formData.assignedLocation]);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
@@ -381,6 +427,11 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
             <CardTitle>Active Managers</CardTitle>
           </CardHeader>
           <CardContent>
+            {listLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading managers...
+              </div>
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -393,11 +444,15 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {managers.map((manager) => (
+                {managers.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground">No managers found</TableCell>
+                  </TableRow>
+                ) : managers.map((manager) => (
                   <TableRow key={manager.id}>
                     <TableCell className="font-medium">{manager.name}</TableCell>
                     <TableCell>{manager.email}</TableCell>
-                    <TableCell>{manager.location}</TableCell>
+                    <TableCell>{manager.assigned_location || '—'}</TableCell>
                     <TableCell>
                       <Badge variant={manager.status === "Active" ? "default" : "secondary"}>
                         {manager.status}
@@ -413,6 +468,57 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
                 ))}
               </TableBody>
             </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Active Workers</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {listLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading workers...
+              </div>
+            ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Assigned Location</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Last Login</TableHead>
+                  <TableHead>Delete</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {workers.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground">No workers found</TableCell>
+                  </TableRow>
+                ) : workers.map((worker) => (
+                  <TableRow key={worker.id}>
+                    <TableCell className="font-medium">{worker.name}</TableCell>
+                    <TableCell>{worker.email}</TableCell>
+                    <TableCell>{worker.assigned_location || '—'}</TableCell>
+                    <TableCell>
+                      <Badge variant={worker.status === "Active" ? "default" : "secondary"}>
+                        {worker.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{worker.lastLogin}</TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            )}
           </CardContent>
         </Card>
 
