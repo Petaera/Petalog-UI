@@ -40,6 +40,7 @@ import ManagerVehicleHistory from "./pages/ManagerVehicleHistory";
 import ManagerOwnerEntry from "./pages/ManagerOwnerEntry";
 import WorkerManualEntry from "./pages/WorkerManualEntry";
 import LocationPartnershipsPage from "./pages/LocationPartnershipsPage";
+import { ProfileSettings } from "./pages/ProfileSettings";
 
 import NotFound from "./pages/NotFound";
 import { Layout } from "@/components/layout/Layout";
@@ -287,6 +288,17 @@ const App = () => (
                  element={
                    <ProtectedRoute requiredRole="owner">
                      <ManagerSettings />
+                   </ProtectedRoute>
+                 } 
+               />
+               
+               <Route 
+                 path="/profileSettings" 
+                 element={
+                   <ProtectedRoute requiredRole="owner">
+                     <Layout>
+                       <ProfileSettings />
+                     </Layout>
                    </ProtectedRoute>
                  } 
                />
