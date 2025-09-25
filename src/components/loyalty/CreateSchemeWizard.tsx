@@ -53,7 +53,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
     multiple_locations: 'no',
     max_redemptions: '',
     enable_reminders: 'no',
-    actual_amount: '',
+    multiplier: '',
   } as any);
 
   const progress = (currentStep / steps.length) * 100;
@@ -64,7 +64,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
       if (!isEditMode || !planId) return;
       const { data: plan, error } = await supabase
         .from('subscription_plans')
-        .select('id, name, type, duration_days, price, plan_amount, short_description, currency, allow_multiple_locations, max_redemptions, allowed_payment_methods, allowed_locations, mixed_handling, allow_mixed_handling, expiry, refund_policy')
+        .select('id, name, type, duration_days, price, multiplier, short_description, currency, allow_multiple_locations, max_redemptions, allowed_payment_methods, allowed_locations, mixed_handling, allow_mixed_handling, expiry, refund_policy')
         .eq('id', planId)
         .maybeSingle();
       if (error || !plan) {
@@ -77,7 +77,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
         type: plan.type || '',
         duration_days: plan.duration_days != null ? String(plan.duration_days) : '',
         price: plan.price != null ? String(plan.price) : '',
-        actual_amount: plan.plan_amount != null ? String(plan.plan_amount) : '',
+        multiplier: plan.multiplier != null ? String(plan.multiplier) : '',
         description: plan.short_description || '',
         paymentModes: plan.allowed_payment_methods ? String(plan.allowed_payment_methods).split(',').map((s: string) => s.trim()).filter(Boolean) : [],
         allowMixed: plan.allow_mixed_handling ? 'yes' : 'no',
@@ -115,7 +115,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
               ? Number(formData.max_redemptions)
               : null,
           price: String(formData.price || '').trim() !== '' ? Number(formData.price) : 0,
-          plan_amount: String(formData.actual_amount || '').trim() !== '' ? Number(formData.actual_amount) : null,
+          multiplier: String(formData.multiplier || '').trim() !== '' ? Number(formData.multiplier) : null,
           short_description: formData.description.trim() || null,
           allow_multiple_locations: formData.multiple_locations === 'yes',
           mixed_handling: formData.mixedHandling || null,
@@ -164,7 +164,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
             ? Number(formData.max_redemptions)
             : null,
         price: String(formData.price || '').trim() !== '' ? Number(formData.price) : 0,
-        plan_amount: String(formData.actual_amount || '').trim() !== '' ? Number(formData.actual_amount) : null,
+        multiplier: String(formData.multiplier || '').trim() !== '' ? Number(formData.multiplier) : null,
         short_description: formData.description.trim() || null,
         currency: 'INR',
         allow_multiple_locations: formData.multiple_locations === 'yes',
@@ -241,7 +241,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
           ? Number(formData.max_redemptions)
           : null,
       price: String(formData.price || '').trim() !== '' ? Number(formData.price) : 0,
-      plan_amount: String(formData.actual_amount || '').trim() !== '' ? Number(formData.actual_amount) : null,
+      multiplier: String(formData.multiplier || '').trim() !== '' ? Number(formData.multiplier) : null,
       short_description: formData.description.trim() || null,
       allow_multiple_locations: formData.multiple_locations === 'yes',
       mixed_handling: formData.mixedHandling || null,
@@ -370,27 +370,37 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
                 />
               </div>
               {String(formData.type || '').toLowerCase() === 'credit' && (
-                <div>
-                  <label className="block text-sm font-medium mb-1">Value <span className="text-muted-foreground">(in rupees)</span></label>
-                  <Input
-                    type="number"
-                    min={0}
-                    placeholder="e.g. 13000"
-                    value={formData.price}
-                    onChange={(e) => handleChange('price', e.target.value)}
-                  />
-                </div>
+                <>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Value <span className="text-muted-foreground">(in rupees)</span></label>
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="e.g. 13000"
+                      value={formData.price}
+                      onChange={(e) => handleChange('price', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Multiplier (fraction) <span className="text-muted-foreground">(e.g., 0.8 for 80% of price)</span></label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={1}
+                      step="0.01"
+                      placeholder="e.g. 0.8"
+                      value={formData.multiplier || ''}
+                      onChange={(e) => handleChange('multiplier', e.target.value)}
+                    />
+                    {formData.price && formData.multiplier && (
+                      <div className="mt-2 text-sm text-muted-foreground">
+                        <strong>Actual Amount (customer pays):</strong> ₹{Math.round(Number(formData.price) * Number(formData.multiplier))}
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
-              <div>
-                <label className="block text-sm font-medium mb-1">Actual Amount (customer pays) <span className="text-muted-foreground">(in rupees)</span></label>
-                <Input
-                  type="number"
-                  min={0}
-                  placeholder="e.g. 10000"
-                  value={formData.actual_amount || ''}
-                  onChange={(e) => handleChange('actual_amount', e.target.value)}
-                />
-              </div>
+              
               <div>
                 <label className="block text-sm font-medium mb-1">Short Description</label>
                 <Input
@@ -683,8 +693,12 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
                       </div>
                     )}
                     <div>
-                      <strong>Actual Amount:</strong>{' '}
-                      {formData.actual_amount ? `₹${formData.actual_amount}` : <span className="text-muted-foreground">Not set</span>}
+                      <strong>Multiplier:</strong>{' '}
+                      {formData.multiplier ? `${formData.multiplier}` : <span className="text-muted-foreground">Not set</span>}
+                    </div>
+                    <div>
+                      <strong>Actual Amount (calculated):</strong>{' '}
+                      {formData.price && formData.multiplier ? `₹${Math.round(Number(formData.price) * Number(formData.multiplier))}` : <span className="text-muted-foreground">Not set</span>}
                     </div>
                   </div>
                 </CardContent>

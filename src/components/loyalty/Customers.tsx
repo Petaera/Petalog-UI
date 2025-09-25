@@ -88,6 +88,197 @@ export function Customers() {
   const [entryAmount, setEntryAmount] = useState('');
   const [entryService, setEntryService] = useState('');
   const [entryNotes, setEntryNotes] = useState('');
+  const [existingCustomer, setExistingCustomer] = useState<any>(null);
+  const [existingVehicle, setExistingVehicle] = useState<any>(null);
+  const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
+  const [showVehicleSuggestions, setShowVehicleSuggestions] = useState(false);
+
+  // Function to fetch existing customer by phone
+  const fetchExistingCustomer = async (phone: string) => {
+    if (!phone.trim()) {
+      setExistingCustomer(null);
+      setShowCustomerSuggestions(false);
+      return;
+    }
+
+    try {
+      // First get the user's permitted locations
+      const { data: userLocations } = await supabase
+        .from('location_owners')
+        .select('location_id')
+        .eq('owner_id', user?.id);
+      
+      const locationIds = userLocations?.map(l => l.location_id) || [];
+      console.log('User locations for customer search:', locationIds);
+      
+      if (locationIds.length === 0) {
+        console.log('No locations found for user');
+        setExistingCustomer(null);
+        setShowCustomerSuggestions(false);
+        return;
+      }
+      
+      // Try to find customer with location match using a different approach
+      let customer = null;
+      
+      // First try to find the customer by phone
+      const { data: allCustomers, error: customerFetchError } = await supabase
+        .from('customers')
+        .select('id, name, phone, email, date_of_birth, default_vehicle_id, location_id')
+        .eq('phone', phone.trim());
+      
+      if (!customerFetchError && allCustomers && allCustomers.length > 0) {
+        // Filter by location match manually
+        const matchingCustomer = allCustomers.find(c => {
+          if (!c.location_id) return false;
+          return locationIds.includes(c.location_id);
+        });
+        
+        if (matchingCustomer) {
+          customer = matchingCustomer;
+        }
+      }
+
+      console.log('Customer query result:', customer);
+
+      if (customer) {
+        setExistingCustomer(customer);
+        setShowCustomerSuggestions(true);
+        
+        // Auto-fill the customer details in the form
+        setCustomerDetails({
+          name: customer.name || '',
+          phone: customer.phone || '',
+          email: customer.email || '',
+          dob: customer.date_of_birth || '',
+          id: customer.id // Store the existing ID for reuse
+        });
+      } else {
+        setExistingCustomer(null);
+        setShowCustomerSuggestions(false);
+      }
+    } catch (error) {
+      console.error('Error fetching customer:', error);
+      setExistingCustomer(null);
+      setShowCustomerSuggestions(false);
+    }
+  };
+
+  // Function to fetch existing vehicle by number plate
+  const fetchExistingVehicle = async (numberPlate: string) => {
+    if (!numberPlate.trim()) {
+      setExistingVehicle(null);
+      setShowVehicleSuggestions(false);
+      return;
+    }
+
+    try {
+      console.log('Fetching vehicle for:', numberPlate.trim().toUpperCase(), 'User ID:', user?.id);
+      
+      // First get the user's permitted locations
+      const { data: userLocations } = await supabase
+        .from('location_owners')
+        .select('location_id')
+        .eq('owner_id', user?.id);
+      
+      const locationIds = userLocations?.map(l => l.location_id) || [];
+      console.log('User locations:', locationIds);
+      
+      if (locationIds.length === 0) {
+        console.log('No locations found for user');
+        setExistingVehicle(null);
+        setShowVehicleSuggestions(false);
+        return;
+      }
+      
+      // Try to find vehicle with location overlap using a different approach
+      let vehicle = null;
+      let vehicleError = null;
+      
+      // First try to find the vehicle by number plate
+      const { data: allVehicles, error: fetchError } = await supabase
+        .from('vehicles')
+        .select(`
+          id, 
+          number_plate, 
+          type, 
+          Brand, 
+          model,
+          location_id,
+          owner_id,
+          Vehicles_in_india!vehicles_model_fkey (
+            Models,
+            "Vehicle Brands"
+          )
+        `)
+        .eq('number_plate', numberPlate.trim().toUpperCase());
+      
+      if (fetchError) {
+        vehicleError = fetchError;
+      } else if (allVehicles && allVehicles.length > 0) {
+        // Filter by location overlap manually
+        const matchingVehicle = allVehicles.find(v => {
+          if (!v.location_id || !Array.isArray(v.location_id)) return false;
+          return v.location_id.some(locId => locationIds.includes(locId));
+        });
+        
+        if (matchingVehicle) {
+          vehicle = matchingVehicle;
+        }
+      }
+
+      console.log('Vehicle query result:', vehicle, 'Error:', vehicleError);
+
+      if (vehicle) {
+        setExistingVehicle(vehicle);
+        setShowVehicleSuggestions(true);
+        
+        // Auto-fill the vehicle details in the form
+        setVehicleDetails({
+          number_plate: vehicle.number_plate || '',
+          type: vehicle.type || '',
+          vehicle_brand: vehicle.Brand || '',
+          vehicle_model: (vehicle as any).Vehicles_in_india?.Models || '',
+          id: vehicle.id // Store the existing ID for reuse
+        });
+
+        // Also fetch and autofill the associated customer details
+        if (vehicle.owner_id) {
+          console.log('Fetching customer for vehicle owner:', vehicle.owner_id);
+          
+          const { data: customer, error: customerError } = await supabase
+            .from('customers')
+            .select('id, name, phone, email, date_of_birth, location_id')
+            .eq('id', vehicle.owner_id)
+            .maybeSingle();
+
+          console.log('Customer query result:', customer, 'Error:', customerError);
+
+          if (customer) {
+            setExistingCustomer(customer);
+            setShowCustomerSuggestions(true);
+            
+            // Auto-fill the customer details in the form
+            setCustomerDetails({
+              name: customer.name || '',
+              phone: customer.phone || '',
+              email: customer.email || '',
+              dob: customer.date_of_birth || '',
+              id: customer.id // Store the existing ID for reuse
+            });
+          }
+        }
+      } else {
+        console.log('No vehicle found');
+        setExistingVehicle(null);
+        setShowVehicleSuggestions(false);
+      }
+    } catch (error) {
+      console.error('Error fetching vehicle:', error);
+      setExistingVehicle(null);
+      setShowVehicleSuggestions(false);
+    }
+  };
 
   // Utility function to check and update expiry status for a specific purchase
   const checkAndUpdateExpiry = async (purchaseId: string, customerId: string, planType: string) => {
@@ -383,35 +574,6 @@ export function Customers() {
     }
   }, [subscriptionCustomers]);
 
-  useEffect(() => {
-    async function fetchVehicleInfo() {
-      const vehicleIds = Array.from(new Set(
-        subscriptionCustomers
-          .map(c => customerDetailsMap[c.customer_id]?.default_vehicle_id)
-          .filter(Boolean)
-      ));
-
-      if (vehicleIds.length > 0) {
-        const { data: vehicles } = await supabase
-          .from('subscription_vehicles')
-          .select('id, number_plate, "Model", "Brand", type')
-          .in('id', vehicleIds);
-
-        const map: Record<string, any> = {};
-        (vehicles || []).forEach(v => { map[v.id] = v; });
-        setVehicleInfoMap(map);
-      } else {
-        setVehicleInfoMap({});
-      }
-    }
-    if (
-      subscriptionCustomers.length > 0 &&
-      Object.keys(customerDetailsMap).length > 0
-    ) {
-      fetchVehicleInfo();
-    }
-  }, [subscriptionCustomers, customerDetailsMap]);
-
   const filteredCustomers = subscriptionCustomers.filter(purchase => {
     const cust = customerDetailsMap[purchase.customer_id] || {};
     const plan = planDetailsMap[purchase.plan_id] || {};
@@ -469,6 +631,10 @@ export function Customers() {
     setModelQuery('');
     setModelSuggestions([]);
     setPaymentMethod('');
+    setExistingCustomer(null);
+    setExistingVehicle(null);
+    setShowCustomerSuggestions(false);
+    setShowVehicleSuggestions(false);
   };
 
   // Handler for discarding the add customer form
@@ -483,6 +649,10 @@ export function Customers() {
     setSelectedScheme('');
     setSelectedPlanId('');
     setSelectedLocationId('');
+    setExistingCustomer(null);
+    setExistingVehicle(null);
+    setShowCustomerSuggestions(false);
+    setShowVehicleSuggestions(false);
   };
 
   // When a plan is selected, store id and drive next step by type
@@ -502,19 +672,64 @@ export function Customers() {
 
   const handleIdentify = async () => {
     // Proceed to form from identify
-    // Prefill only entered keys
-    const baseCustomer = { name: '', phone: planType === 'credit' ? phoneInput.trim() : '', email: '', dob: '' };
-    const baseVehicle = { number_plate: planType !== 'credit' ? vehicleNumberInput.trim().toUpperCase() : '', type: '', vehicle_brand: '', vehicle_model: '' };
-    setCustomerDetails(baseCustomer);
-    setVehicleDetails(baseVehicle);
+    // Data should already be auto-filled by the fetch functions
+    // Just ensure we have the basic required data
+    
+    if (planType === 'credit') {
+      // For credit plans, ensure customer data is set
+      if (!customerDetails) {
+        setCustomerDetails({ 
+          name: '', 
+          phone: phoneInput.trim(), 
+          email: '', 
+          dob: '' 
+        });
+      }
+    } else {
+      // For non-credit plans, ensure vehicle data is set
+      if (!vehicleDetails) {
+        setVehicleDetails({ 
+          number_plate: vehicleNumberInput.trim().toUpperCase(), 
+          type: '', 
+          vehicle_brand: '', 
+          vehicle_model: '' 
+        });
+      }
+      
+      // If we found a vehicle with an associated customer, ensure customer data is also set
+      if (existingCustomer && !customerDetails) {
+        setCustomerDetails({
+          name: existingCustomer.name || '',
+          phone: existingCustomer.phone || '',
+          email: existingCustomer.email || '',
+          dob: existingCustomer.date_of_birth || '',
+          id: existingCustomer.id
+        });
+      }
+    }
+
     setAddStep('form');
   };
 
   // Reusable prefill function (removed)
   // const prefillFromInputs = async () => {};
 
-  // Debounced fetch during identify step as user types (removed)
-  // useEffect(() => {}, []);
+  // Debounced fetch during identify step as user types
+  useEffect(() => {
+    console.log('useEffect triggered:', { planType, phoneInput, vehicleNumberInput, user: user?.id });
+    
+    const timeoutId = setTimeout(() => {
+      if (planType === 'credit' && phoneInput.trim()) {
+        console.log('Fetching customer for phone:', phoneInput);
+        fetchExistingCustomer(phoneInput);
+      } else if (planType !== 'credit' && vehicleNumberInput.trim()) {
+        console.log('Fetching vehicle for number:', vehicleNumberInput);
+        fetchExistingVehicle(vehicleNumberInput);
+      }
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [phoneInput, vehicleNumberInput, planType, user?.id]);
 
   // Vehicles_in_india model suggestions
   useEffect(() => {
@@ -548,89 +763,132 @@ export function Customers() {
         return;
       }
 
-      // 1) Upsert subscription vehicle first (collect everything)
+      // 1) Handle vehicle - reuse existing ID if available, otherwise create/update
       let vehicleId: string | null = null;
       const locationArray = selectedLocationId ? [selectedLocationId] : null;
+      
       if (vehicleDetails.number_plate) {
         const numberPlate = vehicleDetails.number_plate.toUpperCase();
-        const { data: existingVehicle } = await supabase
-          .from('subscription_vehicles')
-          .select('id, type')
-          .eq('number_plate', numberPlate)
-          .limit(1);
-
-        if (existingVehicle && existingVehicle.length > 0) {
-          vehicleId = existingVehicle[0].id;
-          const existingType = existingVehicle[0].type || null;
-          const finalType = existingType || vehicleDetails.type || null;
+        
+        // If we have an existing vehicle ID from the identify step, use it
+        if (vehicleDetails.id) {
+          vehicleId = vehicleDetails.id;
+          // Update the existing vehicle with new details
+          const modelId = vehicleDetails.vehicle_model ? 
+            (await supabase.from('Vehicles_in_india').select('id').eq('Models', vehicleDetails.vehicle_model).maybeSingle()).data?.id : null;
+          
           await supabase
-            .from('subscription_vehicles')
+            .from('vehicles')
             .update({
-              type: finalType,
-              owner_id: user?.id || null,
-              "Model": vehicleDetails.vehicle_model || null,
-              "Brand": vehicleDetails.vehicle_brand || null,
-              "Location_id": locationArray,
+              type: vehicleDetails.type || null,
+              Brand: vehicleDetails.vehicle_brand || null,
+              model: modelId,
+              location_id: locationArray,
             })
             .eq('id', vehicleId);
-          if (!vehicleDetails.type && existingType) {
-            setVehicleDetails((prev: any) => ({ ...prev, type: existingType }));
-          }
         } else {
-          const finalType = vehicleDetails.type || null;
-          const { data: insertedVehicle, error: vehicleErr } = await supabase
-            .from('subscription_vehicles')
-            .insert([
-              {
-                number_plate: numberPlate,
+          // Check if vehicle exists in vehicles table
+          const { data: existingVehicle } = await supabase
+            .from('vehicles')
+            .select('id, type')
+            .eq('number_plate', numberPlate)
+            .eq('owner_id', user?.id)
+            .limit(1);
+
+          if (existingVehicle && existingVehicle.length > 0) {
+            vehicleId = existingVehicle[0].id;
+            const existingType = existingVehicle[0].type || null;
+            const finalType = existingType || vehicleDetails.type || null;
+            const modelId = vehicleDetails.vehicle_model ? 
+              (await supabase.from('Vehicles_in_india').select('id').eq('Models', vehicleDetails.vehicle_model).maybeSingle()).data?.id : null;
+            
+            await supabase
+              .from('vehicles')
+              .update({
                 type: finalType,
-                owner_id: user?.id || null,
-                "Model": vehicleDetails.vehicle_model || null,
-                "Brand": vehicleDetails.vehicle_brand || null,
-                "Location_id": locationArray,
-              }
-            ])
-            .select('id');
-          if (vehicleErr || !insertedVehicle || !insertedVehicle[0]?.id) {
-            throw new Error('Error adding vehicle');
+                Brand: vehicleDetails.vehicle_brand || null,
+                model: modelId,
+                location_id: locationArray,
+              })
+              .eq('id', vehicleId);
+            if (!vehicleDetails.type && existingType) {
+              setVehicleDetails((prev: any) => ({ ...prev, type: existingType }));
+            }
+          } else {
+            const finalType = vehicleDetails.type || null;
+            const modelId = vehicleDetails.vehicle_model ? 
+              (await supabase.from('Vehicles_in_india').select('id').eq('Models', vehicleDetails.vehicle_model).maybeSingle()).data?.id : null;
+            
+            const { data: insertedVehicle, error: vehicleErr } = await supabase
+              .from('vehicles')
+              .insert([
+                {
+                  number_plate: numberPlate,
+                  type: finalType,
+                  owner_id: user?.id || null,
+                  Brand: vehicleDetails.vehicle_brand || null,
+                  model: modelId,
+                  location_id: locationArray,
+                }
+              ])
+              .select('id');
+            if (vehicleErr || !insertedVehicle || !insertedVehicle[0]?.id) {
+              throw new Error('Error adding vehicle');
+            }
+            vehicleId = insertedVehicle[0].id;
           }
-          vehicleId = insertedVehicle[0].id;
         }
       }
 
-      // 2) Upsert customer (by phone). Include date_of_birth and Location.
+      // 2) Handle customer - reuse existing ID if available, otherwise create/update
       const phoneKey = customerDetails.phone;
-      const { data: existingCustomer } = await supabase
-        .from('customers')
-        .select('id')
-        .eq('phone', phoneKey)
-        .limit(1);
-
       let customerId: string | null = null;
-      const customerPayload: any = {
-        name: customerDetails.name || null,
-        phone: phoneKey,
-        email: customerDetails.email || null,
-        owner_id: user?.id || null,
-      };
-      if (customerDetails.dob) customerPayload.date_of_birth = customerDetails.dob;
-      // Removed writing customers.Location per schema issue
-
-      if (existingCustomer && existingCustomer.length > 0) {
-        customerId = existingCustomer[0].id;
+      
+      // If we have an existing customer ID from the identify step, use it
+      if (customerDetails.id) {
+        customerId = customerDetails.id;
+        // Update the existing customer with new details
+        const customerPayload: any = {
+          name: customerDetails.name || null,
+          phone: phoneKey,
+          email: customerDetails.email || null,
+          owner_id: user?.id || null,
+        };
+        if (customerDetails.dob) customerPayload.date_of_birth = customerDetails.dob;
+        
         await supabase.from('customers').update(customerPayload).eq('id', customerId);
       } else {
-        const { data: customerInsert, error: customerError } = await supabase
+        // Check if customer exists by phone
+        const { data: existingCustomer } = await supabase
           .from('customers')
-          .insert([customerPayload])
-          .select('id');
-        if (customerError || !customerInsert || !customerInsert[0]?.id) {
-          throw new Error('Error adding customer');
+          .select('id')
+          .eq('phone', phoneKey)
+          .limit(1);
+
+        const customerPayload: any = {
+          name: customerDetails.name || null,
+          phone: phoneKey,
+          email: customerDetails.email || null,
+          owner_id: user?.id || null,
+        };
+        if (customerDetails.dob) customerPayload.date_of_birth = customerDetails.dob;
+
+        if (existingCustomer && existingCustomer.length > 0) {
+          customerId = existingCustomer[0].id;
+          await supabase.from('customers').update(customerPayload).eq('id', customerId);
+        } else {
+          const { data: customerInsert, error: customerError } = await supabase
+            .from('customers')
+            .insert([customerPayload])
+            .select('id');
+          if (customerError || !customerInsert || !customerInsert[0]?.id) {
+            throw new Error('Error adding customer');
+          }
+          customerId = customerInsert[0].id;
         }
-        customerId = customerInsert[0].id;
       }
 
-      // 3) Set default_vehicle_id if we created/selected a subscription vehicle
+      // 3) Set default_vehicle_id if we created/selected a vehicle
       if (vehicleId && customerId) {
         await supabase.from('customers').update({ default_vehicle_id: vehicleId }).eq('id', customerId);
       }
@@ -672,7 +930,7 @@ export function Customers() {
           {
             plan_id: selectedPlanId || selectedScheme,
             customer_id: customerId,
-            vehicle_id: vehicleId,
+            vehicle_id: vehicleId, // This will be the ID from the vehicles table
             location_id: selectedLocationId || null,
             status: 'active',
             created_by: user?.id || null,
@@ -901,12 +1159,59 @@ export function Customers() {
                   {planType === 'credit' ? (
                     <div>
                       <label className="block mb-2 font-medium">Phone Number</label>
-                      <Input value={phoneInput} onChange={(e) => setPhoneInput(e.target.value)} placeholder="Enter phone number" />
+                      <Input 
+                        value={phoneInput} 
+                        onChange={(e) => setPhoneInput(e.target.value)} 
+                        placeholder="Enter phone number" 
+                      />
+                      {showCustomerSuggestions && existingCustomer && (
+                        <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <div className="text-sm font-medium text-blue-900 mb-1">Existing Customer Found:</div>
+                          <div className="text-sm text-blue-700">
+                            <div>Name: {existingCustomer.name || 'Not provided'}</div>
+                            <div>Email: {existingCustomer.email || 'Not provided'}</div>
+                            <div>DOB: {existingCustomer.date_of_birth || 'Not provided'}</div>
+                          </div>
+                          <div className="text-xs text-blue-600 mt-1">
+                            This customer's details will be auto-filled in the next step.
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div>
                       <label className="block mb-2 font-medium">Vehicle Number</label>
-                      <Input value={vehicleNumberInput} onChange={(e) => setVehicleNumberInput(e.target.value.toUpperCase())} placeholder="Enter vehicle number" />
+                      <Input 
+                        value={vehicleNumberInput} 
+                        onChange={(e) => setVehicleNumberInput(e.target.value.toUpperCase())} 
+                        placeholder="Enter vehicle number" 
+                      />
+                      {showVehicleSuggestions && existingVehicle && (
+                        <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                          <div className="text-sm font-medium text-green-900 mb-1">Existing Vehicle Found:</div>
+                          <div className="text-sm text-green-700">
+                            <div>Type: {existingVehicle.type || 'Not provided'}</div>
+                            <div>Brand: {existingVehicle.Brand || 'Not provided'}</div>
+                            <div>Model: {(existingVehicle as any).Vehicles_in_india?.Models || 'Not provided'}</div>
+                          </div>
+                          <div className="text-xs text-green-600 mt-1">
+                            This vehicle's details will be auto-filled in the next step.
+                          </div>
+                        </div>
+                      )}
+                      {showCustomerSuggestions && existingCustomer && (
+                        <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <div className="text-sm font-medium text-blue-900 mb-1">Associated Customer Found:</div>
+                          <div className="text-sm text-blue-700">
+                            <div>Name: {existingCustomer.name || 'Not provided'}</div>
+                            <div>Phone: {existingCustomer.phone || 'Not provided'}</div>
+                            <div>Email: {existingCustomer.email || 'Not provided'}</div>
+                          </div>
+                          <div className="text-xs text-blue-600 mt-1">
+                            This customer's details will also be auto-filled in the next step.
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                   <div className="flex justify-end">

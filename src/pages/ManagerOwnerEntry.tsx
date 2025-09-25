@@ -238,6 +238,12 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
   const [isApplyingEditData, setIsApplyingEditData] = useState(false);
   const [editVehicleNumber, setEditVehicleNumber] = useState<string | null>(null);
 
+  // Subscription selection state
+  const [usableSubscriptions, setUsableSubscriptions] = useState<any[]>([]);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [selectedSubscription, setSelectedSubscription] = useState<any | null>(null);
+  const [useSubscriptionForRedemption, setUseSubscriptionForRedemption] = useState(false);
+
   // Check for edit data on component mount
   useEffect(() => {
     const editData = sessionStorage.getItem('editLogData');
@@ -388,9 +394,16 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
   const normalizeTypeString = (value: any): string => String(value ?? '').trim();
   const mapTypeToWheelCategory = (typeString: string): string => {
     const t = normalizeTypeString(typeString);
+    // Handle numeric codes
     if (t === '3') return 'other';
     if (t === '2') return '2';
     if (t === '4' || t === '1') return '4';
+    
+    // Handle actual vehicle type strings from logs-man
+    if (t.toLowerCase().includes('above 300cc') || t.toLowerCase().includes('300cc')) return 'other';
+    if (t.toLowerCase().includes('2 wheeler') || t.toLowerCase().includes('2-wheeler')) return '2';
+    if (t.toLowerCase().includes('4 wheeler') || t.toLowerCase().includes('4-wheeler') || t.toLowerCase().includes('car')) return '4';
+    
     return '';
   };
   const mapWheelCategoryToTypeCode = (wheelCat: string): string | null => {
@@ -852,14 +865,17 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
         }
 
         setIsLoadingVehicleData(true);
-        const { data, error } = await supabase
-          .from('logs-man')
-          .select('Name, Phone_no, Location, "D.O.B", vehicle_brand, vehicle_model, Brand_id, wheel_type, created_at')
-          .ilike('vehicle_number', `%${plate}%`)
-          .order('created_at', { ascending: false })
-          .limit(1);
-        if (error || !data || data.length === 0) {
-          // No previous data found, clear the form
+        
+        // First, find the vehicle by normalized plate
+        const normalizedPlate = plate.toUpperCase().replace(/\s|-/g, '');
+        const { data: vehicleRecord, error: vehicleError } = await supabase
+          .from('vehicles')
+          .select('id, number_plate, Brand, model, type, owner_id')
+          .eq('number_plate', normalizedPlate)
+          .maybeSingle();
+
+        if (vehicleError || !vehicleRecord) {
+          // No vehicle found, clear customer-related fields
           if (!cancelled) {
             // Final protection check before clearing
             if (isEditing || isApplyingEditData || editLogId) {
@@ -892,36 +908,86 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
           return;
         }
 
-        const last = data[0] as any;
+        // Get customer data if vehicle has an owner
+        let customerData = null;
+        if (vehicleRecord.owner_id) {
+          const { data: customer, error: customerError } = await supabase
+            .from('customers')
+            .select('id, name, phone, date_of_birth, location_id')
+            .eq('id', vehicleRecord.owner_id)
+            .maybeSingle();
+          
+          if (!customerError && customer) {
+            customerData = customer;
+          }
+        }
 
-        // Always populate with the latest data for this vehicle number
-        setCustomerName(last.Name || '');
-        setPhoneNumber(last.Phone_no || '');
-        setCustomerLocation(last.Location || '');
-        setDateOfBirth(last['D.O.B'] || '');
+        // Get location name if customer has a location_id
+        let locationName = '';
+        if (customerData && customerData.location_id) {
+          const { data: location, error: locationError } = await supabase
+            .from('locations')
+            .select('name')
+            .eq('id', customerData.location_id)
+            .maybeSingle();
+          
+          if (!locationError && location) {
+            locationName = location.name;
+          }
+        }
 
-        if (last.wheel_type) {
-          const derived = mapTypeToWheelCategory(normalizeTypeString(last.wheel_type));
+        // Populate customer details
+        if (customerData) {
+          setCustomerName(customerData.name || '');
+          setPhoneNumber(customerData.phone || '');
+          setCustomerLocation(locationName);
+          setDateOfBirth(customerData.date_of_birth || '');
+        } else {
+          setCustomerName('');
+          setPhoneNumber('');
+          setDateOfBirth('');
+          setCustomerLocation('');
+        }
+
+        // Populate vehicle details
+        setSelectedVehicleBrand(vehicleRecord.Brand || '');
+        
+        // Set wheel category from vehicle type
+        if (vehicleRecord.type) {
+          const derived = mapTypeToWheelCategory(normalizeTypeString(vehicleRecord.type));
           if (derived) setWheelCategory(derived);
         }
 
-        setSelectedVehicleBrand(last.vehicle_brand || '');
-        setTimeout(() => {
-          if (!cancelled) {
-            // Protection check before setting model
-            if (isEditing || isApplyingEditData || editLogId) {
-              console.log('🛡️ Auto-fill model setting blocked: protection check failed');
-              return;
+        // Find the model name from Vehicles_in_india using the ID stored in vehicles.model
+        if (vehicleRecord.model && vehicleData.length > 0) {
+          const match = vehicleData.find(item => item.id === vehicleRecord.model);
+          if (match) {
+            // Use the model name from Vehicles_in_india
+            setSelectedModel(match['Models'] || '');
+            setSelectedModelId(match.id || '');
+            
+            // Auto-fill wheel category from Vehicles_in_india type
+            if (match.type) {
+              const derivedCategory = mapTypeToWheelCategory(normalizeTypeString(match.type));
+              if (derivedCategory) {
+                setWheelCategory(derivedCategory);
+              }
             }
-            setSelectedModel(last.vehicle_model || '');
-            setSelectedModelId(last.Brand_id || '');
+          } else {
+            // Fallback if ID not found
+            setSelectedModel('');
+            setSelectedModelId('');
           }
-        }, 200);
+        } else {
+          setSelectedModel('');
+          setSelectedModelId('');
+        }
 
-        if (!last.wheel_type && (last.vehicle_brand || last.vehicle_model) && vehicleData.length > 0) {
+        // If wheel category still empty, try to derive from Vehicles_in_india type by brand+model
+        if (!vehicleRecord.type && (vehicleRecord.Brand || vehicleRecord.model) && vehicleData.length > 0) {
           try {
             const match = vehicleData.find(item =>
-              item['Vehicle Brands'] === (last.vehicle_brand || '') && item['Models'] === (last.vehicle_model || '')
+              item['Vehicle Brands'] === (vehicleRecord.Brand || '') && item['Models'] === (vehicleRecord.model || '')
             );
             if (match && (match as any).type != null) {
               const derived = mapTypeToWheelCategory(normalizeTypeString((match as any).type));
@@ -935,6 +1001,32 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
               }
             }
           } catch { }
+        }
+
+        // Auto-fill vehicle type from last entry in logs-man for the same location
+        console.log('Auto-fill debug - selectedLocation:', selectedLocation, 'vehicleRecord.type:', vehicleRecord.type);
+        if (selectedLocation && !cancelled) {
+          try {
+            const { data: lastLog, error: logError } = await supabase
+              .from('logs-man')
+              .select('vehicle_type')
+              .eq('location_id', selectedLocation)
+              .not('vehicle_type', 'is', null)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            console.log('Last log query result:', lastLog, 'error:', logError);
+
+            if (!logError && lastLog && lastLog.vehicle_type) {
+              console.log('Setting vehicle type from logs-man:', lastLog.vehicle_type);
+              if (!cancelled) {
+                setVehicleType(lastLog.vehicle_type);
+              }
+            }
+          } catch (err) {
+            console.warn('Error fetching last vehicle type from logs-man:', err);
+          }
         }
       } catch (e) {
         // ignore autofill errors silently
@@ -1011,6 +1103,11 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
     }
   }, [selectedLocation]);
 
+  // Debug modal state changes
+  useEffect(() => {
+    console.log('🔔 Modal state changed:', showSubscriptionModal);
+  }, [showSubscriptionModal]);
+
   const handleVehicleNumberChange = (value: string) => {
     const upperValue = value.toUpperCase();
     setVehicleNumber(upperValue);
@@ -1048,7 +1145,478 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
     });
   }
 
+  const updateCustomerVehicles = async (customerId: string, vehicleId: string) => {
+    // Get current customer data
+    const { data: customer, error: customerError } = await supabase
+      .from('customers')
+      .select('vehicles, default_vehicle_id')
+      .eq('id', customerId)
+      .single();
+    
+    if (customerError) {
+      console.warn('Error fetching customer data:', customerError);
+      return;
+    }
+    
+    // Update vehicles array
+    const currentVehicles = customer.vehicles || [];
+    const updatedVehicles = currentVehicles.includes(vehicleId) 
+      ? currentVehicles 
+      : [...currentVehicles, vehicleId];
+    
+    // Update customer with new vehicles array and set default vehicle
+    const { error: updateError } = await supabase
+      .from('customers')
+      .update({
+        vehicles: updatedVehicles,
+        default_vehicle_id: vehicleId
+      })
+      .eq('id', customerId);
+    
+    if (updateError) {
+      console.warn('Error updating customer vehicles:', updateError);
+    }
+  };
+
+  // Function to fetch usable subscriptions for a customer
+  const fetchUsableSubscriptions = async (customerId: string) => {
+    try {
+      console.log('🔍 Fetching subscriptions for customer ID:', customerId);
+      const { data: subscriptions, error } = await supabase
+        .from('subscription_purchases')
+        .select(`
+          id,
+          plan_id,
+          remaining_visits,
+          status,
+          created_at,
+          subscription_plans!inner(
+            id,
+            name,
+            type,
+            max_redemptions,
+            price
+          )
+        `)
+        .eq('customer_id', customerId)
+        .eq('status', 'active')
+        .in('subscription_plans.type', ['package', 'visit'])
+        .gt('remaining_visits', 0)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.warn('❌ Error fetching usable subscriptions:', error);
+        return [];
+      }
+
+      console.log('📊 Subscription query result:', subscriptions);
+      return subscriptions || [];
+    } catch (error) {
+      console.warn('❌ Error fetching usable subscriptions:', error);
+      return [];
+    }
+  };
+
+  // Function to check for active package subscriptions and handle redemptions
+  const checkAndProcessPackageRedemption = async (customerId: string, vehicleId: string, service: string[], locationId: string, selectedSubscriptionId?: string) => {
+    try {
+      // If no subscription is selected for redemption, skip redemption processing
+      if (!useSubscriptionForRedemption || !selectedSubscriptionId) {
+        console.log('🚫 No subscription selected for redemption, skipping redemption processing');
+        return { isRedemption: false, logId: null };
+      }
+
+      // Find active package/visit subscriptions for this customer
+      const { data: activeSubscriptions, error: subError } = await supabase
+        .from('subscription_purchases')
+        .select(`
+          id,
+          plan_id,
+          remaining_visits,
+          status,
+          subscription_plans!inner(
+            id,
+            name,
+            type,
+            max_redemptions
+          )
+        `)
+        .eq('customer_id', customerId)
+        .eq('status', 'active')
+        .in('subscription_plans.type', ['package', 'visit'])
+        .gt('remaining_visits', 0);
+
+      if (subError) {
+        console.warn('Error fetching active subscriptions:', subError);
+        return { isRedemption: false, logId: null };
+      }
+
+      if (!activeSubscriptions || activeSubscriptions.length === 0) {
+        return { isRedemption: false, logId: null };
+      }
+
+      // Use selected subscription if provided, otherwise use the first active subscription
+      let subscription;
+      if (selectedSubscriptionId) {
+        subscription = activeSubscriptions.find(sub => sub.id === selectedSubscriptionId);
+        if (!subscription) {
+          console.warn('Selected subscription not found or not active');
+          return { isRedemption: false, logId: null };
+        }
+      } else {
+        subscription = activeSubscriptions[0];
+      }
+      const plan = (subscription as any).subscription_plans;
+
+      if (!plan || subscription.remaining_visits <= 0) {
+        return { isRedemption: false, logId: null };
+      }
+
+      // Create loyalty_visits record for redemption
+      const { data: loyaltyVisit, error: loyaltyError } = await supabase
+        .from('loyalty_visits')
+        .insert([{
+          purchase_id: subscription.id,
+          vehicle_id: vehicleId,
+          customer_id: customerId,
+          location_id: locationId,
+          visit_type: 'redemption',
+          service_rendered: service.join(', '),
+          amount_charged: 0, // No payment for redemptions
+          payment_method: 'subscription',
+          created_by: user?.id,
+          notes: `Package redemption from ${plan.name}`
+        }])
+        .select('id')
+        .single();
+
+      if (loyaltyError) {
+        console.warn('Error creating loyalty visit:', loyaltyError);
+        return { isRedemption: false, logId: null };
+      }
+
+      // Decrement remaining visits
+      const newRemainingVisits = Math.max(0, subscription.remaining_visits - 1);
+      const shouldExpire = newRemainingVisits <= 0;
+
+      const updateData: any = { remaining_visits: newRemainingVisits };
+      if (shouldExpire) {
+        updateData.status = 'expired';
+      }
+
+      const { error: updateError } = await supabase
+        .from('subscription_purchases')
+        .update(updateData)
+        .eq('id', subscription.id);
+
+      if (updateError) {
+        console.warn('Error updating subscription visits:', updateError);
+      }
+
+      return { 
+        isRedemption: true, 
+        logId: loyaltyVisit.id,
+        subscriptionName: plan.name,
+        remainingVisits: newRemainingVisits
+      };
+
+    } catch (error) {
+      console.warn('Error processing package redemption:', error);
+      return { isRedemption: false, logId: null };
+    }
+  };
+
+  // Function to handle subscription selection
+  const handleSubscriptionSelection = async (customerId: string) => {
+    console.log('🔍 Checking subscriptions for customer:', customerId);
+    const subscriptions = await fetchUsableSubscriptions(customerId);
+    console.log('📦 Found subscriptions:', subscriptions);
+    setUsableSubscriptions(subscriptions);
+    
+    if (subscriptions.length > 0) {
+      console.log('✅ Showing subscription modal');
+      setShowSubscriptionModal(true);
+      console.log('🔔 Modal state set to true');
+    } else {
+      console.log('❌ No subscriptions found, proceeding with normal payment');
+      // No usable subscriptions, proceed with normal payment
+      setUseSubscriptionForRedemption(false);
+      setSelectedSubscription(null);
+    }
+  };
+
+  // Function to confirm subscription selection
+  const confirmSubscriptionSelection = (subscription: any) => {
+    setSelectedSubscription(subscription);
+    setUseSubscriptionForRedemption(true);
+    setShowSubscriptionModal(false);
+    // Continue with form submission
+    continueFormSubmission();
+  };
+
+  // Function to skip subscription and use normal payment
+  const skipSubscription = () => {
+    setUseSubscriptionForRedemption(false);
+    setSelectedSubscription(null);
+    setShowSubscriptionModal(false);
+    // Continue with form submission
+    continueFormSubmission();
+  };
+
+  // Function to process the actual form submission
+  const processFormSubmission = async (customerId: string, vehicleId: string) => {
+    try {
+      console.log('🔄 Processing form submission for customer:', customerId, 'vehicle:', vehicleId);
+      
+      // 1. Upload image to Supabase Storage
+      // const safeVehicleNumber = vehicleNumber.replace(/[^a-zA-Z0-9_-]/g, '');
+      // const fileName = `${safeVehicleNumber}_${Date.now()}.png`;
+      // const { data: uploadData, error: uploadError } = await supabase.storage
+      //   .from('man-images')
+      //   .upload(fileName, scratchImage, { contentType: 'image/png' });
+      // if (uploadError) throw uploadError;
+      // 2. Get public URL
+      // const { data: publicUrlData } = supabase.storage.from('man-images').getPublicUrl(fileName);
+      // const imageUrl = publicUrlData?.publicUrl;
+      const imageUrl = null; // Set to null since scratch marking is commented out
+      // Calculate final amount
+      const priceNum = parseFloat(amount) || 0;
+      const discountNum = discount === '' ? 0 : parseFloat(discount) || 0;
+      const finalAmount = priceNum - discountNum;
+
+      // Prepare entry time data
+      const entryTimeData = useCustomDateTime
+        ? { entry_time: new Date(`${customEntryDate}T${customEntryTime}:00`).toISOString() }
+        : {};
+
+      // Prepare created_at data - use custom date if specified, otherwise current time
+      const createdAtData = useCustomDateTime
+        ? { created_at: new Date(`${customEntryDate}T${customEntryTime}:00`).toISOString() }
+        : { created_at: new Date().toISOString() };
+
+      // Prepare exit time and approval data for custom date tickets
+      const exitTimeData = useCustomDateTime
+        ? {
+          exit_time: new Date(`${customEntryDate}T${customEntryTime}:00`).toISOString(),
+          approved_at: new Date(`${customEntryDate}T${customEntryTime}:00`).toISOString()
+        }
+        : {};
+
+      // Determine approval status - if custom date is used, go directly to approved
+      const approvalStatus = useCustomDateTime ? 'approved' : 'pending';
+
+      if (useCustomDateTime) {
+        console.log('Custom DateTime Debug:', {
+          userSelectedDate: customEntryDate,
+          userSelectedTime: customEntryTime,
+          combinedString: `${customEntryDate}T${customEntryTime}:00`,
+          finalISOString: new Date(`${customEntryDate}T${customEntryTime}:00`).toISOString(),
+          localDate: new Date(`${customEntryDate}T${customEntryTime}:00`).toLocaleString(),
+          utcDate: new Date(`${customEntryDate}T${customEntryTime}:00`).toUTCString(),
+          approvalStatus: approvalStatus
+        });
+      }
+
+      // 3. Insert or update logs-man based on edit mode
+      if (isEditing && editLogId) {
+        // Update existing log
+        const { error: updateError } = await supabase
+          .from('logs-man')
+          .update({
+            vehicle_id: vehicleId,
+            customer_id: customerId,
+            vehicle_number: vehicleNumber,
+            location_id: selectedLocation,
+            entry_type: entryType,
+            image_url: imageUrl,
+            Amount: finalAmount,
+            discount: discountNum,
+            remarks: remarks,
+            // Payment mode and UPI account information
+            payment_mode: paymentMode,
+            upi_account_id: paymentMode === 'upi' ? selectedUpiAccount : null,
+            service: service.join(','), // Store as comma-separated string
+            vehicle_type: vehicleType,
+            workshop: entryType === 'workshop' ? workshop : null,
+            wheel_type: mapWheelCategoryToTypeCode(wheelCategory),
+            // Customer details
+            Name: customerName.trim() || null,
+            Phone_no: phoneNumber || null,
+            'D.O.B': dateOfBirth || null,
+            Location: customerLocation || null,
+            // Vehicle details
+            vehicle_brand: selectedVehicleBrand || null,
+            vehicle_model: selectedModel || null,
+            Brand_id: selectedModelId || null,
+            updated_at: new Date().toISOString(),
+            own_id: (user as any)?.own_id || null,
+            // Custom entry time if specified
+            ...entryTimeData,
+            // Custom created_at if specified
+            ...createdAtData,
+            // Custom exit time and approval data if specified
+            ...exitTimeData,
+          })
+          .eq('id', editLogId);
+
+        if (updateError) throw updateError;
+        toast.success('Entry updated successfully!');
+
+        // Reset edit mode
+        setIsEditing(false);
+        setEditLogId(null);
+      } else {
+        // Check for package redemption before creating log
+        const redemptionResult = await checkAndProcessPackageRedemption(
+          customerId, 
+          vehicleId, 
+          service, 
+          selectedLocation as string,
+          useSubscriptionForRedemption ? selectedSubscription?.id : undefined
+        );
+
+        // Insert new log
+        const logData: any = {
+          vehicle_id: vehicleId,
+          customer_id: customerId,
+          vehicle_number: vehicleNumber,
+          location_id: selectedLocation,
+          entry_type: entryType,
+          image_url: imageUrl,
+          created_by: user?.id,
+          Amount: redemptionResult.isRedemption ? 0 : finalAmount, // No charge for redemptions
+          discount: redemptionResult.isRedemption ? 0 : discountNum,
+          remarks: redemptionResult.isRedemption 
+            ? `Package redemption from ${redemptionResult.subscriptionName} (${redemptionResult.remainingVisits} visits remaining)`
+            : remarks,
+          // Payment mode and UPI account information
+          payment_mode: redemptionResult.isRedemption ? 'subscription' : paymentMode,
+          upi_account_id: paymentMode === 'upi' ? selectedUpiAccount : null,
+          service: service.join(','), // Store as comma-separated string
+          vehicle_type: vehicleType,
+          workshop: entryType === 'workshop' ? workshop : null,
+          wheel_type: mapWheelCategoryToTypeCode(wheelCategory),
+          // Customer details
+          Name: customerName.trim() || null,
+          Phone_no: phoneNumber || null,
+          'D.O.B': dateOfBirth || null,
+          Location: customerLocation || null,
+          // Vehicle details
+          vehicle_brand: selectedVehicleBrand || null,
+          vehicle_model: selectedModel || null,
+          Brand_id: selectedModelId || null,
+          own_id: (user as any)?.own_id || null,
+          // Custom created_at if specified, otherwise current time
+          ...createdAtData,
+          // Custom entry time if specified
+          ...entryTimeData,
+          // Approval status - if custom date is used, go directly to approved
+          approval_status: approvalStatus,
+          // Custom exit time and approval data if specified
+          ...exitTimeData,
+        };
+
+        // Note: loyalty_visit_id field removed as it doesn't exist in logs-man table
+        // The redemption is tracked in the loyalty_visits table separately
+
+        const { error: insertError } = await supabase.from('logs-man').insert([logData]);
+        if (insertError) throw insertError;
+
+        let statusMessage = useCustomDateTime
+          ? 'Owner entry submitted successfully! Ticket is now closed.'
+          : 'Owner entry submitted successfully!';
+        
+        if (redemptionResult.isRedemption) {
+          statusMessage += ` Package redemption processed from ${redemptionResult.subscriptionName} (${redemptionResult.remainingVisits} visits remaining).`;
+        }
+        
+        toast.success(statusMessage);
+
+        // No persistent counter increment; count is derived from logs-man only
+      }
+
+    } catch (error) {
+      console.error('Error processing form submission:', error);
+      toast.error('Failed to submit entry: ' + error.message);
+    } finally {
+      setIsSubmitDisabled(false);
+    }
+  };
+
+  // Function to reset form fields
+  const resetForm = () => {
+    setVehicleNumber('');
+    setVehicleType('');
+    setService([]); // Reset service to empty array
+    setAmount('500');
+    setDiscount('');
+    setRemarks('');
+    // Reset payment mode and UPI account selection
+    setPaymentMode('cash');
+    setSelectedUpiAccount('');
+    // setScratchImage(null);
+    setCustomerName('');
+    setPhoneNumber('');
+    setDateOfBirth('');
+    setCustomerLocation('');
+    setSelectedVehicleBrand('');
+    setSelectedModel('');
+    setSelectedModelId('');
+    setWheelCategory('4 Wheeler');
+    setWorkshop('');
+    setUseCustomDateTime(false);
+    setCustomEntryDate(new Date().toISOString().split('T')[0]);
+    setCustomEntryTime(new Date().toTimeString().slice(0, 5));
+    // Reset subscription selection
+    setUseSubscriptionForRedemption(false);
+    setSelectedSubscription(null);
+    setUsableSubscriptions([]);
+    setShowSubscriptionModal(false);
+  };
+
+  // Function to continue form submission after subscription selection
+  const continueFormSubmission = async () => {
+    try {
+      console.log('🔄 Continuing form submission after subscription selection');
+      
+      // Get the customer and vehicle IDs (they should already be created)
+      const normalizePlate = (plate: string) => plate.toUpperCase().replace(/\s|-/g, '');
+      const plate = normalizePlate(vehicleNumber);
+      
+      // Find existing customer and vehicle
+      const { data: existingCustomer } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('phone', phoneNumber)
+        .eq('owner_id', (user as any)?.own_id)
+        .eq('location_id', selectedLocation)
+        .single();
+        
+      const { data: existingVehicle } = await supabase
+        .from('vehicles')
+        .select('id')
+        .eq('number_plate', plate)
+        .single();
+        
+      if (!existingCustomer || !existingVehicle) {
+        console.error('❌ Customer or vehicle not found');
+        toast.error('Error: Customer or vehicle not found');
+        return;
+      }
+      
+      const customerId = existingCustomer.id;
+      const vehicleId = existingVehicle.id;
+      
+      // Continue with the rest of the form submission logic
+      await processFormSubmission(customerId, vehicleId);
+    } catch (error) {
+      console.error('❌ Error continuing form submission:', error);
+      toast.error('Error continuing form submission');
+    }
+  };
+
   const handleSubmit = async () => {
+    console.log('🚀 handleSubmit called');
     // Disable submit button for 5 seconds
     setIsSubmitDisabled(true);
 
@@ -1096,9 +1664,135 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
     //   toast.error('Please save the scratch marking before submitting.');
     //   return;
     // }
+
+    console.log('🔧 Starting form processing');
     try {
-      // Use the utility function to get or create vehicle ID
-      const vehicleId = await getOrCreateVehicleId(vehicleNumber, vehicleType);
+      // Upsert customer and vehicle, then use their IDs
+      const normalizePlate = (plate: string) => plate.toUpperCase().replace(/\s|-/g, '');
+      const plate = normalizePlate(vehicleNumber);
+
+      const findOrCreateCustomer = async () => {
+        const ownerId = (user as any)?.own_id || null;
+        if (phoneNumber && phoneNumber.trim() !== '') {
+          const { data } = await supabase
+            .from('customers')
+            .select('id, name, phone, date_of_birth, location_id')
+            .eq('phone', phoneNumber)
+            .eq('owner_id', ownerId)
+            .eq('location_id', selectedLocation as string);
+          if (data && data[0]) {
+            const existing = data[0];
+            const updates: any = {};
+            if (customerName && customerName !== existing.name) updates.name = customerName;
+            if (phoneNumber && phoneNumber !== existing.phone) updates.phone = phoneNumber;
+            if (dateOfBirth && dateOfBirth !== existing.date_of_birth) updates.date_of_birth = dateOfBirth;
+            if (selectedLocation && selectedLocation !== existing.location_id) updates.location_id = selectedLocation;
+            if (Object.keys(updates).length > 0) {
+              await supabase.from('customers').update(updates).eq('id', existing.id);
+            }
+            return existing.id as string;
+          }
+        }
+        if (customerName && customerName.trim() !== '') {
+          const { data } = await supabase
+            .from('customers')
+            .select('id, name, phone, date_of_birth, location_id')
+            .eq('name', customerName)
+            .eq('owner_id', (user as any)?.own_id || null)
+            .eq('location_id', selectedLocation as string);
+          if (data && data[0]) {
+            const existing = data[0];
+            const updates: any = {};
+            if (customerName && customerName !== existing.name) updates.name = customerName;
+            if (phoneNumber && phoneNumber !== existing.phone) updates.phone = phoneNumber;
+            if (dateOfBirth && dateOfBirth !== existing.date_of_birth) updates.date_of_birth = dateOfBirth;
+            if (selectedLocation && selectedLocation !== existing.location_id) updates.location_id = selectedLocation;
+            if (Object.keys(updates).length > 0) {
+              await supabase.from('customers').update(updates).eq('id', existing.id);
+            }
+            return existing.id as string;
+          }
+        }
+        const insertPayload: any = {
+          name: customerName || null,
+          phone: phoneNumber || null,
+          date_of_birth: dateOfBirth || null,
+          location_id: selectedLocation,
+          owner_id: (user as any)?.own_id || null,
+          vehicles: [], // Initialize empty vehicles array
+          default_vehicle_id: null, // Initialize as null
+        };
+        const { data: created, error: custErr } = await supabase
+          .from('customers')
+          .insert([insertPayload])
+          .select('id')
+          .single();
+        if (custErr) throw custErr;
+        return created!.id as string;
+      };
+
+      const findOrCreateVehicle = async (customerId: string) => {
+        const { data: existing } = await supabase
+          .from('vehicles')
+          .select('id, Brand, model, location_id')
+          .eq('number_plate', plate)
+          .maybeSingle();
+        if (existing && existing.id) {
+          const updates: any = { owner_id: customerId };
+          if (selectedVehicleBrand && selectedVehicleBrand !== (existing as any).Brand) updates.Brand = selectedVehicleBrand;
+          if (selectedModelId && selectedModelId !== (existing as any).model) updates.model = selectedModelId; // Update with ID
+          const locs: string[] = Array.isArray((existing as any).location_id) ? (existing as any).location_id : [];
+          if (selectedLocation && !locs.includes(selectedLocation)) {
+            updates.location_id = [...locs, selectedLocation];
+          }
+          if (Object.keys(updates).length > 0) {
+            await supabase.from('vehicles').update(updates).eq('id', existing.id);
+          }
+          return existing.id as string;
+        }
+        const insertVeh: any = {
+          id: generateUUID(),
+          number_plate: plate,
+          type: vehicleType || null,
+          owner_id: customerId,
+          Brand: selectedVehicleBrand || null,
+          model: selectedModelId || null, // Store the ID from Vehicles_in_india
+          location_id: selectedLocation ? [selectedLocation] : [],
+        };
+        const { data: newVeh, error: vehErr } = await supabase
+          .from('vehicles')
+          .insert([insertVeh])
+          .select('id')
+          .single();
+        if (vehErr) throw vehErr;
+        return newVeh!.id as string;
+      };
+
+      const customerId = await findOrCreateCustomer();
+      const vehicleId = await findOrCreateVehicle(customerId);
+      
+      // Update customer's vehicles array and default_vehicle_id
+      await updateCustomerVehicles(customerId, vehicleId);
+
+      console.log('🎯 About to check subscriptions for customer:', customerId);
+      // Check for usable subscriptions and show selection modal if available
+      const subscriptions = await fetchUsableSubscriptions(customerId);
+      console.log('📦 Found subscriptions:', subscriptions);
+      setUsableSubscriptions(subscriptions);
+      
+      if (subscriptions.length > 0) {
+        console.log('✅ Showing subscription modal - pausing form submission');
+        setShowSubscriptionModal(true);
+        // Don't continue with form submission - wait for user selection
+        return;
+      } else {
+        console.log('❌ No subscriptions found, proceeding with normal payment');
+        setUseSubscriptionForRedemption(false);
+        setSelectedSubscription(null);
+        // Continue with form submission immediately
+        await processFormSubmission(customerId, vehicleId);
+        return;
+      }
 
       // 1. Upload image to Supabase Storage
       // const safeVehicleNumber = vehicleNumber.replace(/[^a-zA-Z0-9_-]/g, '');
@@ -1159,6 +1853,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
           .from('logs-man')
           .update({
             vehicle_id: vehicleId,
+            customer_id: customerId,
             vehicle_number: vehicleNumber,
             entry_type: entryType,
             image_url: imageUrl,
@@ -1192,62 +1887,84 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
               upi_account_name: selectedAccount.account_name,
               upi_id: selectedAccount.upi_id,
             } : {}),
+            own_id: (user as any)?.own_id || null,
           })
           .eq('id', editLogId);
 
         if (updateError) throw updateError;
         toast.success('Entry updated successfully!');
       } else {
+        // Check for package redemption before creating log
+        const redemptionResult = await checkAndProcessPackageRedemption(
+          customerId, 
+          vehicleId, 
+          service, 
+          selectedLocation as string,
+          useSubscriptionForRedemption ? selectedSubscription?.id : undefined
+        );
+
         // Insert new log entry
         // Find the selected UPI account details
         const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
 
-        const { error: insertError } = await supabase.from('logs-man').insert([
-          {
-            vehicle_id: vehicleId,
-            vehicle_number: vehicleNumber,
-            location_id: selectedLocation,
-            entry_type: entryType,
-            image_url: imageUrl,
-            created_by: user?.id,
-            Amount: finalAmount,
-            discount: discountNum,
-            remarks: remarks,
-            payment_mode: paymentMode,
-            service: service.join(','), // Store as comma-separated string
-            vehicle_type: vehicleType,
-            workshop: entryType === 'workshop' ? workshop : null,
-            wheel_type: mapWheelCategoryToTypeCode(wheelCategory),
-            // Customer details
-            Name: trimmedCustomerName || null,
-            Phone_no: phoneNumber || null,
-            'D.O.B': dateOfBirth || null,
-            Location: customerLocation || null,
-            // Vehicle details
-            vehicle_brand: selectedVehicleBrand || null,
-            vehicle_model: selectedModel || null,
-            Brand_id: selectedModelId || null,
-            // Custom created_at if specified, otherwise current time
-            ...createdAtData,
-            // Custom entry time if specified
-            ...entryTimeData,
-            // Custom exit time and approval data if specified
-            ...exitTimeData,
-            // Approval status - if custom date is used, go directly to approved
-            approval_status: approvalStatus,
-            // UPI account information if UPI is selected
-            ...(paymentMode === 'upi' && selectedAccount ? {
-              upi_account_id: selectedUpiAccount,
-              upi_account_name: selectedAccount.account_name,
-              upi_id: selectedAccount.upi_id,
-            } : {}),
-          },
-        ]);
+        const logData: any = {
+          vehicle_id: vehicleId,
+          customer_id: customerId,
+          vehicle_number: vehicleNumber,
+          location_id: selectedLocation,
+          entry_type: entryType,
+          image_url: imageUrl,
+          created_by: user?.id,
+          Amount: redemptionResult.isRedemption ? 0 : finalAmount, // No charge for redemptions
+          discount: redemptionResult.isRedemption ? 0 : discountNum,
+          remarks: redemptionResult.isRedemption 
+            ? `Package redemption from ${redemptionResult.subscriptionName} (${redemptionResult.remainingVisits} visits remaining)`
+            : remarks,
+          payment_mode: redemptionResult.isRedemption ? 'subscription' : paymentMode,
+          service: service.join(','), // Store as comma-separated string
+          vehicle_type: vehicleType,
+          workshop: entryType === 'workshop' ? workshop : null,
+          wheel_type: mapWheelCategoryToTypeCode(wheelCategory),
+          // Customer details
+          Name: trimmedCustomerName || null,
+          Phone_no: phoneNumber || null,
+          'D.O.B': dateOfBirth || null,
+          Location: customerLocation || null,
+          // Vehicle details
+          vehicle_brand: selectedVehicleBrand || null,
+          vehicle_model: selectedModel || null,
+          Brand_id: selectedModelId || null,
+          // Custom created_at if specified, otherwise current time
+          ...createdAtData,
+          // Custom entry time if specified
+          ...entryTimeData,
+          // Custom exit time and approval data if specified
+          ...exitTimeData,
+          // Approval status - if custom date is used, go directly to approved
+          approval_status: approvalStatus,
+          // UPI account information if UPI is selected
+          ...(paymentMode === 'upi' && selectedAccount ? {
+            upi_account_id: selectedUpiAccount,
+            upi_account_name: selectedAccount.account_name,
+            upi_id: selectedAccount.upi_id,
+          } : {}),
+          own_id: (user as any)?.own_id || null,
+        };
+
+        // Note: loyalty_visit_id field removed as it doesn't exist in logs-man table
+        // The redemption is tracked in the loyalty_visits table separately
+
+        const { error: insertError } = await supabase.from('logs-man').insert([logData]);
         if (insertError) throw insertError;
 
-        const statusMessage = useCustomDateTime
+        let statusMessage = useCustomDateTime
           ? 'Manager entry submitted successfully! Ticket is now closed.'
           : 'Manager entry submitted successfully!';
+        
+        if (redemptionResult.isRedemption) {
+          statusMessage += ` Package redemption processed from ${redemptionResult.subscriptionName} (${redemptionResult.remainingVisits} visits remaining).`;
+        }
+        
         toast.success(statusMessage);
 
         // No persistent counter increment; count is derived from logs-man only
@@ -1255,27 +1972,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
 
       // Reset form only if not in edit mode
       if (!isEditing) {
-        setVehicleNumber('');
-        setVehicleType('');
-        setService([]); // Reset service to empty array
-        setAmount('500');
-        setDiscount('');
-        setRemarks('');
-        // Reset payment mode and UPI account selection
-        setPaymentMode('cash');
-        setSelectedUpiAccount('');
-        // setScratchImage(null);
-        setCustomerName('');
-        setPhoneNumber('');
-        setDateOfBirth('');
-        setCustomerLocation('');
-        setSelectedVehicleBrand('');
-        setSelectedModel('');
-        setSelectedModelId('');
-        // Reset custom datetime
-        setUseCustomDateTime(false);
-        setCustomEntryDate(new Date().toISOString().split('T')[0]);
-        setCustomEntryTime(new Date().toTimeString().slice(0, 5));
+        resetForm();
       }
     } catch (err: any) {
       toast.error('Submission failed: ' + (err?.message || err));
@@ -1317,8 +2014,115 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
     }
 
     try {
-      // Use the utility function to get or create vehicle ID
-      const vehicleId = await getOrCreateVehicleId(vehicleNumber, vehicleType);
+      // Upsert customer and vehicle, then use their IDs
+      const normalizePlate = (plate: string) => plate.toUpperCase().replace(/\s|-/g, '');
+      const plate = normalizePlate(vehicleNumber);
+
+      const findOrCreateCustomer = async () => {
+        const ownerId = (user as any)?.own_id || null;
+        if (phoneNumber && phoneNumber.trim() !== '') {
+          const { data } = await supabase
+            .from('customers')
+            .select('id, name, phone, date_of_birth, location_id')
+            .eq('phone', phoneNumber)
+            .eq('owner_id', ownerId)
+            .eq('location_id', selectedLocation as string);
+          if (data && data[0]) {
+            const existing = data[0];
+            const updates: any = {};
+            if (customerName && customerName !== existing.name) updates.name = customerName;
+            if (phoneNumber && phoneNumber !== existing.phone) updates.phone = phoneNumber;
+            if (dateOfBirth && dateOfBirth !== existing.date_of_birth) updates.date_of_birth = dateOfBirth;
+            if (selectedLocation && selectedLocation !== existing.location_id) updates.location_id = selectedLocation;
+            if (Object.keys(updates).length > 0) {
+              await supabase.from('customers').update(updates).eq('id', existing.id);
+            }
+            return existing.id as string;
+          }
+        }
+        if (customerName && customerName.trim() !== '') {
+          const { data } = await supabase
+            .from('customers')
+            .select('id, name, phone, date_of_birth, location_id')
+            .eq('name', customerName)
+            .eq('owner_id', (user as any)?.own_id || null)
+            .eq('location_id', selectedLocation as string);
+          if (data && data[0]) {
+            const existing = data[0];
+            const updates: any = {};
+            if (customerName && customerName !== existing.name) updates.name = customerName;
+            if (phoneNumber && phoneNumber !== existing.phone) updates.phone = phoneNumber;
+            if (dateOfBirth && dateOfBirth !== existing.date_of_birth) updates.date_of_birth = dateOfBirth;
+            if (selectedLocation && selectedLocation !== existing.location_id) updates.location_id = selectedLocation;
+            if (Object.keys(updates).length > 0) {
+              await supabase.from('customers').update(updates).eq('id', existing.id);
+            }
+            return existing.id as string;
+          }
+        }
+        const insertPayload: any = {
+          name: customerName || null,
+          phone: phoneNumber || null,
+          date_of_birth: dateOfBirth || null,
+          location_id: selectedLocation,
+          owner_id: (user as any)?.own_id || null,
+          vehicles: [], // Initialize empty vehicles array
+          default_vehicle_id: null, // Initialize as null
+        };
+        const { data: created, error: custErr } = await supabase
+          .from('customers')
+          .insert([insertPayload])
+          .select('id')
+          .single();
+        if (custErr) throw custErr;
+        return created!.id as string;
+      };
+
+      const findOrCreateVehicle = async (customerId: string) => {
+        const { data: existing } = await supabase
+          .from('vehicles')
+          .select('id, Brand, model, location_id')
+          .eq('number_plate', plate)
+          .maybeSingle();
+        if (existing && existing.id) {
+          const updates: any = { owner_id: customerId };
+          if (selectedVehicleBrand && selectedVehicleBrand !== (existing as any).Brand) updates.Brand = selectedVehicleBrand;
+          if (selectedModelId && selectedModelId !== (existing as any).model) updates.model = selectedModelId; // Update with ID
+          const locs: string[] = Array.isArray((existing as any).location_id) ? (existing as any).location_id : [];
+          if (selectedLocation && !locs.includes(selectedLocation)) {
+            updates.location_id = [...locs, selectedLocation];
+          }
+          if (Object.keys(updates).length > 0) {
+            await supabase.from('vehicles').update(updates).eq('id', existing.id);
+          }
+          return existing.id as string;
+        }
+        const insertVeh: any = {
+          id: generateUUID(),
+          number_plate: plate,
+          type: vehicleType || null,
+          owner_id: customerId,
+          Brand: selectedVehicleBrand || null,
+          model: selectedModelId || null, // Store the ID from Vehicles_in_india
+          location_id: selectedLocation ? [selectedLocation] : [],
+        };
+        const { data: newVeh, error: vehErr } = await supabase
+          .from('vehicles')
+          .insert([insertVeh])
+          .select('id')
+          .single();
+        if (vehErr) throw vehErr;
+        return newVeh!.id as string;
+      };
+
+      const customerId = await findOrCreateCustomer();
+      const vehicleId = await findOrCreateVehicle(customerId);
+      
+      // Update customer's vehicles array and default_vehicle_id
+      await updateCustomerVehicles(customerId, vehicleId);
+
+      // Check for usable subscriptions and show selection modal if available
+      await handleSubscriptionSelection(customerId);
 
       const imageUrl = null; // Set to null since scratch marking is commented out
 
@@ -1327,58 +2131,79 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
       const discountNum = discount === '' ? 0 : parseFloat(discount) || 0;
       const finalAmount = priceNum - discountNum;
 
+      // Check for package redemption before creating log
+      const redemptionResult = await checkAndProcessPackageRedemption(
+        customerId, 
+        vehicleId, 
+        service, 
+        selectedLocation as string,
+        useSubscriptionForRedemption ? selectedSubscription?.id : undefined
+      );
+
       // For checkout, we directly set the ticket as approved and closed
       const currentTime = new Date().toISOString();
 
       // Find the selected UPI account details
       const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
 
+      const logData: any = {
+        vehicle_id: vehicleId,
+        customer_id: customerId,
+        vehicle_number: vehicleNumber,
+        location_id: selectedLocation,
+        entry_type: entryType,
+        image_url: imageUrl,
+        created_by: user?.id,
+        Amount: redemptionResult.isRedemption ? 0 : finalAmount, // No charge for redemptions
+        discount: redemptionResult.isRedemption ? 0 : discountNum,
+        remarks: redemptionResult.isRedemption 
+          ? `Package redemption from ${redemptionResult.subscriptionName} (${redemptionResult.remainingVisits} visits remaining)`
+          : remarks,
+        payment_mode: redemptionResult.isRedemption ? 'subscription' : paymentMode,
+        service: service.join(','), // Store as comma-separated string
+        vehicle_type: vehicleType,
+        workshop: entryType === 'workshop' ? workshop : null,
+        wheel_type: mapWheelCategoryToTypeCode(wheelCategory),
+        // Customer details
+        Name: trimmedCustomerName || null,
+        Phone_no: phoneNumber || null,
+        'D.O.B': dateOfBirth || null,
+        Location: customerLocation || null,
+        // Vehicle details
+        vehicle_brand: selectedVehicleBrand || null,
+        vehicle_model: selectedModel || null,
+        Brand_id: selectedModelId || null,
+        // Set as approved immediately
+        approval_status: 'approved',
+        // Set entry and exit time to current time (immediate checkout)
+        entry_time: currentTime,
+        exit_time: currentTime,
+        approved_at: currentTime,
+        // Set payment date to current time
+        payment_date: currentTime,
+        // UPI account information if UPI is selected
+        ...(paymentMode === 'upi' && selectedAccount ? {
+          upi_account_id: selectedUpiAccount,
+          upi_account_name: selectedAccount.account_name,
+          upi_id: selectedAccount.upi_id,
+        } : {}),
+        own_id: (user as any)?.own_id || null,
+      };
+
+      // Note: loyalty_visit_id field removed as it doesn't exist in logs-man table
+      // The redemption is tracked in the loyalty_visits table separately
+
       // Insert new log entry directly as approved
-      const { error: insertError } = await supabase.from('logs-man').insert([
-        {
-          vehicle_id: vehicleId,
-          vehicle_number: vehicleNumber,
-          location_id: selectedLocation,
-          entry_type: entryType,
-          image_url: imageUrl,
-          created_by: user?.id,
-          Amount: finalAmount,
-          discount: discountNum,
-          remarks: remarks,
-          payment_mode: paymentMode,
-          service: service.join(','), // Store as comma-separated string
-          vehicle_type: vehicleType,
-          workshop: entryType === 'workshop' ? workshop : null,
-          wheel_type: mapWheelCategoryToTypeCode(wheelCategory),
-          // Customer details
-          Name: trimmedCustomerName || null,
-          Phone_no: phoneNumber || null,
-          'D.O.B': dateOfBirth || null,
-          Location: customerLocation || null,
-          // Vehicle details
-          vehicle_brand: selectedVehicleBrand || null,
-          vehicle_model: selectedModel || null,
-          Brand_id: selectedModelId || null,
-          // Set as approved immediately
-          approval_status: 'approved',
-          // Set entry and exit time to current time (immediate checkout)
-          entry_time: currentTime,
-          exit_time: currentTime,
-          approved_at: currentTime,
-          // Set payment date to current time
-          payment_date: currentTime,
-          // UPI account information if UPI is selected
-          ...(paymentMode === 'upi' && selectedAccount ? {
-            upi_account_id: selectedUpiAccount,
-            upi_account_name: selectedAccount.account_name,
-            upi_id: selectedAccount.upi_id,
-          } : {}),
-        },
-      ]);
+      const { error: insertError } = await supabase.from('logs-man').insert([logData]);
 
       if (insertError) throw insertError;
 
-      toast.success('Entry checked out successfully! Ticket is now closed.');
+      let statusMessage = 'Entry checked out successfully! Ticket is now closed.';
+      if (redemptionResult.isRedemption) {
+        statusMessage += ` Package redemption processed from ${redemptionResult.subscriptionName} (${redemptionResult.remainingVisits} visits remaining).`;
+      }
+      
+      toast.success(statusMessage);
 
       // Reset form only if not in edit mode
       if (!isEditing) {
@@ -1894,6 +2719,22 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
 
 
 
+              {/* Selected Subscription Indicator */}
+              {selectedSubscription && useSubscriptionForRedemption && (
+                <div className="space-y-2 p-4 border rounded-lg bg-green-50 border-green-200">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                    <Label className="text-sm font-medium text-green-700">Using Subscription Package</Label>
+                  </div>
+                  <div className="text-sm text-green-600">
+                    <strong>{selectedSubscription.subscription_plans.name}</strong> - {selectedSubscription.remaining_visits} visits remaining
+                  </div>
+                  <div className="text-xs text-green-500">
+                    This visit will be processed as a package redemption (no payment required)
+                  </div>
+                </div>
+              )}
+
               {/* Payment Mode Selection */}
               <div className="space-y-2">
                 <Label>Payment Mode</Label>
@@ -2050,6 +2891,65 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
           </Button>
         )}
       </div>
+
+      {/* Subscription Selection Modal */}
+      {showSubscriptionModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">Select Subscription Package</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              This customer has active subscription packages. Choose one to use for this visit:
+            </p>
+            
+            <div className="space-y-3 mb-4">
+              {usableSubscriptions.map((subscription) => {
+                const plan = subscription.subscription_plans;
+                return (
+                  <div
+                    key={subscription.id}
+                    className="border rounded-lg p-3 cursor-pointer hover:bg-gray-50"
+                    onClick={() => confirmSubscriptionSelection(subscription)}
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="font-medium">{plan.name}</h4>
+                        <p className="text-sm text-gray-600">
+                          {subscription.remaining_visits} visits remaining
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Original: {plan.max_redemptions} visits • ₹{plan.price}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-sm font-medium text-green-600">
+                          {subscription.remaining_visits} left
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={skipSubscription}
+                className="flex-1"
+              >
+                Use Normal Payment
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => setShowSubscriptionModal(false)}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
