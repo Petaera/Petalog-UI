@@ -7,7 +7,11 @@ import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from "react-router-dom";
 
-const DashboardManager = () => {
+interface DashboardManagerProps {
+  selectedLocation?: string;
+}
+
+const DashboardManager = ({ selectedLocation }: DashboardManagerProps) => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [manualLogs, setManualLogs] = useState<any[]>([]);

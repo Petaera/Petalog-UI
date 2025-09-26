@@ -4,7 +4,7 @@ import { Navigate } from 'react-router-dom';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole?: 'owner' | 'manager' | ('owner' | 'manager')[];
+  requiredRole?: 'owner' | 'manager' | 'worker' | ('owner' | 'manager' | 'worker')[];
 }
 
 export const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
@@ -25,8 +25,12 @@ export const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) 
 
   if (requiredRole) {
     // Handle both single role and array of roles
-    const allowedRoles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
-    if (!allowedRoles.includes(user.role as 'owner' | 'manager')) {
+    const allowedRoles = Array.isArray(requiredRole) ? [...requiredRole] : [requiredRole];
+    // Treat 'worker' as allowed wherever 'manager' is allowed
+    if (allowedRoles.includes('manager') && !allowedRoles.includes('worker')) {
+      allowedRoles.push('worker');
+    }
+    if (!allowedRoles.includes(user.role as 'owner' | 'manager' | 'worker')) {
       // Redirect to appropriate dashboard based on user's role
       const redirectPath = user.role === 'owner' ? '/dashboard' : '/manager-portal';
       return <Navigate to={redirectPath} replace />;

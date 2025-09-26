@@ -169,6 +169,27 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
     }
   };
 
+  // Update customEntryDate when selectedDateOption changes
+  useEffect(() => {
+    switch (selectedDateOption) {
+      case 'today':
+        setCustomEntryDate(todayYMD());
+        setUseCustomDateTime(false);
+        break;
+      case 'yesterday':
+        setCustomEntryDate(yesterdayYMD());
+        setUseCustomDateTime(true);
+        break;
+      case 'custom':
+        // Keep current customEntryDate as is
+        setUseCustomDateTime(true);
+        break;
+      default:
+        setCustomEntryDate(todayYMD());
+        setUseCustomDateTime(false);
+    }
+  }, [selectedDateOption]);
+
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [vehicleTypes, setVehicleTypes] = useState<string[]>([]);
   const [serviceOptions, setServiceOptions] = useState<string[]>([]);
@@ -180,7 +201,8 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
   const [entryType, setEntryType] = useState('customer');
   const [discount, setDiscount] = useState('');
   const [remarks, setRemarks] = useState('');
-  const [paymentMode, setPaymentMode] = useState('cash');
+  // Payment mode state for cash/UPI selection
+  const [paymentMode, setPaymentMode] = useState<'cash' | 'upi' | 'credit'>('cash');
   // const [scratchImage, setScratchImage] = useState<Blob | null>(null);
   const [workshop, setWorkshop] = useState('');
   const [workshopOptions, setWorkshopOptions] = useState<string[]>([]);
@@ -199,7 +221,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
   const [selectedModel, setSelectedModel] = useState('');
   const [selectedModelId, setSelectedModelId] = useState('');
   const [availableVehicleBrands, setAvailableVehicleBrands] = useState<string[]>([]);
-  const [availableModels, setAvailableModels] = useState<{ name: string, id: string, brand: string }[]>([]);
+  const [availableModels, setAvailableModels] = useState<{ name: string, id: string, brand: string, type?: string }[]>([]);
   const [vehicleData, setVehicleData] = useState<any[]>([]);
 
 
@@ -233,8 +255,8 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
 
   const { user } = useAuth();
 
-  // State to hold pending edit data
-  const [pendingEditData, setPendingEditData] = useState<any | null>(null);
+  // Store edit data for later use
+  const [pendingEditData, setPendingEditData] = useState<any>(null);
   const [isApplyingEditData, setIsApplyingEditData] = useState(false);
   const [editVehicleNumber, setEditVehicleNumber] = useState<string | null>(null);
 
@@ -296,7 +318,11 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
         setEntryType(logData.entryType || 'customer');
         setDiscount(logData.discount || '');
         setRemarks(logData.remarks || '');
-        setPaymentMode(logData.paymentMode || 'cash');
+        // Payment mode from edit data or default to cash
+        const paymentModeValue = logData.payment_mode || logData.paymentMode || 'cash';
+        const validPaymentModes = ['cash', 'upi', 'credit'];
+        const normalizedPaymentMode = validPaymentModes.includes(paymentModeValue) ? paymentModeValue : 'cash';
+        setPaymentMode(normalizedPaymentMode);
         setCustomerName(logData.customerName || '');
         setPhoneNumber(logData.phoneNumber || '');
         setDateOfBirth(logData.dateOfBirth || '');
@@ -306,15 +332,29 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
         // Handle custom entry date and time
         if (logData.entry_time) {
           const entryDateTime = new Date(logData.entry_time);
-          setCustomEntryDate(entryDateTime.toISOString().split('T')[0]);
+          const entryDateYMD = entryDateTime.toISOString().split('T')[0];
+          setCustomEntryDate(entryDateYMD);
           setCustomEntryTime(entryDateTime.toTimeString().slice(0, 5));
           setUseCustomDateTime(true);
+          
+          // Determine the correct date option based on the entry date
+          const todayStr = todayYMD();
+          const yesterdayStr = yesterdayYMD();
+          
+          if (entryDateYMD === todayStr) {
+            setSelectedDateOption('today');
+          } else if (entryDateYMD === yesterdayStr) {
+            setSelectedDateOption('yesterday');
+          } else {
+            setSelectedDateOption('custom');
+          }
         } else {
           // If no custom entry time, use current date/time
           const now = new Date();
           setCustomEntryDate(now.toISOString().split('T')[0]);
           setCustomEntryTime(now.toTimeString().slice(0, 5));
           setUseCustomDateTime(false);
+          setSelectedDateOption('today');
         }
 
         // Set edit mode
@@ -421,30 +461,19 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
     return false;
   };
 
-  // Update available brands when wheel category changes
+  // Update available brands - show all brands regardless of category
   useEffect(() => {
     if (vehicleData.length === 0 || isApplyingEditData) {
       setAvailableVehicleBrands([]);
       return;
     }
 
-    if (!wheelCategory) {
-      setAvailableVehicleBrands([]);
-      return;
-    }
-
-    const filteredBrands = vehicleData
-      .filter(item => {
-        const typeStr = normalizeTypeString((item as any).type);
-        if (wheelCategory === 'other') return typeStr === '3';
-        if (wheelCategory === '2') return typeStr === '2';
-        if (wheelCategory === '4') return typeStr === '4' || typeStr === '1';
-        return false;
-      })
+    // Show all brands from all categories
+    const allBrands = vehicleData
       .map(item => item['Vehicle Brands'])
       .filter(Boolean);
 
-    const uniqueBrands = [...new Set(filteredBrands)] as string[];
+    const uniqueBrands = [...new Set(allBrands)] as string[];
     setAvailableVehicleBrands(uniqueBrands);
 
     // Reset selections when wheel category changes (only if not editing and not applying edit data)
@@ -453,42 +482,31 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
       setSelectedModel('');
       setSelectedModelId('');
     }
-  }, [wheelCategory, vehicleData, isEditing, isApplyingEditData]);
+  }, [vehicleData, isEditing, isApplyingEditData]);
 
-  // Update available models when wheel category changes (show all models for the wheel category)
+  // Update available models - show all models regardless of category
   useEffect(() => {
     if (vehicleData.length === 0 || isApplyingEditData) {
       setAvailableModels([]);
       return;
     }
 
-    if (!wheelCategory) {
-      setAvailableModels([]);
-      return;
-    }
-
-    // Show all models for the selected wheel category, regardless of brand
-    const allModelsForWheelCategory = vehicleData
-      .filter(item => {
-        const typeStr = normalizeTypeString((item as any).type);
-        if (wheelCategory === 'other') return typeStr === '3';
-        if (wheelCategory === '2') return typeStr === '2';
-        if (wheelCategory === '4') return typeStr === '4' || typeStr === '1';
-        return false;
-      })
+    // Show all models from all categories
+    const allModels = vehicleData
       .map(item => ({
         name: item['Models'],
         id: item.id,
-        brand: item['Vehicle Brands']
+        brand: item['Vehicle Brands'],
+        type: item.type
       }))
       .filter(item => item.name); // Filter out empty models
 
-    // Remove duplicates based on model name but keep the id and brand
-    const uniqueModels = allModelsForWheelCategory.filter((model, index, arr) =>
+    // Remove duplicates based on model name but keep the id, brand, and type
+    const uniqueModels = allModels.filter((model, index, arr) =>
       arr.findIndex(m => m.name === model.name) === index
     );
 
-    console.log('All models for wheel category:', uniqueModels);
+    console.log('All available models:', uniqueModels);
     setAvailableModels(uniqueModels);
 
     // Reset selections when wheel category changes (only if not editing and not applying edit data)
@@ -497,19 +515,39 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
       setSelectedModel('');
       setSelectedModelId('');
     }
-  }, [wheelCategory, vehicleData, isEditing, isApplyingEditData]);
+  }, [vehicleData, isEditing, isApplyingEditData]);
 
-  // Auto-select brand when model is selected
+  // Auto-select category and brand when model is selected
   useEffect(() => {
     if (selectedModel && availableModels.length > 0) {
       const selectedModelData = availableModels.find(model => model.name === selectedModel);
-      if (selectedModelData && selectedModelData.brand && !selectedVehicleBrand) {
-        console.log('Auto-selecting brand for model:', selectedModelData.brand);
-        // Set a flag to indicate this is an auto-selection
-        setSelectedVehicleBrand(selectedModelData.brand);
+      console.log('Selected model data:', selectedModelData);
+      if (selectedModelData) {
+        // Auto-populate category based on model type
+        console.log('Model type:', selectedModelData.type);
+        if (selectedModelData.type) {
+          const categoryFromType = mapTypeToWheelCategory(selectedModelData.type);
+          console.log('Category from type:', categoryFromType);
+          if (categoryFromType) {
+            console.log('Auto-selecting category for model:', categoryFromType);
+            setWheelCategory(categoryFromType);
+          } else {
+            console.log('No category found for type:', selectedModelData.type);
+          }
+        } else {
+          console.log('No type found in model data');
+        }
+        
+        // Auto-select brand
+        if (selectedModelData.brand) {
+          console.log('Auto-selecting brand for model:', selectedModelData.brand);
+          setSelectedVehicleBrand(selectedModelData.brand);
+        }
+      } else {
+        console.log('No model data found for selected model:', selectedModel);
       }
     }
-  }, [selectedModel, availableModels, selectedVehicleBrand]);
+  }, [selectedModel, availableModels]);
 
   // Update available models when vehicle brand changes (filtering by brand)
   useEffect(() => {
@@ -818,26 +856,10 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
 
   // Auto-fill customer and vehicle brand/model details from most recent manual log
   useEffect(() => {
-    if (isEditing || isApplyingEditData) {
-      console.log('🛡️ Auto-fill blocked: isEditing=', isEditing, 'isApplyingEditData=', isApplyingEditData);
-      return; // don't override when editing an existing entry or applying edit data
-    }
-
-    // Don't auto-fill if this vehicle number was just set from edit data
-    if (editVehicleNumber && vehicleNumber.trim() === editVehicleNumber.trim()) {
-      console.log('Skipping auto-fill for vehicle number from edit data:', vehicleNumber);
-      return;
-    }
-
-    // Additional protection: don't auto-fill if we're in edit mode or recently applied edit data
-    if (editLogId || isEditing) {
-      console.log('🛡️ Auto-fill blocked: editLogId=', editLogId, 'isEditing=', isEditing);
-      return;
-    }
-
+    if (isEditing) return; // don't override when editing an existing entry
     const plate = vehicleNumber.trim();
-    if (!plate || plate.length < 3) {
-      // Clear form when vehicle number is too short
+    if (!plate) {
+      // Only clear form when vehicle number is completely empty
       setCustomerName('');
       setPhoneNumber('');
       setDateOfBirth('');
@@ -845,25 +867,25 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
       setSelectedVehicleBrand('');
       setSelectedModel('');
       setSelectedModelId('');
-      setWheelCategory('');
-      setVehicleType('');
-      setService([]);
+      // Don't clear wheel category, vehicle type, and service when just typing
+      // setWheelCategory('');
+      // setVehicleType('');
+      // setService([]);
       setAmount('500');
       setDiscount('');
       setRemarks('');
       setWorkshop('');
       return;
     }
+
+    // If vehicle number is too short, don't proceed with auto-fill but also don't clear selections
+    if (plate.length < 3) {
+      return;
+    }
     let cancelled = false;
 
     const loadLatestDetails = async () => {
       try {
-        // Double-check protection before proceeding
-        if (isEditing || isApplyingEditData || editLogId) {
-          console.log('🛡️ Auto-fill cancelled: protection check failed');
-          return;
-        }
-
         setIsLoadingVehicleData(true);
         
         // First, find the vehicle by normalized plate
@@ -874,15 +896,17 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
           .eq('number_plate', normalizedPlate)
           .maybeSingle();
 
+        // Also pull latest matching manual log (any location) for this plate
+        const { data: logData, error: logError } = await supabase
+          .from('logs-man')
+          .select('Name, Phone_no, Location, "D.O.B", vehicle_brand, vehicle_model, Brand_id, wheel_type, vehicle_type, created_at')
+          .ilike('vehicle_number', `%${plate}%`)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
         if (vehicleError || !vehicleRecord) {
           // No vehicle found, clear customer-related fields
           if (!cancelled) {
-            // Final protection check before clearing
-            if (isEditing || isApplyingEditData || editLogId) {
-              console.log('🛡️ Auto-fill clear blocked: protection check failed');
-              return;
-            }
-
             setCustomerName('');
             setPhoneNumber('');
             setDateOfBirth('');
@@ -890,9 +914,10 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
             setSelectedVehicleBrand('');
             setSelectedModel('');
             setSelectedModelId('');
-            setWheelCategory('');
-            setVehicleType('');
-            setService([]);
+            // Preserve user's current selections
+            // setWheelCategory('');
+            // setVehicleType('');
+            // setService([]);
             setAmount('500');
             setDiscount('');
             setRemarks('');
@@ -922,6 +947,9 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
           }
         }
 
+        // Use log data if available, otherwise use vehicle record data
+        const last = logData && logData.length > 0 ? logData[0] : null;
+
         // Get location name if customer has a location_id
         let locationName = '';
         if (customerData && customerData.location_id) {
@@ -936,8 +964,13 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
           }
         }
 
-        // Populate customer details
-        if (customerData) {
+        // Populate customer details - prioritize log data, fallback to customer data
+        if (last) {
+          setCustomerName(last.Name || '');
+          setPhoneNumber(last.Phone_no || '');
+          setCustomerLocation(last.Location || '');
+          setDateOfBirth(last['D.O.B'] || '');
+        } else if (customerData) {
           setCustomerName(customerData.name || '');
           setPhoneNumber(customerData.phone || '');
           setCustomerLocation(locationName);
@@ -949,56 +982,77 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
           setCustomerLocation('');
         }
 
-        // Populate vehicle details
-        setSelectedVehicleBrand(vehicleRecord.Brand || '');
-        
-        // Set wheel category from vehicle type
-        if (vehicleRecord.type) {
-          const derived = mapTypeToWheelCategory(normalizeTypeString(vehicleRecord.type));
-          if (derived) setWheelCategory(derived);
-        }
+        // Populate vehicle details - prioritize log data, fallback to vehicle record
+        if (last) {
+          setSelectedVehicleBrand(last.vehicle_brand || '');
+          
+          // Wheel category from log if available
+          if (last.wheel_type) {
+            const derived = mapTypeToWheelCategory(normalizeTypeString(last.wheel_type));
+            if (derived) setWheelCategory(derived);
+          }
 
-        // Find the model name from Vehicles_in_india using the ID stored in vehicles.model
-        if (vehicleRecord.model && vehicleData.length > 0) {
-          const match = vehicleData.find(item => item.id === vehicleRecord.model);
-          if (match) {
-            // Use the model name from Vehicles_in_india
-            setSelectedModel(match['Models'] || '');
-            setSelectedModelId(match.id || '');
-            
-            // Auto-fill wheel category from Vehicles_in_india type
-            if (match.type) {
-              const derivedCategory = mapTypeToWheelCategory(normalizeTypeString(match.type));
-              if (derivedCategory) {
-                setWheelCategory(derivedCategory);
+          // Vehicle type from log
+          if (last.vehicle_type) {
+            setVehicleType(last.vehicle_type);
+          }
+
+          // Defer model/id set to allow brand effect to populate models
+          setTimeout(() => {
+            if (!cancelled) {
+              setSelectedModel(last.vehicle_model || '');
+              setSelectedModelId(last.Brand_id || '');
+            }
+          }, 100);
+        } else {
+          // Fallback to vehicle record data
+          setSelectedVehicleBrand(vehicleRecord.Brand || '');
+          
+          // Set wheel category from vehicle type
+          if (vehicleRecord.type) {
+            const derived = mapTypeToWheelCategory(normalizeTypeString(vehicleRecord.type));
+            if (derived) setWheelCategory(derived);
+          }
+
+          // Find the model name from Vehicles_in_india using the ID stored in vehicles.model
+          if (vehicleRecord.model && vehicleData.length > 0) {
+            const match = vehicleData.find(item => item.id === vehicleRecord.model);
+            if (match) {
+              // Use the model name from Vehicles_in_india
+              setSelectedModel(match['Models'] || '');
+              setSelectedModelId(match.id || '');
+              
+              // Auto-fill wheel category from Vehicles_in_india type
+              if (match.type) {
+                const derivedCategory = mapTypeToWheelCategory(normalizeTypeString(match.type));
+                if (derivedCategory) {
+                  setWheelCategory(derivedCategory);
+                }
               }
+            } else {
+              // Fallback if ID not found
+              setSelectedModel('');
+              setSelectedModelId('');
             }
           } else {
-            // Fallback if ID not found
             setSelectedModel('');
             setSelectedModelId('');
           }
-        } else {
-          setSelectedModel('');
-          setSelectedModelId('');
         }
 
         // If wheel category still empty, try to derive from Vehicles_in_india type by brand+model
-        if (!vehicleRecord.type && (vehicleRecord.Brand || vehicleRecord.model) && vehicleData.length > 0) {
+        const currentBrand = last ? last.vehicle_brand : vehicleRecord.Brand;
+        const currentModel = last ? last.vehicle_model : vehicleRecord.model;
+        const currentWheelType = last ? last.wheel_type : vehicleRecord.type;
+        
+        if (!currentWheelType && (currentBrand || currentModel) && vehicleData.length > 0) {
           try {
             const match = vehicleData.find(item =>
-              item['Vehicle Brands'] === (vehicleRecord.Brand || '') && item['Models'] === (vehicleRecord.model || '')
+              item['Vehicle Brands'] === (currentBrand || '') && item['Models'] === (currentModel || '')
             );
             if (match && (match as any).type != null) {
               const derived = mapTypeToWheelCategory(normalizeTypeString((match as any).type));
-              if (derived && !cancelled) {
-                // Protection check before setting wheel category
-                if (isEditing || isApplyingEditData || editLogId) {
-                  console.log('🛡️ Auto-fill wheel category setting blocked: protection check failed');
-                  return;
-                }
-                setWheelCategory(derived);
-              }
+              if (derived && !cancelled) setWheelCategory(derived);
             }
           } catch { }
         }
@@ -1037,9 +1091,9 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
       }
     };
 
-    const t = setTimeout(loadLatestDetails, 500); // Increased delay to give edit mode more time
+    const t = setTimeout(loadLatestDetails, 300);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [vehicleNumber, isEditing, vehicleData, isApplyingEditData, editLogId, editVehicleNumber]);
+  }, [vehicleNumber, isEditing, vehicleData]);
 
   // Fetch number of manual visits from logs-man for the typed vehicle number
   useEffect(() => {
@@ -2342,19 +2396,49 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
 
                       {isDateDropdownOpen && (
                         <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-background border rounded-md shadow-lg">
-                          <div className="p-3">
-                            <Label className="text-xs text-muted-foreground mb-2 block">Custom Date</Label>
-                            <Input
-                              type="date"
-                              value={customEntryDate}
-                              onChange={(e) => {
-                                setCustomEntryDate(e.target.value);
-                                setSelectedDateOption('custom');
-                                setIsDateDropdownOpen(false);
-                              }}
-                              max={todayYMD()}
-                              className="w-full text-sm"
-                            />
+                          <div className="p-3 space-y-3">
+                            {/* Quick Date Options */}
+                            <div className="space-y-2">
+                              <Label className="text-xs text-muted-foreground">Quick Select</Label>
+                              <div className="grid grid-cols-2 gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedDateOption('today');
+                                    setIsDateDropdownOpen(false);
+                                  }}
+                                  className="px-3 py-2 text-sm border rounded-md hover:bg-muted/50 transition-colors"
+                                >
+                                  Today
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedDateOption('yesterday');
+                                    setIsDateDropdownOpen(false);
+                                  }}
+                                  className="px-3 py-2 text-sm border rounded-md hover:bg-muted/50 transition-colors"
+                                >
+                                  Yesterday
+                                </button>
+                              </div>
+                            </div>
+                            
+                            {/* Custom Date Input */}
+                            <div className="space-y-2">
+                              <Label className="text-xs text-muted-foreground">Custom Date</Label>
+                              <Input
+                                type="date"
+                                value={customEntryDate}
+                                onChange={(e) => {
+                                  setCustomEntryDate(e.target.value);
+                                  setSelectedDateOption('custom');
+                                  setIsDateDropdownOpen(false);
+                                }}
+                                max={todayYMD()}
+                                className="w-full text-sm"
+                              />
+                            </div>
                           </div>
                         </div>
                       )}
@@ -2442,6 +2526,56 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
             </div>
 
 
+            {/* Vehicle Brand and Model */}
+            <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
+              <Label className="text-base font-semibold">Vehicle Details</Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                <div className="space-y-2">
+                  <Label htmlFor="selectedModel">Vehicle Model</Label>
+                  <ReactSelect
+                    isClearable
+                    isSearchable
+                    placeholder="Type to search vehicle model..."
+                    options={availableModels.map(model => ({ value: model.name, label: model.name }))}
+                    value={selectedModel ? { value: selectedModel, label: selectedModel } : null}
+                    onChange={(selected) => {
+                      setSelectedModel(selected?.value || '');
+                      // Find and set the corresponding model ID
+                      const modelObj = availableModels.find(m => m.name === selected?.value);
+                      setSelectedModelId(modelObj?.id || '');
+                      
+                      // If model is cleared, also clear brand and category
+                      if (!selected?.value) {
+                        setSelectedVehicleBrand('');
+                        setWheelCategory('');
+                      }
+                    }}
+                    classNamePrefix="react-select"
+                    noOptionsMessage={() => "No models found"}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="selectedVehicleBrand">Vehicle Brand</Label>
+                  <ReactSelect
+                    isClearable
+                    isSearchable
+                    placeholder={selectedModel ? "Brand will be auto-selected" : "Type to search vehicle brand..."}
+                    options={availableVehicleBrands.map(brand => ({ value: brand, label: brand }))}
+                    value={selectedVehicleBrand ? { value: selectedVehicleBrand, label: selectedVehicleBrand } : null}
+                    onChange={(selected) => setSelectedVehicleBrand(selected?.value || '')}
+                    classNamePrefix="react-select"
+                    noOptionsMessage={() => "No brands found"}
+                    isDisabled={!!selectedModel}
+                  />
+                  {selectedModel && !selectedVehicleBrand && (
+                    <p className="text-sm text-muted-foreground">
+                      Brand will be automatically selected based on the chosen model
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
 
             {/* Category */}
             <div className="space-y-2">
@@ -2456,56 +2590,6 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                   <SelectItem value="other">Other</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-
-
-
-
-
-            {/* Vehicle Brand and Model */}
-            <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
-              <Label className="text-base font-semibold">Vehicle Details</Label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-                <div className="space-y-2">
-                  <Label htmlFor="selectedModel">Vehicle Model</Label>
-                  <ReactSelect
-                    isClearable
-                    isSearchable
-                    placeholder={wheelCategory ? "Type to search vehicle model..." : "Select category first"}
-                    options={availableModels.map(model => ({ value: model.name, label: model.name }))}
-                    value={selectedModel ? { value: selectedModel, label: selectedModel } : null}
-                    onChange={(selected) => {
-                      setSelectedModel(selected?.value || '');
-                      // Find and set the corresponding model ID
-                      const modelObj = availableModels.find(m => m.name === selected?.value);
-                      setSelectedModelId(modelObj?.id || '');
-                    }}
-                    classNamePrefix="react-select"
-                    isDisabled={!wheelCategory}
-                    noOptionsMessage={() => "No models found"}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="selectedVehicleBrand">Vehicle Brand</Label>
-                  <ReactSelect
-                    isClearable
-                    isSearchable
-                    placeholder={wheelCategory ? (selectedModel ? "Brand will be auto-selected" : "Type to search vehicle brand...") : "Select category first"}
-                    options={(wheelCategory ? availableVehicleBrands : []).map(brand => ({ value: brand, label: brand }))}
-                    value={selectedVehicleBrand ? { value: selectedVehicleBrand, label: selectedVehicleBrand } : null}
-                    onChange={(selected) => setSelectedVehicleBrand(selected?.value || '')}
-                    classNamePrefix="react-select"
-                    noOptionsMessage={() => "No brands found"}
-                    isDisabled={!wheelCategory || !!selectedModel}
-                  />
-                  {selectedModel && !selectedVehicleBrand && (
-                    <p className="text-sm text-muted-foreground">
-                      Brand will be automatically selected based on the chosen model
-                    </p>
-                  )}
-                </div>
-              </div>
             </div>
 
             {/* Service Selection */}
@@ -2523,10 +2607,9 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                       // ---------- Reset services and preselect FULL WASH-----------
                       setService(["FULL WASH"]);
                     }}
-                    disabled={!wheelCategory}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder={wheelCategory ? "Select vehicle type" : "Select category first"} />
+                      <SelectValue placeholder="Select vehicle type" />
                     </SelectTrigger>
                     <SelectContent>
                       {sortVehicleTypesWithPriority(vehicleTypes).map(type => (
@@ -2680,6 +2763,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                         .join(' ');
                       setCustomerName(formattedName);
                     }}
+
                   />
                 </div>
                 <div>

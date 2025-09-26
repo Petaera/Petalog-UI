@@ -18,7 +18,7 @@ Previously, UPI accounts were shared across all locations owned by an owner. Wit
 
 ### 2. Frontend Updates
 
-#### Manager Access Page (`src/pages/ManagerAccess.tsx`)
+#### Payment Details Page (`src/pages/paymentdetails.tsx`)
 - Added location selector dropdown for UPI accounts
 - Updated payment details form to require location selection for UPI
 - Modified table to display location information

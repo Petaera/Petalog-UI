@@ -26,5 +26,16 @@
       "source": "/(.*)",
       "destination": "/index.html"
     }
+  ],
+  "functions": {
+    "api/sendReport.js": {
+      "maxDuration": 30
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/sendReport",
+      "schedule": "45 15 * * *"
+    }
   ]
 } 

@@ -133,7 +133,7 @@ export function Layout({ children }: LayoutProps) {
               console.log('🔄 Layout: Applied own_id fallback filter:', user.own_id);
             }
           }
-        } else if (user.role === 'manager' && user.assigned_location) {
+        } else if ((user.role === 'manager' || user.role === 'worker') && user.assigned_location) {
           query = query.eq('id', user.assigned_location);
           console.log('🔄 Layout: Applied assigned_location filter:', user.assigned_location);
         } else {

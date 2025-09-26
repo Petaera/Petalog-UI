@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 // Types for vehicle history data
 interface VehicleHistory {

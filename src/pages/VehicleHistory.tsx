@@ -1,9 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { ArrowLeft, Search, Calendar, Car, Clock, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -51,7 +58,15 @@ interface VehicleHistoryProps {
 }
 
 export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps) {
-  const [searchQuery, setSearchQuery] = useState("MH12AB1234"); // Default value for demo
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchPhone, setSearchPhone] = useState<string>("");
+  const [searchName, setSearchName] = useState<string>("");
+  const [selectedBrand, setSelectedBrand] = useState<string>("");
+  const [selectedModel, setSelectedModel] = useState<string>("");
+  const [brandSuggestions, setBrandSuggestions] = useState<string[]>([]);
+  const [modelSuggestions, setModelSuggestions] = useState<string[]>([]);
+  const [brandLoading, setBrandLoading] = useState(false);
+  const [modelLoading, setModelLoading] = useState(false);
   const [vehicleHistory, setVehicleHistory] = useState<VehicleHistory[]>([]);
   const [vehicleStats, setVehicleStats] = useState<VehicleStats>({
     totalVisits: 7,
@@ -61,8 +76,25 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
   });
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
-  const [currentVehicle, setCurrentVehicle] = useState("MH12AB1234");
+  const [currentVehicle, setCurrentVehicle] = useState("");
   const [customerDetails, setCustomerDetails] = useState<CustomerDetails | null>(null);
+  const [groupedSummaries, setGroupedSummaries] = useState<
+    Array<{
+      vehicle_number: string;
+      name?: string | null;
+      phone?: string | null;
+      brand?: string | null;
+      model?: string | null;
+      visits: number;
+      lastVisit: string;
+      totalSpent: number;
+    }>
+  >([]);
+  const [sortBy, setSortBy] = useState<'visits' | 'totalSpent'>('visits');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [locationName, setLocationName] = useState<string>("");
+  const brandInputRef = useRef<HTMLDivElement>(null);
+  const modelInputRef = useRef<HTMLDivElement>(null);
 
   // Fetch customer details for a vehicle
   const fetchCustomerDetails = async (vehicleNumber: string) => {
@@ -102,11 +134,6 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
 
   // Search vehicle history
   const searchVehicleHistory = async () => {
-    if (!searchQuery.trim()) {
-      toast.error("Please enter a vehicle number");
-      return;
-    }
-
     if (!selectedLocation) {
       toast.error("Please select a location first");
       return;
@@ -115,16 +142,43 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
     setLoading(true);
     setSearched(true);
     setCustomerDetails(null); // Reset customer details
+    setGroupedSummaries([]);
 
     try {
-      console.log('🔍 Searching for vehicle:', searchQuery, 'in location:', selectedLocation);
+      console.log('🔍 Searching manual logs with filters:', {
+        vehicle_number: searchQuery,
+        phone: searchPhone,
+        name: searchName,
+        brand: selectedBrand,
+        model: selectedModel,
+        location: selectedLocation,
+      });
 
       // Build query with location filter for manual logs only
       let manualQuery = supabase
         .from('logs-man')
         .select('*')
-        .ilike('vehicle_number', `%${searchQuery.trim()}%`)
         .eq('location_id', selectedLocation);
+
+      // Apply optional filters (AND semantics)
+      if (searchQuery.trim()) {
+        manualQuery = manualQuery.ilike('vehicle_number', `%${searchQuery.trim()}%`);
+      }
+      if (searchPhone.trim()) {
+        const phoneAsNumber = Number(searchPhone.replace(/\D/g, ''));
+        if (!Number.isNaN(phoneAsNumber)) {
+          manualQuery = manualQuery.eq('Phone_no', phoneAsNumber);
+        }
+      }
+      if (searchName.trim()) {
+        manualQuery = manualQuery.ilike('Name', `%${searchName.trim()}%`);
+      }
+      if (selectedBrand) {
+        manualQuery = manualQuery.ilike('vehicle_brand', `%${selectedBrand.trim()}%`);
+      }
+      if (selectedModel) {
+        manualQuery = manualQuery.ilike('vehicle_model', `%${selectedModel.trim()}%`);
+      }
 
       const { data: manualData, error: manualError } = await manualQuery.order('created_at', { ascending: false });
 
@@ -151,11 +205,51 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
       })) || [];
 
       setVehicleHistory(processedHistory);
-      setCurrentVehicle(searchQuery.trim());
 
-      // Fetch customer details
-      const customerData = await fetchCustomerDetails(searchQuery.trim());
-      setCustomerDetails(customerData);
+      // Group by vehicle_number to show summaries when multiple vehicles match
+      const groups = new Map<string, typeof groupedSummaries[number]>();
+      (manualData || []).forEach((log: any) => {
+        const key = (log.vehicle_number || 'UNKNOWN').toUpperCase();
+        const existing = groups.get(key);
+        const amount = Number(log.Amount || 0) || 0;
+        if (existing) {
+          existing.visits += 1;
+          existing.totalSpent += amount;
+          if (new Date(log.created_at) > new Date(existing.lastVisit)) {
+            existing.lastVisit = log.created_at;
+          }
+        } else {
+          groups.set(key, {
+            vehicle_number: key,
+            name: log.Name ?? null,
+            phone: log.Phone_no ? String(log.Phone_no) : null,
+            brand: log.vehicle_brand ?? null,
+            model: log.vehicle_model ?? null,
+            visits: 1,
+            lastVisit: log.created_at,
+            totalSpent: amount,
+          });
+        }
+      });
+
+      const summaries = Array.from(groups.values());
+      setGroupedSummaries(summaries);
+
+      // Choose current vehicle context
+      if (summaries.length === 1) {
+        setCurrentVehicle(summaries[0].vehicle_number);
+      } else if (searchQuery.trim()) {
+        setCurrentVehicle(searchQuery.trim());
+      } else if (summaries.length > 1) {
+        setCurrentVehicle('');
+      }
+
+      // Fetch customer details only when a single vehicle is clearly targeted
+      if ((summaries.length === 1 && summaries[0].vehicle_number) || searchQuery.trim()) {
+        const vehicleForDetails = summaries.length === 1 ? summaries[0].vehicle_number : searchQuery.trim();
+        const customerData = await fetchCustomerDetails(vehicleForDetails);
+        setCustomerDetails(customerData);
+      }
 
       // Calculate statistics
       if (processedHistory.length > 0) {
@@ -227,7 +321,129 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
 
   // Load initial data on component mount
   useEffect(() => {
+    // Fetch location name when location changes
+    const fetchLocationName = async () => {
+      if (!selectedLocation) {
+        setLocationName("");
+        return;
+      }
+      try {
+        const { data, error } = await supabase
+          .from('locations')
+          .select('name')
+          .eq('id', selectedLocation)
+          .single();
+        if (!error && data) {
+          setLocationName((data as any).name || "");
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+    fetchLocationName();
+  }, [selectedLocation]);
+  
+  useEffect(() => {
     searchVehicleHistory();
+  }, []);
+
+  // Debounced brand suggestions
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeout = setTimeout(async () => {
+      const q = selectedBrand.trim();
+      if (q.length < 2) {
+        setBrandSuggestions([]);
+        return;
+      }
+      try {
+        setBrandLoading(true);
+        console.log('🔍 Fetching brand suggestions for:', q);
+        const { data, error } = await supabase
+          .from('Vehicles_in_india')
+          .select('"Vehicle Brands"')
+          .ilike('"Vehicle Brands"', `%${q}%`)
+          .limit(20);
+        
+        console.log('Brand query result:', { data, error });
+        
+        if (!error && data) {
+          const list = Array.from(new Set((data as any[]).map(r => r['Vehicle Brands']).filter(Boolean)));
+          console.log('Brand suggestions:', list);
+          setBrandSuggestions(list);
+        } else if (error) {
+          console.error('Brand query error:', error);
+        }
+      } catch (err) {
+        console.error('Brand suggestions error:', err);
+      } finally {
+        setBrandLoading(false);
+      }
+    }, 250);
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [selectedBrand]);
+
+  // Debounced model suggestions (depends on brand if provided)
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeout = setTimeout(async () => {
+      const q = selectedModel.trim();
+      if (q.length < 2) {
+        setModelSuggestions([]);
+        return;
+      }
+      try {
+        setModelLoading(true);
+        console.log('🔍 Fetching model suggestions for:', q, 'with brand:', selectedBrand);
+        let query = supabase
+          .from('Vehicles_in_india')
+          .select('"Models"')
+          .ilike('"Models"', `%${q}%`)
+          .limit(20);
+        if (selectedBrand.trim()) {
+          query = query.ilike('"Vehicle Brands"', `%${selectedBrand.trim()}%`);
+        }
+        const { data, error } = await query;
+        
+        console.log('Model query result:', { data, error });
+        
+        if (!error && data) {
+          const list = Array.from(new Set((data as any[]).map(r => r.Models).filter(Boolean)));
+          console.log('Model suggestions:', list);
+          setModelSuggestions(list);
+        } else if (error) {
+          console.error('Model query error:', error);
+        }
+      } catch (err) {
+        console.error('Model suggestions error:', err);
+      } finally {
+        setModelLoading(false);
+      }
+    }, 250);
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [selectedModel, selectedBrand]);
+
+  // Click outside handlers
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (brandInputRef.current && !brandInputRef.current.contains(event.target as Node)) {
+        setBrandSuggestions([]);
+      }
+      if (modelInputRef.current && !modelInputRef.current.contains(event.target as Node)) {
+        setModelSuggestions([]);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   // Check if no location is selected
@@ -277,33 +493,108 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
               <Search className="h-5 w-5 text-blue-500" />
               Search Vehicle History
               <span className="text-sm text-muted-foreground ml-auto">
-                Location: {selectedLocation}
+                Location: {locationName || '—'}
               </span>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex gap-4">
-              <div className="flex-1">
-                                 <Input 
-                   placeholder="Enter vehicle number (e.g., MH12AB1234)" 
-                   className="text-center font-mono text-lg"
-                   value={searchQuery}
-                   onChange={(e) => setSearchQuery(e.target.value.toUpperCase())}
-                   onKeyPress={(e) => e.key === 'Enter' && searchVehicleHistory()}
-                 />
-              </div>
-              <Button 
-                variant="default" 
-                onClick={searchVehicleHistory}
-                disabled={loading}
-              >
-                {loading ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Search className="h-4 w-4 mr-2" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <Input
+                placeholder="Vehicle number (e.g., MH12AB1234)"
+                className="text-center font-mono"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value.toUpperCase())}
+                onKeyPress={(e) => e.key === 'Enter' && searchVehicleHistory()}
+              />
+              <Input
+                placeholder="Phone number"
+                value={searchPhone}
+                onChange={(e) => setSearchPhone(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && searchVehicleHistory()}
+              />
+              <Input
+                placeholder="Customer name"
+                value={searchName}
+                onChange={(e) => setSearchName(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && searchVehicleHistory()}
+              />
+              <div className="relative" ref={brandInputRef}>
+                <Input
+                  placeholder="Vehicle brand"
+                  value={selectedBrand}
+                  onChange={(e) => setSelectedBrand(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && searchVehicleHistory()}
+                />
+                {brandSuggestions.length > 0 && (
+                  <div className="absolute z-10 mt-1 w-full max-h-56 overflow-auto rounded-md border bg-white shadow">
+                    {brandSuggestions.map((b) => (
+                      <div
+                        key={b}
+                        className="px-3 py-2 text-sm hover:bg-gray-100 cursor-pointer"
+                        onMouseDown={() => { setSelectedBrand(b); setBrandSuggestions([]); }}
+                      >
+                        {b}
+                      </div>
+                    ))}
+                    {brandLoading && (
+                      <div className="px-3 py-2 text-xs text-muted-foreground">Loading...</div>
+                    )}
+                  </div>
                 )}
-                Search
-              </Button>
+              </div>
+              <div className="relative" ref={modelInputRef}>
+                <Input
+                  placeholder="Vehicle model"
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && searchVehicleHistory()}
+                />
+                {modelSuggestions.length > 0 && (
+                  <div className="absolute z-10 mt-1 w-full max-h-56 overflow-auto rounded-md border bg-white shadow">
+                    {modelSuggestions.map((m) => (
+                      <div
+                        key={m}
+                        className="px-3 py-2 text-sm hover:bg-gray-100 cursor-pointer"
+                        onMouseDown={() => { setSelectedModel(m); setModelSuggestions([]); }}
+                      >
+                        {m}
+                      </div>
+                    ))}
+                    {modelLoading && (
+                      <div className="px-3 py-2 text-xs text-muted-foreground">Loading...</div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-stretch gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setSearchPhone("");
+                    setSearchName("");
+                    setSelectedBrand("");
+                    setSelectedModel("");
+                    setBrandSuggestions([]);
+                    setModelSuggestions([]);
+                  }}
+                  disabled={loading}
+                >
+                  Clear
+                </Button>
+                <Button
+                  variant="default"
+                  onClick={searchVehicleHistory}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Search className="h-4 w-4 mr-2" />
+                  )}
+                  Search
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -392,12 +683,95 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
         </Card>
       </div>
 
+      {/* Sort and Grouped results when multiple vehicles match */}
+      {groupedSummaries.length > 1 && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="text-sm text-muted-foreground">Sort by</div>
+            <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
+              <SelectTrigger className="w-[180px]"><SelectValue placeholder="Metric" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="visits">Visits</SelectItem>
+                <SelectItem value="totalSpent">Total Spent</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={sortOrder} onValueChange={(v) => setSortOrder(v as any)}>
+              <SelectTrigger className="w-[160px]"><SelectValue placeholder="Order" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="desc">Descending</SelectItem>
+                <SelectItem value="asc">Ascending</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Car className="h-5 w-5" />
+                Matching Vehicles ({groupedSummaries.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {(() => {
+                const sorted = [...groupedSummaries].sort((a, b) => {
+                  const metricA = sortBy === 'visits' ? a.visits : a.totalSpent;
+                  const metricB = sortBy === 'visits' ? b.visits : b.totalSpent;
+                  return sortOrder === 'asc' ? metricA - metricB : metricB - metricA;
+                });
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {sorted.map((g) => (
+                      <div key={g.vehicle_number} className="border rounded-lg p-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="text-lg font-semibold">{g.vehicle_number}</div>
+                          <Badge variant="secondary">{g.visits} visits</Badge>
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {g.brand || '-'} {g.model ? `• ${g.model}` : ''}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div>
+                            <div className="text-muted-foreground">Customer</div>
+                            <div className="font-medium">{g.name || '-'}</div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground">Phone</div>
+                            <div className="font-medium">{g.phone || '-'}</div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground">Last Visit</div>
+                            <div className="font-medium">{formatDate(g.lastVisit)}</div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground">Total Spent</div>
+                            <div className="font-semibold text-financial">₹{Math.round(g.totalSpent).toLocaleString()}</div>
+                          </div>
+                        </div>
+                        <div className="flex justify-end">
+                          <Button size="sm" onClick={() => {
+                            setSearchQuery(g.vehicle_number);
+                            setSearchPhone('');
+                            setSearchName('');
+                            setSelectedBrand(g.brand || '');
+                            setSelectedModel(g.model || '');
+                            searchVehicleHistory();
+                          }}>View history</Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* History Table */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Car className="h-5 w-5" />
-            Visit History - {currentVehicle}
+            Visit History {currentVehicle ? `- ${currentVehicle}` : ''}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -410,8 +784,8 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
             <div className="text-center p-8 text-muted-foreground">
               <Car className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p className="text-lg font-medium">No vehicle history found</p>
-              <p className="text-sm">No records found for vehicle number: {currentVehicle}</p>
-              <p className="text-xs mt-2">Showing demo data for demonstration purposes</p>
+              <p className="text-sm">No records found for given specifications</p>
+              {/* <p className="text-xs mt-2">Showing demo data for demonstration purposes</p> */}
             </div>
           ) : (
                           <Table>

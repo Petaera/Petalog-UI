@@ -763,7 +763,7 @@ export default function ManagerManualLogs({ selectedLocation }: ManagerManualLog
                   <thead className="bg-muted/50">
                     <tr>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle No</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle Type</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Name</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Amount</th>
@@ -783,7 +783,9 @@ export default function ManagerManualLogs({ selectedLocation }: ManagerManualLog
                       pendingLogs.map((log, idx) => (
                         <tr key={log.id || idx} className="hover:bg-muted/30">
                           <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_type || "-"}</td>
+                          <td className="p-2">
+                            <Badge variant="outline">{log.vehicle_model || 'N/A'}</Badge>
+                          </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.Name || "-"}</td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
                             {log.Phone_no ? (
@@ -891,7 +893,7 @@ export default function ManagerManualLogs({ selectedLocation }: ManagerManualLog
                   <thead className="bg-muted/50">
                     <tr>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle No</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle Type</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Name</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Amount</th>
@@ -914,7 +916,9 @@ export default function ManagerManualLogs({ selectedLocation }: ManagerManualLog
                       payLaterLogs.map((log: any, idx: number) => (
                         <tr key={log.id || idx} className="hover:bg-muted/30">
                           <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_type || "-"}</td>
+                          <td className="p-2">
+                            <Badge variant="outline">{log.vehicle_model || 'N/A'}</Badge>
+                          </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.Name || "-"}</td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
                             {log.Phone_no ? (
@@ -1001,7 +1005,7 @@ export default function ManagerManualLogs({ selectedLocation }: ManagerManualLog
                   <thead className="bg-muted/50">
                     <tr>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle No</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle Type</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Name</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ">Amount</th>
@@ -1025,7 +1029,9 @@ export default function ManagerManualLogs({ selectedLocation }: ManagerManualLog
                       approvedLogs.map((log, idx) => (
                         <tr key={log.id || idx} className="hover:bg-muted/30">
                           <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.vehicle_type || "-"}</td>
+                          <td className="p-2">
+                            <Badge variant="outline">{log.vehicle_model || 'N/A'}</Badge>
+                          </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.Name || "-"}</td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
                             {log.Phone_no ? (

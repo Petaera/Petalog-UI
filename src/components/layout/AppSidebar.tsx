@@ -11,7 +11,8 @@ import {
   Car,
   Gift,
   Calculator,
-  Calendar
+  Calendar,
+  CreditCard
 } from "lucide-react";
 
 import {
@@ -35,6 +36,7 @@ export function AppSidebar() {
   const { setOpenMobile } = useSidebar();
 
   const isManager = user?.role === 'manager';
+  const isWorker = user?.role === 'worker';
 
   const isActive = (path: string) => currentPath === path;
 
@@ -47,7 +49,11 @@ export function AppSidebar() {
     setOpenMobile(false);
   };
 
-  const navigationItems = isManager
+  const navigationItems = isWorker
+    ? [
+        { title: "Manual Entry", url: "/worker-manual-entry", icon: Car },
+      ]
+    : isManager
     ? [
         { title: "Dashboard", url: "/dashboard", icon: Home },
         { title: "Manual Entry", url: "/manager-owner-entry", icon: Car },
@@ -62,6 +68,7 @@ export function AppSidebar() {
         { title: "Manual Logs", url: "/manual-logs", icon: PenTool },
         { title: "Comparison", url: "/comparison", icon: FileText },
         { title: "Reports & Statistics", url: "/reports", icon: BarChart3 },
+        { title: "Payment Details", url: "/payment-details", icon: CreditCard },
         { title: "Manager Access", url: "/manager-access", icon: Users },
         // { title: "Partnerships", url: "/location-partnerships", icon: Users },
         { title: "Price Settings", url: "/price-settings", icon: Settings },

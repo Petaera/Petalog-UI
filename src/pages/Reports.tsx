@@ -102,31 +102,115 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
   // Pagination state
   const [page, setPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
 
 
 
-  // Fetch all data from Supabase
-  const fetchAllData = async () => {
+  // Fetch filtered data from Supabase based on current filters
+  const fetchFilteredData = async () => {
     try {
-      console.log('🔄 Starting data fetch from Supabase...');
+      console.log('🔄 Starting filtered data fetch from Supabase...');
       setLoading(true);
 
-      // Fetch all tables in parallel
-      console.log('📡 Fetching from tables: vehicles, logs-man, locations, Service_prices, users');
-      const [vehiclesRes, logsRes, locationsRes, servicePricesRes, usersRes] = await Promise.all([
+      // Build the logs query with filters applied at database level
+      let logsQuery = supabase.from('logs-man').select('*');
+
+      // Apply approval status filter (only approved logs for reports)
+      logsQuery = logsQuery.eq('approval_status', 'approved');
+
+      // Apply location filter
+      const currentLocation = user?.role === 'manager' ? user?.assigned_location :
+        (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
+      
+      if (currentLocation) {
+        logsQuery = logsQuery.eq('location_id', currentLocation);
+      }
+
+      // Apply date range filter
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+      if (dateRange === "today") {
+        const startOfDay = new Date(today).toISOString();
+        const endOfDay = new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString();
+        logsQuery = logsQuery.gte('created_at', startOfDay).lt('created_at', endOfDay);
+      } else if (dateRange === "yesterday") {
+        const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+        const startOfYesterday = yesterday.toISOString();
+        const endOfYesterday = today.toISOString();
+        logsQuery = logsQuery.gte('created_at', startOfYesterday).lt('created_at', endOfYesterday);
+      } else if (dateRange === "last7days") {
+        const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+        logsQuery = logsQuery.gte('created_at', weekAgo.toISOString());
+      } else if (dateRange === "last30days") {
+        const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+        logsQuery = logsQuery.gte('created_at', monthAgo.toISOString());
+      } else if (dateRange === "singleday" && customFromDate) {
+        const singleDay = new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate());
+        const startOfDay = singleDay.toISOString();
+        const endOfDay = new Date(singleDay.getTime() + 24 * 60 * 60 * 1000).toISOString();
+        logsQuery = logsQuery.gte('created_at', startOfDay).lt('created_at', endOfDay);
+      } else if (dateRange === "custom" && (customFromDate || customToDate)) {
+        if (customFromDate) {
+          const from = new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate());
+          logsQuery = logsQuery.gte('created_at', from.toISOString());
+        }
+        if (customToDate) {
+          const to = new Date(customToDate.getFullYear(), customToDate.getMonth(), customToDate.getDate());
+          const nextDay = new Date(to.getTime() + 24 * 60 * 60 * 1000);
+          logsQuery = logsQuery.lt('created_at', nextDay.toISOString());
+        }
+      }
+
+      // Apply vehicle type filter
+      if (vehicleType !== "all") {
+        logsQuery = logsQuery.ilike('vehicle_type', vehicleType);
+      }
+
+      // Apply service filter
+      if (service !== "all") {
+        logsQuery = logsQuery.ilike('service', service);
+      }
+
+      // Apply entry type filter
+      if (entryType !== "all") {
+        logsQuery = logsQuery.ilike('entry_type', entryType);
+      }
+
+      // Apply manager filter
+      if (manager !== "all") {
+        logsQuery = logsQuery.eq('created_by', manager);
+      }
+
+      // Apply search filter (if any)
+      if (debouncedSearchTerm) {
+        logsQuery = logsQuery.or(`vehicle_number.ilike.%${debouncedSearchTerm}%,Name.ilike.%${debouncedSearchTerm}%,Phone_no.ilike.%${debouncedSearchTerm}%`);
+      }
+
+      // Fetch filtered logs and other required data in parallel
+      console.log('📡 Fetching filtered data from Supabase...');
+      const [logsRes, vehiclesRes, locationsRes, servicePricesRes, usersRes] = await Promise.all([
+        logsQuery,
         supabase.from('vehicles').select('*'),
-        supabase.from('logs-man').select('*'),
         supabase.from('locations').select('*'),
         supabase.from('Service_prices').select('*'),
         supabase.from('users').select('*')
       ]);
 
-      console.log('📊 Raw fetch results:');
-      console.log('- Vehicles:', vehiclesRes);
+      console.log('📊 Filtered fetch results:');
       console.log('- Logs:', logsRes);
+      console.log('- Vehicles:', vehiclesRes);
       console.log('- Locations:', locationsRes);
       console.log('- Service Prices:', servicePricesRes);
       console.log('- Users:', usersRes);
+
+      if (logsRes.error) {
+        console.error('❌ Error fetching filtered logs:', logsRes.error);
+        toast.error('Failed to fetch logs data');
+      } else {
+        console.log('✅ Filtered logs fetched successfully:', logsRes.data?.length || 0, 'records');
+        setLogs(logsRes.data || []);
+      }
 
       if (vehiclesRes.error) {
         console.error('❌ Error fetching vehicles:', vehiclesRes.error);
@@ -134,15 +218,6 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
       } else {
         console.log('✅ Vehicles fetched successfully:', vehiclesRes.data?.length || 0, 'records');
         setVehicles(vehiclesRes.data || []);
-      }
-
-      if (logsRes.error) {
-        console.error('❌ Error fetching logs:', logsRes.error);
-        toast.error('Failed to fetch logs data');
-      } else {
-        console.log('✅ Logs fetched successfully:', logsRes.data?.length || 0, 'records');
-        console.log('📋 Sample log record:', logsRes.data?.[0]);
-        setLogs(logsRes.data || []);
       }
 
       if (locationsRes.error) {
@@ -169,20 +244,20 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
         setUsers(usersRes.data || []);
       }
 
-      console.log('🎯 Data fetch completed successfully!');
+      console.log('🎯 Filtered data fetch completed successfully!');
       console.log('📈 Final data summary:');
+      console.log(`- Filtered Logs: ${logsRes.data?.length || 0}`);
       console.log(`- Vehicles: ${vehiclesRes.data?.length || 0}`);
-      console.log(`- Logs: ${logsRes.data?.length || 0}`);
       console.log(`- Locations: ${locationsRes.data?.length || 0}`);
       console.log(`- Service Prices: ${servicePricesRes.data?.length || 0}`);
       console.log(`- Users: ${usersRes.data?.length || 0}`);
 
     } catch (error) {
-      console.error('💥 Critical error during data fetch:', error);
+      console.error('💥 Critical error during filtered data fetch:', error);
       toast.error('Failed to fetch data from database');
     } finally {
       setLoading(false);
-      console.log('🏁 Data fetch process completed');
+      console.log('🏁 Filtered data fetch process completed');
     }
   };
   // Switch between list and pie chart view for service breakdown
@@ -190,12 +265,21 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
 
   const [pendingLogs, setPendingLogs] = useState([]);
 
-  // Auto-fetch data on mount and when location/auth becomes ready
+  // Debounce search term to avoid too many API calls
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 500); // 500ms delay
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Auto-fetch filtered data on mount and when filters change
   useEffect(() => {
     if (!authLoading) {
-      fetchAllData();
+      fetchFilteredData();
     }
-  }, [authLoading, selectedLocation]);
+  }, [authLoading, selectedLocation, dateRange, vehicleType, service, entryType, manager, customFromDate, customToDate, debouncedSearchTerm, user?.assigned_location, user?.role]);
 
 useEffect(() => {
   const fetchTodayPendingLogs = async () => {
@@ -230,141 +314,11 @@ useEffect(() => {
     setPage(1);
   }, [dateRange, vehicleType, service, entryType, manager, customFromDate, customToDate]);
 
-  // Filter data based on current selections
+  // Get filtered data (now logs are already filtered at database level)
   const getFilteredData = () => {
-    let filteredLogs = [...logs];
-
-    console.log('🔍 Starting data filtering with logs:', filteredLogs.length, 'records');
-
-    // Apply search filter
-    if (searchTerm) {
-      filteredLogs = filteredLogs.filter(log =>
-        log.vehicle_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        log.Name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        String(log.Phone_no || '').includes(searchTerm)
-      );
-      console.log('🔍 After search filter:', filteredLogs.length, 'records');
-    }
-
-    // Apply date range filter
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-    if (dateRange === "today") {
-      filteredLogs = filteredLogs.filter(log => {
-        const logDate = new Date(log.created_at);
-        const logDateOnly = new Date(logDate.getFullYear(), logDate.getMonth(), logDate.getDate());
-        return logDateOnly.getTime() === today.getTime();
-      });
-
-    } else if (dateRange === "yesterday") {
-      const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-      filteredLogs = filteredLogs.filter(log => {
-        const logDate = new Date(log.created_at);
-        return logDate >= yesterday && logDate < today;
-      });
-
-    } else if (dateRange === "last7days") {
-      const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-      filteredLogs = filteredLogs.filter(log => {
-        const logDate = new Date(log.created_at);
-        return logDate >= weekAgo;
-      });
-
-    } else if (dateRange === "last30days") {
-      const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-      filteredLogs = filteredLogs.filter(log => {
-        const logDate = new Date(log.created_at);
-        return logDate >= monthAgo;
-      });
-
-    } else if (dateRange === "singleday" && customFromDate) {
-      // ✅ Single day (from = to = selected date)
-      const singleDay = new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate());
-      const nextDay = new Date(singleDay.getTime() + 24 * 60 * 60 * 1000);
-
-      filteredLogs = filteredLogs.filter(log => {
-        const logDate = new Date(log.created_at);
-        return logDate >= singleDay && logDate < nextDay;
-      });
-
-    } else if (dateRange === "custom" && (customFromDate || customToDate)) {
-      // ✅ Custom range (support partial selection too)
-      const from = customFromDate
-        ? new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate())
-        : null;
-      const to = customToDate
-        ? new Date(customToDate.getFullYear(), customToDate.getMonth(), customToDate.getDate())
-        : null;
-
-      filteredLogs = filteredLogs.filter(log => {
-        const logDate = new Date(log.created_at);
-
-        if (from && to) {
-          // Fix: Make 'to' exclusive by adding 1 day
-          const nextDayAfterTo = new Date(to.getTime() + 24 * 60 * 60 * 1000);
-          return logDate >= from && logDate < nextDayAfterTo;
-        } else if (from) {
-          const nextDay = new Date(from.getTime() + 24 * 60 * 60 * 1000);
-          return logDate >= from && logDate < nextDay;
-        } else if (to) {
-          const nextDayAfterTo = new Date(to.getTime() + 24 * 60 * 60 * 1000);
-          return logDate < nextDayAfterTo;
-        }
-        return true;
-      });
-    }
-
-    console.log("🔍 After date filter:", filteredLogs.length, "records");
-    // Apply other filters
-    // Get the current location from the toolbar context
-    const currentLocation = user?.role === 'manager' ? user?.assigned_location :
-      (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
-
-    if (currentLocation) {
-      filteredLogs = filteredLogs.filter(log => log.location_id === currentLocation);
-      console.log('🔍 After location filter:', filteredLogs.length, 'records');
-    }
-
-    // Only count approved/closed tickets for revenue calculations (including Pay Later/credit for display)
-    filteredLogs = filteredLogs.filter(log =>
-      log.approval_status === 'approved'
-    );
-    console.log('🔍 After approval status filter (only approved/closed tickets):', filteredLogs.length, 'records');
-
-    if (vehicleType !== "all") {
-      filteredLogs = filteredLogs.filter(log => {
-        const normalizedLogType = (log.vehicle_type || '').toString().trim();
-        const normalizedFilterType = vehicleType.trim();
-        return normalizedLogType.toLowerCase() === normalizedFilterType.toLowerCase();
-      });
-      console.log('🔍 After vehicle type filter:', filteredLogs.length, 'records');
-    }
-
-    if (service !== "all") {
-      filteredLogs = filteredLogs.filter(log => {
-        const normalizedLogService = (log.service || '').toString().trim();
-        const normalizedFilterService = service.trim();
-        return normalizedLogService.toLowerCase() === normalizedFilterService.toLowerCase();
-      });
-      console.log('🔍 After service filter:', filteredLogs.length, 'records');
-    }
-
-    if (entryType !== "all") {
-      filteredLogs = filteredLogs.filter(log => {
-        const normalizedLogEntry = (log.entry_type || '').toString().trim();
-        const normalizedFilterEntry = entryType.trim();
-        return normalizedLogEntry.toLowerCase() === normalizedFilterEntry.toLowerCase();
-      });
-      console.log('🔍 After entry type filter:', filteredLogs.length, 'records');
-    }
-
-    if (manager !== "all") {
-      filteredLogs = filteredLogs.filter(log => log.created_by === manager);
-      console.log('🔍 After manager filter:', filteredLogs.length, 'records');
-    }
-
-    console.log('📊 Final filtered data:', filteredLogs.length, 'records');
+    // Logs are already filtered at the database level, so we just return them
+    const filteredLogs = [...logs];
+    console.log('📊 Using pre-filtered data from database:', filteredLogs.length, 'records');
 
     // Debug: Log all unique payment modes found
     const uniquePaymentModes = [...new Set(filteredLogs.map(log => log.payment_mode))];
@@ -461,7 +415,8 @@ useEffect(() => {
         service: log.service,
         vehicleType: log.vehicle_type,
         originalAmount: log.Amount,
-        servicePriceFound: !!servicePrice
+        servicePriceFound: !!servicePrice,
+        created_at: log.created_at
       });
 
       // If we have service price data, use it to validate/calculate the price
@@ -585,8 +540,14 @@ useEffect(() => {
       ...csvRows.map(row => row.join(','))
     ].join('\n');
     
+    // Get location name for filename
+    const currentLocation = user?.role === 'manager' ? user?.assigned_location : 
+                          (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
+    const locationName = locations.find(loc => loc.id === currentLocation)?.name || 'All-Locations';
+    const sanitizedLocationName = locationName.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+
     // Generate filename based on the actual date range being exported
-    let filename = 'car-wash-report';
+    let filename = `${sanitizedLocationName}-car-wash-report`;
     
     if (dateRange === "today") {
       filename += `-${format(new Date(), 'dd-MM-yyyy')}`;
@@ -654,8 +615,14 @@ useEffect(() => {
       ...csvRows.map(row => row.join(','))
     ].join('\n');
 
+    // Get location name for filename
+    const currentLocation = user?.role === 'manager' ? user?.assigned_location : 
+                          (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
+    const locationName = locations.find(loc => loc.id === currentLocation)?.name || 'All-Locations';
+    const sanitizedLocationName = locationName.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+
     // Generate filename based on the actual date range being exported
-    let filename = 'payment-breakdown';
+    let filename = `${sanitizedLocationName}-payment-breakdown`;
     
     if (dateRange === "today") {
       filename += `-${format(new Date(), 'dd-MM-yyyy')}`;
@@ -736,7 +703,7 @@ useEffect(() => {
             <BarChart3 className="h-4 w-4 mr-2" />
             Export Payment Breakdown
           </Button>
-          <Button variant="outline" size="sm" onClick={fetchAllData} disabled={loading}>
+          <Button variant="outline" size="sm" onClick={fetchFilteredData} disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <BarChart3 className="h-4 w-4 mr-2" />}
             Refresh Data
           </Button>
@@ -833,76 +800,106 @@ useEffect(() => {
 
               {/* Custom Range Selection */}
               {dateRange === "custom" && (
-                <div className="space-y-2 pt-2 p-3 bg-muted/30 rounded-lg border">
-                  <Label className="text-xs font-medium text-muted-foreground">Select date range</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" size="sm" className="w-full justify-start">
-                          {customFromDate ? (
-                            <span className="flex items-center gap-2">
-                              <Calendar className="h-4 w-4" />
-                              {format(customFromDate, "PPP")}
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-2">
-                              <Calendar className="h-4 w-4" />
-                              From Date
-                            </span>
-                          )}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <CalendarComponent
-                          mode="single"
-                          selected={customFromDate}
-                          onSelect={setCustomFromDate}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" size="sm" className="w-full justify-start">
-                          {customToDate ? (
-                            <span className="flex items-center gap-2">
-                              <Calendar className="h-4 w-4" />
-                              {format(customToDate, "PPP")}
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-2">
-                              <Calendar className="h-4 w-4" />
-                              To Date
-                            </span>
-                          )}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <CalendarComponent
-                          mode="single"
-                          selected={customToDate}
-                          onSelect={setCustomToDate}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
+                <div className="space-y-3 pt-3 p-4 bg-muted/30 rounded-lg border min-w-[500px]">
+                  <div className="space-y-1">
+                    <Label className="text-sm font-medium text-foreground">Select date range</Label>
+                    <p className="text-xs text-muted-foreground">Choose your start and end dates</p>
                   </div>
+                  
+                  <div className="flex gap-4 min-w-0">
+                    <div className="flex-1 space-y-1 min-w-0">
+                      <Label className="text-xs font-medium text-muted-foreground">From Date</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" size="sm" className="w-full justify-start h-9 min-w-0">
+                            {customFromDate ? (
+                              <span className="flex items-center gap-2 min-w-0">
+                                <Calendar className="h-4 w-4 flex-shrink-0" />
+                                <span className="truncate">{format(customFromDate, "MMM dd, yyyy")}</span>
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-2 text-muted-foreground min-w-0">
+                                <Calendar className="h-4 w-4 flex-shrink-0" />
+                                <span className="truncate">Select start date</span>
+                              </span>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <CalendarComponent
+                            mode="single"
+                            selected={customFromDate}
+                            onSelect={setCustomFromDate}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    
+                    <div className="flex-1 space-y-1 min-w-0">
+                      <Label className="text-xs font-medium text-muted-foreground">To Date</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" size="sm" className="w-full justify-start h-9 min-w-0">
+                            {customToDate ? (
+                              <span className="flex items-center gap-2 min-w-0">
+                                <Calendar className="h-4 w-4 flex-shrink-0" />
+                                <span className="truncate">{format(customToDate, "MMM dd, yyyy")}</span>
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-2 text-muted-foreground min-w-0">
+                                <Calendar className="h-4 w-4 flex-shrink-0" />
+                                <span className="truncate">Select end date</span>
+                              </span>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <CalendarComponent
+                            mode="single"
+                            selected={customToDate}
+                            onSelect={setCustomToDate}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+                  
                   {(customFromDate || customToDate) && (
-                    <div className="text-xs text-muted-foreground">
-                      {customFromDate && customToDate ? (
-                        <>Showing data from <span className="font-medium">{format(customFromDate, "PPP")}</span> to <span className="font-medium">{format(customToDate, "PPP")}</span></>
-                      ) : customFromDate ? (
-                        <>Showing data from <span className="font-medium">{format(customFromDate, "PPP")}</span></>
-                      ) : (
-                        <>Showing data until <span className="font-medium">{format(customToDate, "PPP")}</span></>
-                      )}
+                    <div className="pt-2 border-t">
+                      <div className="text-sm text-muted-foreground">
+                        {customFromDate && customToDate ? (
+                          <>Showing data from <span className="font-medium text-foreground">{format(customFromDate, "MMM dd, yyyy")}</span> to <span className="font-medium text-foreground">{format(customToDate, "MMM dd, yyyy")}</span></>
+                        ) : customFromDate ? (
+                          <>Showing data from <span className="font-medium text-foreground">{format(customFromDate, "MMM dd, yyyy")}</span></>
+                        ) : (
+                          <>Showing data until <span className="font-medium text-foreground">{format(customToDate, "MMM dd, yyyy")}</span></>
+                        )}
+                      </div>
                     </div>
                   )}
+                  
+                  {/* Reset Button inside the container */}
+                  <div className="pt-2 border-t">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setDateRange("today");
+                        setCustomFromDate(undefined);
+                        setCustomToDate(undefined);
+                      }}
+                      className="w-full text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Reset to Today
+                    </Button>
+                  </div>
                 </div>
               )}
 
-              {/* Clear Filters Button */}
-              {(dateRange !== "today" || customFromDate || customToDate) && (
+              {/* Clear Filters Button for other date ranges */}
+              {dateRange !== "custom" && dateRange !== "today" && (
                 <Button
                   variant="ghost"
                   size="sm"

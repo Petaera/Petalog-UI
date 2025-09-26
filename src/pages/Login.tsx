@@ -21,6 +21,7 @@ export default function Login() {
     if (user) {
       if (user.role === 'owner') navigate('/dashboard');
       else if (user.role === 'manager') navigate('/manager-portal');
+      else if (user.role === 'worker') navigate('/worker-portal');
     }
   }, [user, navigate]);
 
@@ -36,7 +37,15 @@ export default function Login() {
       // Do not redirect here!
       toast.success('Login successful!');
     } catch (error) {
-      toast.error('Login failed. Please check your credentials.');
+      // Check if it's a restricted account error
+      const errorMessage = error instanceof Error ? error.message : 'Login failed. Please check your credentials.';
+      if (errorMessage.includes('restricted')) {
+        toast.error('Your login is restricted. Please contact support.');
+      } else if (errorMessage.includes('disabled')) {
+        toast.error('Your account has been disabled. Please contact support.');
+      } else {
+        toast.error('Login failed. Please check your credentials.');
+      }
     } finally {
       setLoading(false);
     }

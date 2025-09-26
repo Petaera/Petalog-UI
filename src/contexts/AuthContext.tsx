@@ -11,6 +11,7 @@ interface User {
   first_name?: string;
   last_name?: string;
   phone?: string;
+  status?: boolean;
 }
 
 interface AuthContextType {
@@ -45,11 +46,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // First try to get basic user info from users table
           const { data: userData, error: userError } = await supabase
             .from('users')
-            .select('id, email, role, assigned_location, own_id')
+            .select('id, email, role, assigned_location, own_id, status')
             .eq('id', session.user.id)
             .maybeSingle();
           
           if (!userError && userData) {
+            // Check if user status is active
+            if (userData.status === false) {
+              // User is disabled, sign them out and don't set user context
+              await supabase.auth.signOut();
+              setUser(null);
+              return;
+            }
+            
             const trimmedRole = typeof userData.role === 'string' ? userData.role.trim() : userData.role;
             setUser({
               id: userData.id,
@@ -60,25 +69,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               first_name: undefined,
               last_name: undefined,
               phone: undefined,
+              status: userData.status,
             });
           } else {
-            // If user not found in users table, create basic user object from auth
-            setUser({
-              id: session.user.id,
-              email: session.user.email || '',
-              role: 'owner', // Default to owner if not found in users table
-              assigned_location: undefined,
-              own_id: undefined,
-            });
+            // If user not found in users table, they are not authorized
+            await supabase.auth.signOut();
+            setUser(null);
+            return;
           }
         } catch (error) {
-          setUser({
-            id: session.user.id,
-            email: session.user.email || '',
-            role: 'owner',
-            assigned_location: undefined,
-            own_id: undefined,
-          });
+          // If there's an error fetching user data, sign them out
+          await supabase.auth.signOut();
+          setUser(null);
         }
       }
       setLoading(false);
@@ -96,20 +98,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Fetch user data from users table
         const { data: userData, error: userError } = await supabase
           .from('users')
-          .select('id, email, role, assigned_location, own_id')
+          .select('id, email, role, assigned_location, own_id, status')
           .eq('id', authData.user.id)
           .maybeSingle();
         
         if (userError || !userData) {
-          // If user not found in users table, create basic user object from auth
-          setUser({
-            id: authData.user.id,
-            email: authData.user.email || '',
-            role: 'owner', // Default to owner if not found in users table
-            assigned_location: undefined,
-            own_id: undefined,
-          });
+          // If user not found in users table, they are not authorized to log in
+          await supabase.auth.signOut();
+          setUser(null);
+          throw new Error('Your login is restricted. Please contact support.');
         } else {
+          // Check if user status is active
+          if (userData.status === false) {
+            // User is disabled, sign them out and throw error
+            await supabase.auth.signOut();
+            setUser(null);
+            throw new Error('Your account has been disabled. Please contact support.');
+          }
+          
           const trimmedRole = typeof userData.role === 'string' ? userData.role.trim() : userData.role;
           setUser({
             id: userData.id,
@@ -120,17 +126,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             first_name: undefined,
             last_name: undefined,
             phone: undefined,
+            status: userData.status,
           });
         }
               } catch (error) {
-          setUser({
-          id: authData.user.id,
-          email: authData.user.email || '',
-          role: 'owner',
-          assigned_location: undefined,
-          own_id: undefined,
-        });
-      }
+          // If there's an error fetching user data, sign them out
+          await supabase.auth.signOut();
+          setUser(null);
+          throw new Error('Your login is restricted. Please contact support.');
+        }
       
 
     } catch (error) {
@@ -144,6 +148,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signup = async (email: string, password: string, role: string, location?: string, userData?: { first_name?: string; last_name?: string; phone?: string }, autoLogin: boolean = true) => {
     setLoading(true);
     try {
+      // Preserve current session so owner remains logged in when creating staff
+      const { data: pre } = await supabase.auth.getSession();
+      const prevAccessToken = pre.session?.access_token || null;
+      const prevRefreshToken = pre.session?.refresh_token || null;
 
       
       // Validate email format
@@ -176,10 +184,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         id: authData.user.id,
         email,
         role,
+        status: true, // New users are active by default
       };
 
-      // Add assigned_location for managers
-      if (role === 'manager' && location) {
+      // Add assigned_location for managers and workers
+      if ((role === 'manager' || role === 'worker') && location) {
         userInsertData.assigned_location = location;
       }
 
@@ -204,10 +213,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           first_name: userData?.first_name,
           last_name: userData?.last_name,
           phone: userData?.phone,
+          status: true, // New users are active by default
         });
       } else {
         // Sign out the created user so they're not logged in
         await supabase.auth.signOut();
+        // Restore previous session (owner stays logged in)
+        if (prevAccessToken && prevRefreshToken) {
+          try {
+            await supabase.auth.setSession({ access_token: prevAccessToken, refresh_token: prevRefreshToken });
+          } catch {}
+        }
       }
     } catch (error) {
       if (autoLogin) {

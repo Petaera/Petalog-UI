@@ -20,6 +20,7 @@ import AutomaticLogs from "./pages/AutomaticLogs";
 import ManualLogs from "./pages/ManualLogs";
 import Comparison from "./pages/Comparison";
 import Reports from "./pages/Reports";
+import PaymentDetails from "./pages/paymentdetails";
 import ManagerAccess from "./pages/ManagerAccess";
 import PriceSettings from "./pages/PriceSettings";
 import VehicleHistory from "./pages/VehicleHistory";
@@ -53,7 +54,9 @@ import ManagerReports from "./pages/ManagerReports";
 import ManagerPriceSettings from "./pages/ManagerPriceSettings";
 import ManagerVehicleHistory from "./pages/ManagerVehicleHistory";
 import ManagerOwnerEntry from "./pages/ManagerOwnerEntry";
+import WorkerManualEntry from "./pages/WorkerManualEntry";
 import LocationPartnershipsPage from "./pages/LocationPartnershipsPage";
+import { ProfileSettings } from "./pages/ProfileSettings";
 
 import NotFound from "./pages/NotFound";
 import { Layout } from "@/components/layout/Layout";
@@ -162,6 +165,28 @@ const App = () => (
                   </ProtectedRoute>
                 } 
               />
+              
+              {/* Worker routes */}
+              <Route 
+                path="/worker-portal" 
+                element={
+                  <ProtectedRoute requiredRole="worker">
+                    <Layout>
+                      <WorkerManualEntry />
+                    </Layout>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/worker-manual-entry" 
+                element={
+                  <ProtectedRoute requiredRole="worker">
+                    <Layout>
+                      <WorkerManualEntry />
+                    </Layout>
+                  </ProtectedRoute>
+                } 
+              />
                              <Route 
                  path="/automatic-logs" 
                  element={
@@ -210,6 +235,16 @@ const App = () => (
                   <ProtectedRoute requiredRole="owner">
                     <Layout>
                       <Reports />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route 
+                path="/payment-details" 
+                element={
+                  <ProtectedRoute requiredRole="owner">
+                    <Layout>
+                      <PaymentDetails />
                     </Layout>
                   </ProtectedRoute>
                 }
@@ -287,6 +322,17 @@ const App = () => (
                  element={
                    <ProtectedRoute requiredRole="owner">
                      <ManagerSettings />
+                   </ProtectedRoute>
+                 } 
+               />
+               
+               <Route 
+                 path="/profileSettings" 
+                 element={
+                   <ProtectedRoute requiredRole="owner">
+                     <Layout>
+                       <ProfileSettings />
+                     </Layout>
                    </ProtectedRoute>
                  } 
                />

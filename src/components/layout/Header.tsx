@@ -105,10 +105,12 @@ export function Header({ locations, selectedLocation, onLocationChange }: Header
               <DropdownMenuContent align="end" className="w-56 lg:w-64">
                 <DropdownMenuLabel>My Account</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>
-                  <User className="mr-2 h-4 w-4" />
-                  Profile Settings
-                </DropdownMenuItem>
+                {user?.role === 'owner' && (
+                  <DropdownMenuItem onClick={() => navigate('/profileSettings')}>
+                    <User className="mr-2 h-4 w-4" />
+                    Profile Settings
+                  </DropdownMenuItem>
+                )}
                 {user?.role === 'owner' && (
                   <>
                     <DropdownMenuSeparator />
@@ -190,10 +192,12 @@ export function Header({ locations, selectedLocation, onLocationChange }: Header
             <DropdownMenuContent align="end" className="w-56 lg:w-64">
               <DropdownMenuLabel>My Account</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <User className="mr-2 h-4 w-4" />
-                Profile Settings
-              </DropdownMenuItem>
+              {user?.role === 'owner' && (
+                <DropdownMenuItem onClick={() => navigate('/profileSettings')}>
+                  <User className="mr-2 h-4 w-4" />
+                  Profile Settings
+                </DropdownMenuItem>
+              )}
               {user?.role === 'owner' && (
                 <>
                   <DropdownMenuSeparator />
