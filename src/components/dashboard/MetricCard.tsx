@@ -1,68 +1,77 @@
-import { LucideIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
+import React from 'react';
+import { Card } from '@/components/ui/card';
+import { LucideIcon } from 'lucide-react';
 
 interface MetricCardProps {
   title: string;
-  value: string;
+  value: string | number;
   icon: LucideIcon;
-  variant?: "default" | "financial" | "success" | "warning";
-  subtitle?: string;
-  trend?: {
+  color: 'default' | 'success' | 'warning' | 'danger';
+  change?: {
     value: number;
-    isPositive: boolean;
+    type: 'positive' | 'negative' | 'neutral';
   };
 }
 
-export function MetricCard({ 
+const MetricCard: React.FC<MetricCardProps> = ({ 
   title, 
   value, 
   icon: Icon, 
-  variant = "default", 
-  subtitle,
-  trend 
-}: MetricCardProps) {
+  color, 
+  change 
+}) => {
+  const getColorClasses = () => {
+    switch (color) {
+      case 'success':
+        return 'text-green-600';
+      case 'warning':
+        return 'text-orange-600';
+      case 'danger':
+        return 'text-red-600';
+      default:
+        return 'text-primary';
+    }
+  };
+
+  const getChangeColor = () => {
+    if (!change) return '';
+    switch (change.type) {
+      case 'positive':
+        return 'text-green-600';
+      case 'negative':
+        return 'text-red-600';
+      default:
+        return 'text-gray-600';
+    }
+  };
+
+  const formatValue = (val: string | number) => {
+    if (typeof val === 'number') {
+      return `₹${val.toLocaleString('en-IN')}`;
+    }
+    return val;
+  };
+
   return (
-    <div className={cn(
-      "metric-card",
-      variant === "financial" && "metric-card-financial",
-      variant === "success" && "metric-card-success"
-    )}>
-      <div className="flex items-start justify-between">
+    <Card className="p-6">
+      <div className="flex items-center justify-between">
         <div className="flex-1">
-          <p className="text-sm font-medium text-muted-foreground">{title}</p>
-          <div className="mt-2">
-            <p className={cn(
-              "text-3xl font-bold",
-              variant === "financial" && "text-financial",
-              variant === "success" && "text-success"
-            )}>
-              {value}
+          <p className="text-sm text-muted-foreground mb-1">{title}</p>
+          <p className={`text-2xl font-bold ${getColorClasses()}`}>
+            {formatValue(value)}
+          </p>
+          {change && (
+            <p className={`text-xs mt-1 ${getChangeColor()}`}>
+              {change.type === 'positive' ? '+' : ''}{change.value}%
             </p>
-            {subtitle && (
-              <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
-            )}
-          </div>
-          {trend && (
-            <div className="flex items-center mt-2">
-              <span className={cn(
-                "text-xs font-medium",
-                trend.isPositive ? "text-success" : "text-destructive"
-              )}>
-                {trend.isPositive ? "+" : ""}{trend.value}%
-              </span>
-              <span className="text-xs text-muted-foreground ml-2">vs yesterday</span>
-            </div>
           )}
         </div>
-        <div className={cn(
-          "flex items-center justify-center w-12 h-12 rounded-lg",
-          variant === "financial" && "bg-financial/10 text-financial",
-          variant === "success" && "bg-success/10 text-success",
-          variant === "default" && "bg-primary/10 text-primary"
-        )}>
+        <div className={`p-3 rounded-lg bg-muted ${getColorClasses()}`}>
           <Icon className="h-6 w-6" />
         </div>
       </div>
-    </div>
+    </Card>
   );
-}
+};
+
+export default MetricCard;

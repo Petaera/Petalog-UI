@@ -1,0 +1,577 @@
+Core System Tables
+These tables form the foundation of your entire platform, storing information about people, places, and vehicles. All other loyalty and transactional data relies on these tables.
+
+users
+This table is the central hub for all users of the system, including administrators, location owners, and customers. It's the primary source of truth for user authentication and permissions.
+
+id: uuid, the primary key and unique identifier for each user.
+
+email: text, a unique email address for the user.
+
+role: text, defines the user's role (e.g., admin, owner, customer).
+
+assigned_location: uuid, a foreign key linking an employee or owner to a specific location.
+
+created_at: timestamp with time zone, the time the user was created.
+
+own_id: uuid, a self-referencing foreign key, potentially for internal organizational hierarchy.
+
+locations
+This table represents the physical sites where services are offered.
+
+id: uuid, the primary key and unique identifier for each location.
+
+name: text, the name of the location.
+
+address: text, the physical address of the location.
+
+migration_completed: boolean, a flag to track the migration status of this location.
+
+own_id: uuid, a foreign key linking the location to its owner in the users table.
+
+vehicles
+This table serves as a registry for all vehicles in the system. It's linked to logs and customer data.
+
+id: uuid, the primary key and unique identifier for the vehicle.
+
+number_plate: text, the unique number plate of the vehicle.
+
+type: text, the type of vehicle (e.g., car, bike, truck).
+
+visit_count: integer, tracks the number of times this vehicle has been logged.
+
+own_id: uuid, a foreign key linking the vehicle to its owner in the users table.
+
+logs_man
+This is the most critical table for your loyalty system. It contains manual logs of every visit, including detailed information about the service and payment.
+
+id: uuid, the primary key and unique identifier for each log entry.
+
+vehicle_id: uuid, a foreign key to the vehicles table.
+
+location_id: uuid, a foreign key to the locations table.
+
+total: numeric, the total amount charged, essential for loyalty points calculation.
+
+payment_mode: text, the method of payment.
+
+entry_time: timestamp with time zone, the time the vehicle entered the location.
+
+created_by: uuid, a foreign key to the users table, showing who created the log.
+
+vehicle_number: text, redundant with vehicle_id, but may be useful for manual lookup.
+
+Customer & Account Management
+These tables manage customer profiles, credit accounts, and all financial transactions.
+
+customers
+This table contains specific customer details and links them to a user and a default vehicle.
+
+id: uuid, the primary key.
+
+phone: text, the unique phone number of the customer.
+
+default_vehicle_id: uuid, a foreign key to the customer's primary vehicle.
+
+linked_user_id: uuid, a foreign key to the main users table.
+
+name, email: text, customer contact information.
+
+credit_accounts
+This table manages credit or prepaid balances for each customer.
+
+id: uuid, the primary key.
+
+customer_id: uuid, a unique foreign key to the customers table.
+
+balance: numeric, the current credit balance.
+
+total_deposited: numeric, the sum of all top-up amounts.
+
+credit_transactions
+This table is a detailed log of all transactions on a customer's credit account.
+
+id: uuid, the primary key.
+
+credit_account_id: uuid, a foreign key to the credit_accounts table.
+
+transaction_type: text, type of transaction (topup, deduction, refund).
+
+amount: numeric, the value of the transaction.
+
+Loyalty & Rewards System
+These tables are the heart of your loyalty program, managing plans, purchases, and reward redemptions.
+
+subscription_plans
+This table defines the different loyalty plans available, such as visit-based or credit-based packages. Note: Your existing schema has a bug where foreign keys are missing from subscription_payments and subscription_purchases. They need to be added to ensure data integrity.
+
+id: uuid, the primary key.
+
+name: text, the name of the plan.
+
+type: text, the plan's category (visit, credit, package).
+
+price: numeric, the cost of the plan.
+
+max_redemptions: integer, the number of times a plan can be used.
+
+owner_id: uuid, a foreign key to the plan's owner.
+
+subscription_purchases
+This table records every instance of a customer buying a subscription plan. It is a critical link between the plan and the customer.
+
+id: uuid, the primary key for each purchase record.
+
+plan_id: uuid, a foreign key to the subscription_plans table.
+
+customer_id: uuid, a foreign key to the customers table.
+
+remaining_visits: integer, tracks the remaining uses for visit-based plans.
+
+status: text, the current status of the purchase (active, expired, cancelled).
+
+subscription_payments
+This table logs the payment details for each subscription purchase.
+
+id: uuid, the primary key.
+
+purchase_id: uuid, a foreign key to the subscription_purchases table.
+
+amount: numeric, the amount of the payment.
+
+payment_method: text, the payment method used.
+
+loyalty_visits
+This table is the direct link between a customer log and their loyalty activity. It's how you track which visits count towards rewards.
+
+id: uuid, the primary key.
+
+entry_log_id: uuid, a foreign key to a specific record in the logs_man table. This is the crucial link for tracking a "valid entry count."
+
+customer_id: uuid, a foreign key to the customers table.
+
+purchase_id: uuid, an optional foreign key to the specific purchase record used for this visit.
+
+reward_claims
+This table tracks every time a customer redeems a reward.
+
+id: uuid, the primary key.
+
+reward_id: uuid, a foreign key to the rewards table.
+
+customer_id: uuid, a foreign key to the customers table.
+
+claimed_at: timestamp with time zone, the time the reward was claimed.
+
+rewards
+This table defines the rewards that can be offered.
+
+id: uuid, the primary key.
+
+title: text, the name of the reward.
+
+applicable_plan_id: uuid, a foreign key to a plan if the reward is tied to it.
+
+owner_id: uuid, a foreign key to the user who created the reward.
+
+package_usages
+This table tracks the specific usage of a service that is part of a package.
+
+id: uuid, the primary key.
+
+purchase_id: uuid, a foreign key to the subscription_purchases table.
+
+service_type: text, the type of service used.
+
+subscription_plan_locations
+This is a join table that links specific plans to specific locations.
+
+id: uuid, the primary key.
+
+plan_id: uuid, a foreign key to subscription_plans.
+
+location_id: text, a foreign key to locations. Note: This should be changed to a UUID type.
+
+
+Database Schema:
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
+
+CREATE TABLE public.Service_prices (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  SERVICE text,
+  VEHICLE text,
+  PRICE numeric,
+  own_id uuid,
+  type text,
+  CONSTRAINT Service_prices_pkey PRIMARY KEY (id),
+  CONSTRAINT Service_prices_own_id_fkey FOREIGN KEY (own_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.Staff (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  NAME text,
+  POST text,
+  SALARY numeric,
+  STATUS text,
+  CONATCT numeric,
+  JOINING DATE date,
+  ATTENDANCE text,
+  LEAVES text,
+  CONSTRAINT Staff_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.Vehicles_in_india (
+  Vehicle Brands text,
+  Models text,
+  id uuid NOT NULL DEFAULT gen_random_uuid() UNIQUE,
+  type text,
+  CONSTRAINT Vehicles_in_india_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.WORKSHOP (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  HATCH BACK numeric,
+  SEDAN / MINI SUV numeric,
+  SUV / PREMIUM SEDAN numeric,
+  PREMIUM SUV numeric,
+  WORKSHOP text,
+  own_id uuid,
+  SCOOTER numeric,
+  BIKE numeric DEFAULT '200'::numeric,
+  BULLET numeric DEFAULT '250'::numeric,
+  SUPER BIKE numeric DEFAULT '300'::numeric,
+  CONSTRAINT WORKSHOP_pkey PRIMARY KEY (id),
+  CONSTRAINT WORKSHOP_own_id_fkey FOREIGN KEY (own_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.credit_accounts (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  customer_id uuid NOT NULL UNIQUE,
+  total_deposited numeric DEFAULT 0,
+  balance numeric DEFAULT 0,
+  currency text DEFAULT 'INR'::text,
+  last_topup_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT credit_accounts_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_credit_accounts_customer FOREIGN KEY (customer_id) REFERENCES public.customers(id)
+);
+CREATE TABLE public.credit_transactions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  credit_account_id uuid NOT NULL,
+  transaction_type text NOT NULL CHECK (transaction_type = ANY (ARRAY['topup'::text, 'deduction'::text, 'refund'::text])),
+  amount numeric NOT NULL,
+  related_payment_id uuid,
+  created_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT credit_transactions_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_credit_transactions_account FOREIGN KEY (credit_account_id) REFERENCES public.credit_accounts(id),
+  CONSTRAINT fk_credit_transactions_payment FOREIGN KEY (related_payment_id) REFERENCES public.subscription_payments(id)
+);
+  id uuid not null default gen_random_uuid (),
+  phone text not null,
+  name text null,
+  email text null,
+  default_vehicle_id uuid null,
+  linked_user_id uuid null,
+  notes text null,
+  created_at timestamp with time zone null default now(),
+  owner_id uuid null,
+  "Vehicles" text[] null,
+  "Location" text null,
+  date_of_birth date null,
+  constraint customers_pkey primary key (id),
+  constraint customers_phone_key unique (phone)
+) TABLESPACE pg_default;
+create table public.subscription_vehicles (
+  id uuid not null default extensions.uuid_generate_v4 (),
+  number_plate text not null,
+  type text null,
+  owner_id uuid null,
+  visit_count integer not null default 0,
+  "Model" text null,
+  "Brand" text null,
+  "Location_id" jsonb[] null
+) TABLESPACE pg_default;
+CREATE TABLE public.location_owners (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  location_id uuid NOT NULL,
+  owner_id uuid NOT NULL,
+  ownership_percentage numeric DEFAULT 100.00 CHECK (ownership_percentage >= 0::numeric AND ownership_percentage <= 100::numeric),
+  is_primary_owner boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT location_owners_pkey PRIMARY KEY (id),
+  CONSTRAINT location_owners_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES auth.users(id),
+  CONSTRAINT location_owners_location_id_fkey FOREIGN KEY (location_id) REFERENCES public.locations(id)
+);
+CREATE TABLE public.locations (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  name text NOT NULL,
+  address text,
+  created_at timestamp with time zone DEFAULT now(),
+  own_id uuid,
+  migration_completed boolean DEFAULT false,
+  CONSTRAINT locations_pkey PRIMARY KEY (id),
+  CONSTRAINT locations_own_id_fkey FOREIGN KEY (own_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.logs-auto (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  vehicle_id uuid,
+  location_id uuid,
+  entry_time timestamp with time zone NOT NULL,
+  exit_time timestamp with time zone,
+  entry_type text NOT NULL,
+  entry_url text,
+  created_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  duration interval DEFAULT (exit_time - entry_time),
+  exit_image text,
+  own_id uuid,
+  CONSTRAINT logs-auto_pkey PRIMARY KEY (id),
+  CONSTRAINT logs-auto_own_id_fkey FOREIGN KEY (own_id) REFERENCES public.users(id),
+  CONSTRAINT logs_vehicle_id_fkey FOREIGN KEY (vehicle_id) REFERENCES public.vehicles(id),
+  CONSTRAINT logs_location_id_fkey FOREIGN KEY (location_id) REFERENCES public.locations(id),
+  CONSTRAINT logs_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.logs-man (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  vehicle_id uuid,
+  location_id uuid,
+  entry_time timestamp with time zone DEFAULT now(),
+  exit_time timestamp with time zone,
+  entry_type text NOT NULL,
+  image_url text,
+  created_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  duration interval DEFAULT (exit_time - entry_time),
+  Amount numeric,
+  discount numeric,
+  payment_mode text,
+  remarks text,
+  service text,
+  vehicle_type text,
+  workshop text,
+  vehicle_number text,
+  Name text,
+  Phone_no bigint,
+  D.O.B date,
+  Brand_id uuid,
+  vehicle_brand text,
+  vehicle_model text,
+  Location text,
+  approval_status text DEFAULT 'pending'::text,
+  approved_at timestamp with time zone,
+  own_id uuid,
+  updated_at timestamp with time zone DEFAULT now(),
+  wheel_type text,
+  payment_date timestamp with time zone,
+  upi_account_id uuid,
+  upi_account_name text,
+  upi_id text,
+  Total numeric,
+  CONSTRAINT logs-man_pkey PRIMARY KEY (id),
+  CONSTRAINT logs-man_upi_account_id_fkey FOREIGN KEY (upi_account_id) REFERENCES public.owner_payment_details(id),
+  CONSTRAINT logs-man_vehicle_id_fkey FOREIGN KEY (vehicle_id) REFERENCES public.vehicles(id),
+  CONSTRAINT logs-man_location_id_fkey FOREIGN KEY (location_id) REFERENCES public.locations(id),
+  CONSTRAINT logs-man_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id),
+  CONSTRAINT logs-man_Brand_id_fkey FOREIGN KEY (Brand_id) REFERENCES public.Vehicles_in_india(id),
+  CONSTRAINT logs_man_brand_id_fkey FOREIGN KEY (Brand_id) REFERENCES public.Vehicles_in_india(id),
+  CONSTRAINT logs-man_own_id_fkey FOREIGN KEY (own_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.loyalty_visits (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  purchase_id uuid,
+  vehicle_id uuid,
+  customer_id uuid,
+  location_id uuid,
+  entry_log_id uuid,
+  visit_time timestamp with time zone DEFAULT now(),
+  visit_type text,
+  service_rendered text,
+  reward_given text,
+  amount_charged numeric DEFAULT 0,
+  payment_method text,
+  created_by uuid,
+  notes text,
+  CONSTRAINT loyalty_visits_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_loyalty_visits_purchase FOREIGN KEY (purchase_id) REFERENCES public.subscription_purchases(id),
+  CONSTRAINT fk_loyalty_visits_customer FOREIGN KEY (customer_id) REFERENCES public.customers(id),
+  CONSTRAINT fk_loyalty_visits_location FOREIGN KEY (location_id) REFERENCES public.locations(id),
+  CONSTRAINT fk_loyalty_visits_created_by FOREIGN KEY (created_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.owner_payment_details (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  owner_id uuid NOT NULL,
+  payment_method text NOT NULL CHECK (payment_method = ANY (ARRAY['bank_transfer'::text, 'upi'::text, 'cash'::text, 'check'::text, 'other'::text])),
+  account_name text,
+  account_number text,
+  ifsc_code text,
+  bank_name text,
+  upi_id text,
+  qr_code_url text,
+  qr_code_file_path text,
+  additional_notes text,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  user_role text DEFAULT 'owner'::text CHECK (user_role = ANY (ARRAY['owner'::text, 'manager'::text])),
+  location_id uuid,
+  CONSTRAINT owner_payment_details_pkey PRIMARY KEY (id),
+  CONSTRAINT owner_payment_details_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES auth.users(id),
+  CONSTRAINT owner_payment_details_location_id_fkey FOREIGN KEY (location_id) REFERENCES public.locations(id)
+);
+CREATE TABLE public.package_usages (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  purchase_id uuid NOT NULL,
+  service_type text,
+  use_date timestamp with time zone DEFAULT now(),
+  service_value numeric DEFAULT 0,
+  created_by uuid,
+  notes text,
+  CONSTRAINT package_usages_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_package_usages_purchase FOREIGN KEY (purchase_id) REFERENCES public.subscription_purchases(id),
+  CONSTRAINT fk_package_usages_created_by FOREIGN KEY (created_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.price_details (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  services text,
+  Hatch back numeric,
+  SEDAN/ MINI SUV numeric,
+  SUV/ PREMIUM SEDAN numeric,
+  PREMIUM SUV numeric,
+  SCOOTER numeric,
+  BIKE numeric,
+  BULLET numeric,
+  SUPER BIKES numeric,
+  own_id uuid,
+  CONSTRAINT price_details_pkey PRIMARY KEY (id),
+  CONSTRAINT price_details_own_id_fkey FOREIGN KEY (own_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.reward_claims (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  reward_id uuid NOT NULL,
+  purchase_id uuid,
+  customer_id uuid,
+  vehicle_id uuid,
+  claimed_at timestamp with time zone DEFAULT now(),
+  created_by uuid,
+  notes text,
+  CONSTRAINT reward_claims_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_reward_claims_purchase FOREIGN KEY (purchase_id) REFERENCES public.subscription_purchases(id),
+  CONSTRAINT fk_reward_claims_customer FOREIGN KEY (customer_id) REFERENCES public.customers(id),
+  CONSTRAINT fk_reward_claims_vehicle FOREIGN KEY (vehicle_id) REFERENCES public.vehicles(id),
+  CONSTRAINT fk_reward_claims_created_by FOREIGN KEY (created_by) REFERENCES public.users(id),
+  CONSTRAINT fk_reward_claims_reward FOREIGN KEY (reward_id) REFERENCES public.rewards(id)
+);
+CREATE TABLE public.rewards (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  owner_id uuid NOT NULL,
+  title text NOT NULL,
+  description text,
+  applicable_plan_id uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  active boolean DEFAULT true,
+  CONSTRAINT rewards_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_rewards_applicable_plan FOREIGN KEY (applicable_plan_id) REFERENCES public.subscription_plans(id),
+  CONSTRAINT fk_rewards_owner FOREIGN KEY (owner_id) REFERENCES public.customers(id)
+);
+CREATE TABLE public.subscription_payments (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  purchase_id uuid,
+  customer_id uuid,
+  amount numeric NOT NULL,
+  currency text DEFAULT 'INR'::text,
+  payment_method text NOT NULL,
+  payment_meta jsonb,
+  created_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT subscription_payments_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_subscription_payments_purchase FOREIGN KEY (purchase_id) REFERENCES public.subscription_purchases(id),
+  CONSTRAINT fk_subscription_payments_customer FOREIGN KEY (customer_id) REFERENCES public.customers(id),
+  CONSTRAINT fk_subscription_payments_created_by FOREIGN KEY (created_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.subscription_plan_locations (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  plan_id uuid NOT NULL,
+  location_id uuid NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT subscription_plan_locations_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_plan FOREIGN KEY (plan_id) REFERENCES public.subscription_plans(id),
+  CONSTRAINT fk_subscription_plan_locations_location FOREIGN KEY (location_id) REFERENCES public.locations(id)
+);
+CREATE TABLE public.subscription_plans (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  owner_id uuid NOT NULL,
+  name text NOT NULL,
+  type text NOT NULL CHECK (type = ANY (ARRAY['visit'::text, 'credit'::text, 'package'::text])),
+  short_description text,
+  price numeric DEFAULT 0,
+  currency text DEFAULT 'INR'::text,
+  vehicle_type text,
+  allowed_services jsonb,
+  duration_days integer,
+  max_redemptions integer,
+  allow_multiple_locations boolean DEFAULT false,
+  active boolean DEFAULT true,
+  created_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT subscription_plans_pkey PRIMARY KEY (id),
+  CONSTRAINT subscription_plans_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES public.customers(id)
+);
+CREATE TABLE public.subscription_purchases (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  plan_id uuid NOT NULL,
+  customer_id uuid,
+  vehicle_id uuid,
+  location_id uuid,
+  start_date timestamp with time zone DEFAULT now(),
+  expiry_date timestamp with time zone,
+  total_value numeric DEFAULT 0,
+  remaining_value numeric,
+  remaining_visits integer,
+  status text DEFAULT 'active'::text CHECK (status = ANY (ARRAY['active'::text, 'expired'::text, 'cancelled'::text])),
+  created_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  source_payment_method text,
+  notes text,
+  CONSTRAINT subscription_purchases_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_subscription_purchases_plan FOREIGN KEY (plan_id) REFERENCES public.subscription_plans(id),
+  CONSTRAINT fk_subscription_purchases_customer FOREIGN KEY (customer_id) REFERENCES public.customers(id),
+  CONSTRAINT fk_subscription_purchases_location FOREIGN KEY (location_id) REFERENCES public.locations(id),
+  CONSTRAINT fk_subscription_purchases_created_by FOREIGN KEY (created_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.users (
+  id uuid NOT NULL DEFAULT auth.uid(),
+  email text NOT NULL UNIQUE,
+  role text NOT NULL,
+  assigned_location uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  own_id uuid,
+  CONSTRAINT users_pkey PRIMARY KEY (id),
+  CONSTRAINT users_assigned_location_fkey FOREIGN KEY (assigned_location) REFERENCES public.locations(id)
+);
+create table public.vehicles (
+  id uuid not null default extensions.uuid_generate_v4 (),
+  number_plate text not null,
+  type text null,
+  owner_id uuid null,
+  created_at timestamp with time zone null default now(),
+  visit_count integer not null default 0,
+  "Model" text null,
+  "Brand" text null,
+  constraint vehicles_pkey primary key (id),
+  constraint vehicles_number_plate_key unique (number_plate),
+  constraint vehicles_owner_id_fkey foreign KEY (owner_id) references users (id)
+) TABLESPACE pg_default;
+CREATE TABLE public.workshop_prices (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  WORKSHOP text,
+  Created at timestamp with time zone NOT NULL,
+  VEHICLE text,
+  PRICE numeric,
+  own_id uuid,
+  type bigint,
+  CONSTRAINT workshop_prices_pkey PRIMARY KEY (id),
+  CONSTRAINT workshop_prices_own_id_fkey FOREIGN KEY (own_id) REFERENCES public.users(id)
+);

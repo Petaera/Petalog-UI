@@ -9,6 +9,9 @@ import {
   Settings,
   Search,
   Car,
+  Gift,
+  Calculator,
+  Calendar,
   CreditCard
 } from "lucide-react";
 
@@ -55,6 +58,8 @@ export function AppSidebar() {
         { title: "Dashboard", url: "/dashboard", icon: Home },
         { title: "Manual Entry", url: "/manager-owner-entry", icon: Car },
         { title: "Manual Logs", url: "/manager-manual-logs", icon: PenTool },
+        { title: "Loyalty", url: "/loyalty", icon: Gift },
+        { title: "Payroll & Expenses", url: "/payroll", icon: Calculator },
         // { title: "Partnerships", url: "/location-partnerships", icon: Users },
       ]
     : [
@@ -69,6 +74,8 @@ export function AppSidebar() {
         { title: "Price Settings", url: "/price-settings", icon: Settings },
         { title: "Vehicle History", url: "/vehicle-history", icon: Search },
         { title: "Owner Manual Entry", url: "/owner-entry", icon: Car },
+        { title: "Loyalty", url: "/loyalty", icon: Gift },
+        { title: "Payroll & Expenses", url: "/payroll", icon: Calculator },
       ];
 
   return (

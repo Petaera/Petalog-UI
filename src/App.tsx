@@ -26,6 +26,22 @@ import PriceSettings from "./pages/PriceSettings";
 import VehicleHistory from "./pages/VehicleHistory";
 import OwnerEntry from "./pages/OwnerEntry";
 import ManagerSettings from "./pages/ManagerSettings";
+import Loyalty from "./pages/Loyalty";
+import { DashboardOverview } from "./components/loyalty/DashboardOverview";
+import { SubscriptionSchemes } from "./components/loyalty/SubscriptionSchemes";
+import { CreateSchemeWizard } from "./components/loyalty/CreateSchemeWizard";
+import { Customers } from "./components/loyalty/Customers";
+import { Analytics } from "./components/loyalty/Analytics";
+import { LoyaltyLayout } from "./components/loyalty/LoyaltyLayout";
+
+// Payroll pages
+import PayrollLayout from "./components/layout/PayrollLayout";
+import PayrollDashboard from "./pages/payroll_pages/Dashboard";
+import PayrollStaffPage from "./pages/payroll_pages/StaffPage";
+import PayrollAttendancePage from "./pages/payroll_pages/AttendancePage";
+import PayrollExpensesPage from "./pages/payroll_pages/ExpensesPage";
+import PayrollReportsPage from "./pages/payroll_pages/ReportsPage";
+import PayrollSettingsPage from "./pages/payroll_pages/SettingsPage";
 
 // Manager pages
 import ManagerPortal from "./pages/ManagerPortal";
@@ -274,6 +290,24 @@ const App = () => (
                  }
                />
                
+               {/* Loyalty Routes */}
+               <Route 
+                 path="/loyalty" 
+                 element={
+                   <ProtectedRoute requiredRole={["owner", "manager"]}>
+                     <LoyaltyLayout />
+                   </ProtectedRoute>
+                 }
+               >
+                 <Route index element={<DashboardOverview />} />
+                 <Route path="dashboard" element={<DashboardOverview />} />
+                 <Route path="schemes" element={<SubscriptionSchemes />} />
+                 <Route path="create" element={<CreateSchemeWizard onComplete={() => {}} />} />
+                 <Route path="edit/:id" element={<CreateSchemeWizard onComplete={() => {}} />} />
+                 <Route path="customers" element={<Customers />} />
+                 <Route path="analytics" element={<Analytics />} />
+               </Route>
+               
                <Route 
                  path="/location-partnerships" 
                  element={
@@ -329,6 +363,24 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
+              
+              {/* Payroll Routes */}
+              <Route 
+                path="/payroll" 
+                element={
+                  <ProtectedRoute requiredRole={["owner", "manager"]}>
+                    <PayrollLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<PayrollDashboard />} />
+                <Route path="dashboard" element={<PayrollDashboard />} />
+                <Route path="staff" element={<PayrollStaffPage />} />
+                <Route path="attendance" element={<PayrollAttendancePage />} />
+                <Route path="expenses" element={<PayrollExpensesPage />} />
+                <Route path="reports" element={<PayrollReportsPage />} />
+                <Route path="settings" element={<PayrollSettingsPage />} />
+              </Route>
               
               {/* Catch all route */}
               <Route path="*" element={<NotFound />} />
