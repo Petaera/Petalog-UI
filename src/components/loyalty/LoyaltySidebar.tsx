@@ -52,19 +52,181 @@ const sidebarItems = [
   }
 ];
 
-export function LoyaltySidebar({ activeSection }: { activeSection: string }) {
-  const navigate = useNavigate(); // Initialize navigate
+interface LoyaltySidebarProps {
+  activeSection: string;
+  collapsed?: boolean;
+  onToggle?: () => void;
+}
+
+export function LoyaltySidebar({ activeSection, collapsed = false, onToggle }: LoyaltySidebarProps) {
+  const navigate = useNavigate();
   const location = useLocation();
-  const [collapsed, setCollapsed] = React.useState(false);
+  const [isMobile, setIsMobile] = React.useState(false);
+
+  // Check if mobile on mount and resize
+  React.useEffect(() => {
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const handleBackToMainApp = () => {
     navigate('/dashboard');
   };
 
+  // Mobile overlay when expanded
+  if (isMobile && !collapsed) {
+    return (
+      <>
+        {/* Mobile overlay with smooth fade */}
+        <div 
+          className="fixed inset-0 bg-black/60 z-50 md:hidden animate-in fade-in duration-300"
+          onClick={onToggle}
+        />
+        
+        {/* Mobile sidebar with slide animation */}
+        <div className="fixed left-0 top-0 h-full w-80 bg-white/95 backdrop-blur-xl border-r border-border/50 flex flex-col z-50 md:hidden animate-in slide-in-from-left duration-300 ease-out shadow-2xl">
+          {/* Enhanced Header with gradient */}
+          <div className="relative overflow-hidden">
+            {/* Background gradient */}
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-50/80 via-purple-50/60 to-indigo-50/80" />
+            
+            {/* Content */}
+            <div className="relative p-6 border-b border-border/30">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
+                    <Crown className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="font-bold text-xl text-foreground">PetaLog Loyalty</h1>
+                    <p className="text-sm text-muted-foreground">Subscription & Rewards</p>
+                  </div>
+                </div>
+                
+                {/* Close button */}
+                <button
+                  onClick={onToggle}
+                  className="p-2 rounded-xl hover:bg-white/50 transition-colors duration-200 group"
+                  aria-label="Close sidebar"
+                >
+                  <Menu className="w-5 h-5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                </button>
+              </div>
+              
+              {/* Back to main button */}
+              <button
+                onClick={() => {
+                  navigate('/dashboard');
+                  onToggle?.();
+                }}
+                className="w-full p-3 rounded-xl bg-white/60 hover:bg-white/80 transition-all duration-200 text-left group border border-white/20 shadow-sm"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-muted/50 flex items-center justify-center group-hover:bg-muted transition-colors">
+                    <ArrowLeft className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium text-foreground">Back to Main Dashboard</div>
+                    <div className="text-xs text-muted-foreground">Return to main app</div>
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Navigation with staggered animations */}
+          <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+            {sidebarItems.map((item, index) => {
+              const Icon = item.icon;
+              const isActive = activeSection === item.id || location.pathname.startsWith(item.path);
+
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    navigate(item.path);
+                    onToggle?.(); // Close sidebar after navigation on mobile
+                  }}
+                  className={cn(
+                    "w-full text-left p-4 rounded-xl transition-all duration-300 group relative overflow-hidden",
+                    "hover:shadow-lg hover:shadow-primary/10 transform hover:scale-[1.02]",
+                    isActive 
+                      ? "bg-gradient-to-r from-primary/15 to-primary/5 text-primary border border-primary/20 shadow-lg shadow-primary/10" 
+                      : "bg-white/40 backdrop-blur-sm text-foreground hover:bg-white/60 hover:text-primary border border-white/20"
+                  )}
+                  style={{ 
+                    animationDelay: `${(index + 1) * 100}ms`,
+                    animation: `slideInRight 0.4s ease-out ${(index + 1) * 100}ms both`
+                  }}
+                >
+                  {/* Active indicator */}
+                  {isActive && (
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary to-primary/60 rounded-r-full" />
+                  )}
+                  
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className={cn(
+                      "w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300",
+                      isActive 
+                        ? "bg-primary/20 text-primary" 
+                        : "bg-muted/30 text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
+                    )}>
+                      <Icon className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1">
+                      <span className="font-semibold text-sm">{item.label}</span>
+                      <p className={cn(
+                        "text-xs mt-0.5",
+                        isActive ? "text-primary/70" : "text-muted-foreground group-hover:text-primary/70"
+                      )}>
+                        {item.description}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </nav>
+          
+          {/* Bottom decorative element */}
+          <div className="p-4">
+            <div className="h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-indigo-500 rounded-full opacity-20" />
+          </div>
+        </div>
+        
+        {/* Keyframes for staggered animation */}
+        <style>{`
+          @keyframes slideInRight {
+            from {
+              opacity: 0;
+              transform: translateX(-20px);
+            }
+            to {
+              opacity: 1;
+              transform: translateX(0);
+            }
+          }
+        `}</style>
+      </>
+    );
+  }
+
+  // Mobile collapsed state - no sidebar shown (handled by layout)
+  if (isMobile && collapsed) {
+    return null;
+  }
+
+  // Desktop sidebar
   return (
     <div className={cn(
-      "bg-white border-r border-border flex flex-col transition-all duration-300",
-      collapsed ? "w-20" : "w-80 lg:w-80 md:w-72 sm:w-64"
+      "bg-white border-r border-border flex flex-col transition-all duration-300 hidden md:flex",
+      collapsed ? "w-20" : "w-80 lg:w-80"
     )}>
       
       {/* Header */}
@@ -82,7 +244,7 @@ export function LoyaltySidebar({ activeSection }: { activeSection: string }) {
                 <p className="text-sm text-muted-foreground">Subscription & Rewards</p>
               </div>
               <button
-                onClick={() => setCollapsed((v) => !v)}
+                onClick={onToggle}
                 className="p-2 rounded-md hover:bg-muted transition-colors"
                 aria-label="Toggle sidebar"
               >
@@ -92,19 +254,14 @@ export function LoyaltySidebar({ activeSection }: { activeSection: string }) {
           )}
           {collapsed && (
             <button
-              onClick={() => setCollapsed((v) => !v)}
-              className="ml-auto p-2 rounded-md hover:bg-muted transition-colors"
+              onClick={onToggle}
+              className="w-full p-2 rounded-md hover:bg-muted transition-colors flex items-center justify-center"
               aria-label="Expand sidebar"
             >
               <Menu className="w-4 h-4 text-muted-foreground" />
             </button>
           )}
         </div>
-        {/* <div className="flex items-center gap-1 text-xs text-accent font-medium">
-          <Sparkles className="w-3 h-3" />
-          Premium Module
-        </div> */}
-        
         {/* Back to Main App Button */}
         <button
           onClick={handleBackToMainApp}
@@ -137,7 +294,7 @@ export function LoyaltySidebar({ activeSection }: { activeSection: string }) {
           return (
             <button
               key={item.id}
-              onClick={() => navigate(item.path)} // Navigate to the item's path
+              onClick={() => navigate(item.path)}
               className={cn(
                 "w-full text-left p-4 rounded-xl transition-all duration-300 group",
                 "hover:bg-primary/10 hover:shadow-card",
@@ -165,16 +322,6 @@ export function LoyaltySidebar({ activeSection }: { activeSection: string }) {
           );
         })}
       </nav>
-
-      {/* Footer */}
-      {/* <div className="p-4 border-t border-border">
-        <div className="bg-muted/50 rounded-lg p-3 text-center">
-          <div className="text-xs font-medium text-muted-foreground mb-1">
-            Module Version
-          </div>
-          <div className="text-sm font-bold text-primary">v1.0.0</div>
-        </div>
-      </div> */}
     </div>
   );
 }

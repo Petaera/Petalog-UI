@@ -1297,22 +1297,22 @@ export function Customers() {
         customerIds.length > 0 ? supabase
           .from('customers')
           .select('id, name, phone, email, default_vehicle_id')
-          .in('id', customerIds) : Promise.resolve({ data: [] }),
+          .in('id', customerIds) : Promise.resolve({ data: [], error: null }),
         
         planIds.length > 0 ? supabase
           .from('subscription_plans')
           .select('id, name, type, price, max_redemptions, plan_amount, multiplier')
-          .in('id', planIds) : Promise.resolve({ data: [] }),
+          .in('id', planIds) : Promise.resolve({ data: [], error: null }),
         
         vehicleIds.length > 0 ? supabase
           .from('vehicles')
           .select('id, number_plate, type, Brand, model')
-          .in('id', vehicleIds) : Promise.resolve({ data: [] }),
+          .in('id', vehicleIds) : Promise.resolve({ data: [], error: null }),
         
         locationIds.length > 0 ? supabase
           .from('locations')
           .select('id, name')
-          .in('id', locationIds) : Promise.resolve({ data: [] })
+          .in('id', locationIds) : Promise.resolve({ data: [], error: null })
       ]);
 
       // Check for errors in related data fetching
