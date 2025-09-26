@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabaseClient';
+import { useSelectedLocation } from '@/hooks/useSelectedLocation';
 
 const SettingsPage: React.FC = () => {
   const { user } = useAuth();
@@ -32,21 +33,13 @@ const SettingsPage: React.FC = () => {
   });
 
   const [loading, setSaving] = useState(false);
-  const [selectedLocationId, setSelectedLocationId] = useState<string>('');
+  const selectedLocationId = useSelectedLocation();
   const [branchName, setBranchName] = useState<string>('');
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  // Load selected location
-  useEffect(() => {
-    if (!user?.id) return;
-    try {
-      const stored = localStorage.getItem(`selectedLocation_${user.id}`);
-      setSelectedLocationId(stored || '');
-    } catch (_) {}
-  }, [user?.id]);
 
   // Load payroll.settings for selected branch
   useEffect(() => {

@@ -13,6 +13,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
+  Avatar,
+  AvatarFallback,
+} from '@/components/ui/avatar';
+import {
   Home,
   Users,
   Receipt,
@@ -23,7 +27,9 @@ import {
   Calendar,
   ArrowLeft,
   MapPin,
-  ChevronDown
+  ChevronDown,
+  LogOut,
+  User
 } from 'lucide-react';
 
 const sidebarItems = [
@@ -32,50 +38,56 @@ const sidebarItems = [
     label: 'Dashboard',
     icon: Home,
     path: '/payroll',
-    description: 'Overview & Stats'
+    description: 'Overview & Stats',
+    roles: ['owner', 'manager']
   },
   {
     id: 'staff',
     label: 'Staff Management',
     icon: Users,
     path: '/payroll/staff',
-    description: 'Manage Team'
+    description: 'Manage Team',
+    roles: ['owner', 'manager']
   },
   {
     id: 'attendance',
     label: 'Attendance',
     icon: Calendar,
     path: '/payroll/attendance',
-    description: 'Daily Tracking'
+    description: 'Daily Tracking',
+    roles: ['owner', 'manager']
   },
   {
     id: 'expenses',
     label: 'Expenses',
     icon: Receipt,
     path: '/payroll/expenses',
-    description: 'Track Costs'
+    description: 'Track Costs',
+    roles: ['owner', 'manager']
   },
   {
     id: 'reports',
     label: 'Reports',
     icon: BarChart3,
     path: '/payroll/reports',
-    description: 'Analytics'
+    description: 'Analytics',
+    roles: ['owner']
   },
   {
     id: 'settings',
     label: 'Settings',
     icon: Settings,
     path: '/payroll/settings',
-    description: 'Configuration'
+    description: 'Configuration',
+    roles: ['owner']
   }
 ];
 
 const PayrollLayout: React.FC = () => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true); // Start collapsed by default for better mobile UX
   const [locations, setLocations] = useState<{ id: string; name: string; address: string }[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
@@ -102,6 +114,13 @@ const PayrollLayout: React.FC = () => {
     setSelectedLocation(locationId);
     if (user?.id) {
       storeLocation(user.id, locationId);
+      // Dispatch custom event to notify all components about location change
+      window.dispatchEvent(new CustomEvent('locationChanged', {
+        detail: {
+          userId: user.id,
+          locationId: locationId
+        }
+      }));
     }
   };
 
@@ -189,12 +208,27 @@ const PayrollLayout: React.FC = () => {
     navigate('/dashboard');
   };
 
+  const handleLogout = async () => {
+    await logout();
+    window.location.href = '/'; // Full reload to ensure session is cleared
+  };
+
   return (
     <div className="min-h-screen bg-background flex">
+      {/* Mobile overlay */}
+      {!collapsed && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden" 
+          onClick={() => setCollapsed(true)}
+        />
+      )}
+      
       {/* Sidebar */}
       <div className={cn(
         "bg-white border-r border-border flex flex-col transition-all duration-300",
-        collapsed ? "w-20" : "w-80 lg:w-80 md:w-72 sm:w-64"
+        collapsed ? "w-20" : "w-80 lg:w-80 md:w-72 sm:w-64",
+        "lg:relative fixed z-50 h-full lg:h-auto",
+        collapsed && "lg:w-20 -translate-x-full lg:translate-x-0"
       )}>
         {/* Header */}
         <div className="p-6 border-b border-border">
@@ -230,32 +264,16 @@ const PayrollLayout: React.FC = () => {
             )}
           </div>
 
-          {/* Back to Main App Button */}
-          <button
-            onClick={handleBackToMainApp}
-            className={cn(
-              "w-full mt-4 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors text-left group",
-              collapsed && "flex items-center justify-center"
-            )}
-          >
-            <div className="flex items-center gap-3">
-              <ArrowLeft className={cn(
-                "w-4 h-4 text-muted-foreground group-hover:text-foreground",
-                collapsed && "mr-0"
-              )} />
-              {!collapsed && (
-                <div>
-                  <div className="text-sm font-medium text-foreground">Back to Main Dashboard</div>
-                  <div className="text-xs text-muted-foreground">Return to dashboard</div>
-                </div>
-              )}
-            </div>
-          </button>
         </div>
 
         {/* Navigation */}
         <nav className="flex-1 p-4 space-y-2">
-          {sidebarItems.map((item) => {
+          {sidebarItems
+            .filter(item => {
+              const userRole = user?.role?.toLowerCase() || '';
+              return item.roles.includes(userRole);
+            })
+            .map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path || 
                            (item.path !== '/payroll' && location.pathname.startsWith(item.path));
@@ -293,32 +311,26 @@ const PayrollLayout: React.FC = () => {
         </nav>
 
         {/* User Info */}
-        {!collapsed && (
-          <div className="p-4 border-t border-border">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
-                <span className="text-primary-foreground font-medium text-sm">
-                  {user?.email?.charAt(0).toUpperCase() || 'U'}
-                </span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">
-                  {user?.email || 'User'}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {user?.role || 'Manager'}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-auto flex flex-col min-w-0">
+      <div className={cn(
+        "flex-1 overflow-auto flex flex-col min-w-0",
+        "lg:ml-0", 
+        collapsed ? "ml-0" : "lg:ml-0"
+      )}>
         <header className="h-16 border-b bg-card/50 backdrop-blur-sm">
           <div className="flex h-full items-center justify-between px-4 lg:px-6">
             <div className="flex items-center gap-2 lg:gap-4 min-w-0 flex-1">
+              {/* Mobile menu button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setCollapsed((v) => !v)}
+                className="lg:hidden"
+              >
+                <Menu className="h-4 w-4" />
+              </Button>
               {user?.role === 'manager' ? (
                 <div className="flex flex-col items-start min-w-0 flex-1 border rounded px-3 lg:px-4 py-2 bg-white">
                   <span className="font-medium text-sm truncate">
@@ -361,6 +373,41 @@ const PayrollLayout: React.FC = () => {
                 </DropdownMenu>
               )}
             </div>
+            
+            {/* User Info */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback className="bg-primary text-primary-foreground">
+                      {(user?.email || 'U').charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56" align="end" forceMount>
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">
+                      {user?.email || 'User'}
+                    </p>
+                    <p className="text-xs leading-none text-muted-foreground">
+                      {user?.role === 'manager' ? 'Location Manager' : 'Business Owner'}
+                    </p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleBackToMainApp}>
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  <span>Back to Main App</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Log out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </header>
         <div className="p-6">

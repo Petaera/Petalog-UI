@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input';
 import { useUpiAccounts } from '@/hooks/useUpiAccounts';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { useSelectedLocation } from '@/hooks/useSelectedLocation';
 
 interface ExpenseCategory {
   id: string;
@@ -43,7 +44,7 @@ const ExpensesPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [filterMode, setFilterMode] = useState('');
-  const [selectedLocationId, setSelectedLocationId] = useState<string>('');
+  const selectedLocationId = useSelectedLocation();
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -92,18 +93,19 @@ const ExpensesPage: React.FC = () => {
   // Add Expense dialog
   const [addExpenseOpen, setAddExpenseOpen] = useState(false);
 
-  useEffect(() => {
-    if (!user?.id) return;
-    try {
-      const stored = localStorage.getItem(`selectedLocation_${user.id}`);
-      setSelectedLocationId(stored || '');
-    } catch (_) {}
-  }, [user?.id]);
 
   useEffect(() => {
     const loadExpenses = async () => {
       try {
         setLoading(true);
+        
+        // Only load if we have a selected location
+        if (!selectedLocationId) {
+          setExpenses([]);
+          setExpenseCategories([]);
+          setLoading(false);
+          return;
+        }
         
         // Expenses by month for selected branch
         try {
@@ -117,10 +119,8 @@ const ExpensesPage: React.FC = () => {
             .select('id,date,category_id,amount,payment_mode,notes,is_monthly,branch_id')
             .gte('date', monthStart)
             .lte('date', monthEnd)
+            .eq('branch_id', selectedLocationId)
             .order('date', { ascending: false });
-          if (selectedLocationId) {
-            expQuery = expQuery.eq('branch_id', selectedLocationId);
-          }
           const { data: expData, error: expErr } = await expQuery as any;
 
           if (!expErr && expData) {
@@ -147,10 +147,8 @@ const ExpensesPage: React.FC = () => {
           let catQuery = supabase
             .from('expense_categories')
             .select('id,name,branch_id')
+            .eq('branch_id', selectedLocationId)
             .order('name');
-          if (selectedLocationId) {
-            catQuery = catQuery.eq('branch_id', selectedLocationId);
-          }
           const { data: catData, error: catErr } = await catQuery as any;
 
           if (!catErr && catData) {
@@ -172,14 +170,13 @@ const ExpensesPage: React.FC = () => {
   // (already loaded above)
 
   const reloadCategories = async () => {
+    if (!selectedLocationId) return;
     try {
       let catQuery = supabase
         .from('expense_categories')
         .select('id,name,branch_id')
+        .eq('branch_id', selectedLocationId)
         .order('name');
-      if (selectedLocationId) {
-        catQuery = catQuery.eq('branch_id', selectedLocationId);
-      }
       const { data: catData, error: catErr } = await catQuery as any;
       if (catErr) throw catErr;
       setExpenseCategories((catData as any[]).map(r => ({ id: r.id, name: r.name })));
@@ -187,6 +184,7 @@ const ExpensesPage: React.FC = () => {
   };
 
   const reloadExpenses = async () => {
+    if (!selectedLocationId) return;
     try {
       const monthStart = `${selectedMonth}-01`;
       const monthEnd = new Date(new Date(monthStart).getFullYear(), new Date(monthStart).getMonth() + 1, 0)
@@ -197,10 +195,8 @@ const ExpensesPage: React.FC = () => {
         .select('id,date,category_id,amount,payment_mode,notes,is_monthly,branch_id')
         .gte('date', monthStart)
         .lte('date', monthEnd)
+        .eq('branch_id', selectedLocationId)
         .order('date', { ascending: false });
-      if (selectedLocationId) {
-        expQuery = expQuery.eq('branch_id', selectedLocationId);
-      }
       const { data: expData } = await expQuery as any;
       setExpenses(
         (expData || []).map((e: any) => ({
@@ -477,10 +473,12 @@ const ExpensesPage: React.FC = () => {
         </div>
         
         <div className="flex gap-2">
-          <Button variant="outline" className="text-muted-foreground" onClick={() => { setManageCategories(s => !s); setShowAddCategory(false); }}>
-            <Settings className="h-4 w-4 mr-2" />
-            {manageCategories ? 'Close' : 'Manage Categories'}
-          </Button>
+          {user?.role === 'owner' && (
+            <Button variant="outline" className="text-muted-foreground" onClick={() => { setManageCategories(s => !s); setShowAddCategory(false); }}>
+              <Settings className="h-4 w-4 mr-2" />
+              {manageCategories ? 'Close' : 'Manage Categories'}
+            </Button>
+          )}
           <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => setAddExpenseOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Add Expense
@@ -488,7 +486,7 @@ const ExpensesPage: React.FC = () => {
         </div>
       </div>
 
-      {manageCategories && (
+      {user?.role === 'owner' && manageCategories && (
         <div className="business-card p-6">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-foreground">Manage Categories</h3>

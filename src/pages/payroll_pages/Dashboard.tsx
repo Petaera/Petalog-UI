@@ -13,6 +13,7 @@ import { Card } from '@/components/ui/card';
 import { toast } from '@/hooks/use-toast';
 import MetricCard from '@/components/dashboard/MetricCard';
 import RecentActivityLogs from '@/components/dashboard/RecentActivityLogs';
+import { useSelectedLocation } from '@/hooks/useSelectedLocation';
 
 interface Staff {
   id: string;
@@ -30,7 +31,7 @@ const Dashboard: React.FC = () => {
   const { user } = useAuth();
   const [staff, setStaff] = useState<Staff[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedLocationId, setSelectedLocationId] = useState<string>('');
+  const selectedLocationId = useSelectedLocation();
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -53,13 +54,6 @@ const Dashboard: React.FC = () => {
   const [recentActivities, setRecentActivities] = useState<Array<{ id: string; kind: 'Expense' | 'Advance' | 'SalaryPayment'; date: string; title: string; amount: number; note?: string }>>([]);
   const [attendanceAlerts, setAttendanceAlerts] = useState<Array<{ type: 'leave' | 'absent'; staffName: string; date: string; endDate?: string; reason?: string }>>([]);
 
-  useEffect(() => {
-    if (!user?.id) return;
-    try {
-      const stored = localStorage.getItem(`selectedLocation_${user.id}`);
-      setSelectedLocationId(stored || '');
-    } catch (_) {}
-  }, [user?.id]);
 
   const getMonthRange = (ym: string) => {
     const start = `${ym}-01`;
@@ -439,7 +433,15 @@ const Dashboard: React.FC = () => {
     };
 
     if (selectedLocationId) {
-    loadData();
+      loadData();
+    } else {
+      // Clear data when no location selected
+      setTotals({ totalSalaries: 0, totalAdvances: 0, totalSalaryPaid: 0, totalExpenses: 0, totalPayable: 0 });
+      setPrevTotals({ totalSalaries: 0, totalAdvances: 0, totalExpenses: 0, totalPayable: 0, netCost: 0 });
+      setExpenseBreakdown([]);
+      setRecentActivities([]);
+      setAttendanceAlerts([]);
+      setLoading(false);
     }
   }, [selectedLocationId, selectedMonth]);
 
@@ -518,16 +520,18 @@ const Dashboard: React.FC = () => {
           change={{ value: 0, type: 'neutral' }}
         />
         
-        <MetricCard
-          title="Monthly Salaries"
-          value={totalSalaries}
-          icon={IndianRupee}
-          color="success"
-          change={{ 
-            value: prevTotals.totalSalaries ? (((totalSalaries - prevTotals.totalSalaries) / prevTotals.totalSalaries) * 100) : 0, 
-            type: !prevTotals.totalSalaries || totalSalaries === prevTotals.totalSalaries ? 'neutral' : (totalSalaries > prevTotals.totalSalaries ? 'positive' : 'negative') 
-          }}
-        />
+        {user?.role === 'owner' && (
+          <MetricCard
+            title="Monthly Salaries"
+            value={totalSalaries}
+            icon={IndianRupee}
+            color="success"
+            change={{ 
+              value: prevTotals.totalSalaries ? (((totalSalaries - prevTotals.totalSalaries) / prevTotals.totalSalaries) * 100) : 0, 
+              type: !prevTotals.totalSalaries || totalSalaries === prevTotals.totalSalaries ? 'neutral' : (totalSalaries > prevTotals.totalSalaries ? 'positive' : 'negative') 
+            }}
+          />
+        )}
         
         <MetricCard
           title="Total Advances"
@@ -551,115 +555,121 @@ const Dashboard: React.FC = () => {
           }}
         />
         
-        <MetricCard
-          title="Payable Salaries"
-          value={totalPayable}
-          icon={Calendar}
-          color="success"
-          change={{ 
-            value: prevTotals.totalPayable ? (((totalPayable - prevTotals.totalPayable) / prevTotals.totalPayable) * 100) : 0, 
-            type: !prevTotals.totalPayable || totalPayable === prevTotals.totalPayable ? 'neutral' : (totalPayable > prevTotals.totalPayable ? 'negative' : 'positive') 
-          }}
-        />
-        
-        <MetricCard
-          title="Net Monthly Cost"
-          value={totalSalaries + totalExpenses}
-          icon={Receipt}
-          color="danger"
-          change={{ 
-            value: prevTotals.netCost ? ((((totalSalaries + totalExpenses) - prevTotals.netCost) / prevTotals.netCost) * 100) : 0, 
-            type: !prevTotals.netCost || (totalSalaries + totalExpenses) === prevTotals.netCost ? 'neutral' : ((totalSalaries + totalExpenses) > prevTotals.netCost ? 'negative' : 'positive') 
-          }}
-        />
+        {user?.role === 'owner' && (
+          <>
+            <MetricCard
+              title="Payable Salaries"
+              value={totalPayable}
+              icon={Calendar}
+              color="success"
+              change={{ 
+                value: prevTotals.totalPayable ? (((totalPayable - prevTotals.totalPayable) / prevTotals.totalPayable) * 100) : 0, 
+                type: !prevTotals.totalPayable || totalPayable === prevTotals.totalPayable ? 'neutral' : (totalPayable > prevTotals.totalPayable ? 'negative' : 'positive') 
+              }}
+            />
+            
+            <MetricCard
+              title="Net Monthly Cost"
+              value={totalSalaries + totalExpenses}
+              icon={Receipt}
+              color="danger"
+              change={{ 
+                value: prevTotals.netCost ? ((((totalSalaries + totalExpenses) - prevTotals.netCost) / prevTotals.netCost) * 100) : 0, 
+                type: !prevTotals.netCost || (totalSalaries + totalExpenses) === prevTotals.netCost ? 'neutral' : ((totalSalaries + totalExpenses) > prevTotals.netCost ? 'negative' : 'positive') 
+              }}
+            />
+          </>
+        )}
       </div>
 
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Expense Breakdown (Donut) */}
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-foreground mb-4">Expense Breakdown</h3>
-          <div className="h-64 grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-            <div className="flex items-center justify-center">
+      {/* Charts Section - Owner Only */}
+      {user?.role === 'owner' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Expense Breakdown (Donut) */}
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-foreground mb-4">Expense Breakdown</h3>
+            <div className="h-64 grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+              <div className="flex items-center justify-center">
+                {(() => {
+                  const data = expenseBreakdown;
+                  const total = Math.max(1, data.reduce((s, d) => s + (d.total || 0), 0));
+                  const r = 40;
+                  const circ = 2 * Math.PI * r;
+                  let offset = 0;
+                  const colors = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6'];
+                  return (
+                    <svg width="160" height="160" viewBox="0 0 100 100">
+                      <title>Expense Breakdown</title>
+                      <desc>Share of expenses by category</desc>
+                      <circle cx="50" cy="50" r={r} fill="transparent" stroke="#e5e7eb" strokeWidth="12" />
+                      {data.map((d, i) => {
+                        const len = (Math.max(0, d.total) / total) * circ;
+                        const el = (
+                          <circle
+                            key={d.category}
+                            cx="50" cy="50" r={r} fill="transparent"
+                            stroke={colors[i % colors.length]}
+                            strokeWidth="12"
+                            strokeDasharray={`${len} ${circ - len}`}
+                            strokeDashoffset={-offset}
+                            transform="rotate(-90 50 50)"
+                          />
+                        );
+                        offset += len;
+                        return el;
+                      })}
+                      <text x="50" y="47" textAnchor="middle" fontSize="9" fill="#111">Total</text>
+                      <text x="50" y="58" textAnchor="middle" fontSize="10" fontWeight="bold" fill="#111">{`₹${(total||0).toLocaleString('en-IN')}`}</text>
+                    </svg>
+                  );
+                })()}
+              </div>
+              <div className="text-sm space-y-2">
+                {expenseBreakdown.length === 0 ? (
+                  <div className="text-muted-foreground">No expenses recorded for this period.</div>
+                ) : (
+                  expenseBreakdown.slice(0, 6).map((d, i) => (
+                    <div key={d.category} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6'][i % 7] }} />
+                        <span className="text-foreground">{d.category}</span>
+                      </div>
+                      <span className="text-foreground font-medium">{`₹${(d.total||0).toLocaleString('en-IN')}`}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </Card>
+
+          {/* Monthly Overview (Bars) */}
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-foreground mb-4">Monthly Overview</h3>
+            <div className="h-64 flex items-end justify-center gap-6 p-4">
               {(() => {
-                const data = expenseBreakdown;
-                const total = Math.max(1, data.reduce((s, d) => s + (d.total || 0), 0));
-                const r = 40;
-                const circ = 2 * Math.PI * r;
-                let offset = 0;
-                const colors = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6'];
-                return (
-                  <svg width="160" height="160" viewBox="0 0 100 100">
-                    <title>Expense Breakdown</title>
-                    <desc>Share of expenses by category</desc>
-                    <circle cx="50" cy="50" r={r} fill="transparent" stroke="#e5e7eb" strokeWidth="12" />
-                    {data.map((d, i) => {
-                      const len = (Math.max(0, d.total) / total) * circ;
-                      const el = (
-                        <circle
-                          key={d.category}
-                          cx="50" cy="50" r={r} fill="transparent"
-                          stroke={colors[i % colors.length]}
-                          strokeWidth="12"
-                          strokeDasharray={`${len} ${circ - len}`}
-                          strokeDashoffset={-offset}
-                          transform="rotate(-90 50 50)"
-                        />
-                      );
-                      offset += len;
-                      return el;
-                    })}
-                    <text x="50" y="47" textAnchor="middle" fontSize="9" fill="#111">Total</text>
-                    <text x="50" y="58" textAnchor="middle" fontSize="10" fontWeight="bold" fill="#111">{`₹${(total||0).toLocaleString('en-IN')}`}</text>
-                  </svg>
-                );
+                const bars = [
+                  { label: 'Salaries', value: totalSalaries, color: '#10b981' },
+                  { label: 'Advances', value: totalAdvances, color: '#f59e0b' },
+                  { label: 'Paid', value: totals.totalSalaryPaid, color: '#3b82f6' },
+                  { label: 'Expenses', value: totalExpenses, color: '#ef4444' },
+                  { label: 'Net', value: totalSalaries + totalExpenses, color: '#6366f1' },
+                ];
+                const max = Math.max(1, ...bars.map(b => b.value || 0));
+                return bars.map((b) => {
+                  const h = Math.round(((b.value || 0) / max) * 180);
+                  return (
+                    <div key={b.label} className="flex flex-col items-center">
+                      <div className="text-xs mb-2 text-foreground">{`₹${(b.value||0).toLocaleString('en-IN')}`}</div>
+                      <div className="w-10 rounded-t-md" style={{ height: `${h}px`, backgroundColor: b.color }} />
+                      <div className="text-xs mt-2 text-muted-foreground">{b.label}</div>
+              </div>
+                  );
+                });
               })()}
             </div>
-            <div className="text-sm space-y-2">
-              {expenseBreakdown.length === 0 ? (
-                <div className="text-muted-foreground">No expenses recorded for this period.</div>
-              ) : (
-                expenseBreakdown.slice(0, 6).map((d, i) => (
-                  <div key={d.category} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6'][i % 7] }} />
-                      <span className="text-foreground">{d.category}</span>
-                    </div>
-                    <span className="text-foreground font-medium">{`₹${(d.total||0).toLocaleString('en-IN')}`}</span>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </Card>
-
-        {/* Monthly Overview (Bars) */}
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-foreground mb-4">Monthly Overview</h3>
-          <div className="h-64 flex items-end justify-center gap-6 p-4">
-            {(() => {
-              const bars = [
-                { label: 'Salaries', value: totalSalaries, color: '#10b981' },
-                { label: 'Advances', value: totalAdvances, color: '#f59e0b' },
-                { label: 'Paid', value: totals.totalSalaryPaid, color: '#3b82f6' },
-                { label: 'Expenses', value: totalExpenses, color: '#ef4444' },
-                { label: 'Net', value: totalSalaries + totalExpenses, color: '#6366f1' },
-              ];
-              const max = Math.max(1, ...bars.map(b => b.value || 0));
-              return bars.map((b) => {
-                const h = Math.round(((b.value || 0) / max) * 180);
-                return (
-                  <div key={b.label} className="flex flex-col items-center">
-                    <div className="text-xs mb-2 text-foreground">{`₹${(b.value||0).toLocaleString('en-IN')}`}</div>
-                    <div className="w-10 rounded-t-md" style={{ height: `${h}px`, backgroundColor: b.color }} />
-                    <div className="text-xs mt-2 text-muted-foreground">{b.label}</div>
-            </div>
-                );
-              });
-            })()}
-          </div>
-        </Card>
-      </div>
+          </Card>
+        </div>
+      )}
 
       {/* Recent Activity */}
       <Card>

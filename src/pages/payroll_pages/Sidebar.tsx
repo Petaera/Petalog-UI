@@ -31,7 +31,7 @@ const allSidebarItems = [
     icon: Users,
     path: '/payroll/staff',
     description: 'Employee Management',
-    roles: ['owner', 'manager'] // Available to both
+    roles: ['owner'] // Owner only
   },
   {
     id: 'attendance',
@@ -168,7 +168,9 @@ const Sidebar: React.FC<PayrollSidebarProps> = ({
             <div className="flex-1 flex items-center justify-between">
               <div>
                 <h1 className="font-bold text-lg text-foreground">PetaLog Payroll</h1>
-                <p className="text-sm text-muted-foreground">Business Manager</p>
+                <p className="text-sm text-muted-foreground">
+                  {user?.role === 'manager' ? 'Location Manager' : 'Business Owner'}
+                </p>
               </div>
               <button
                 onClick={onToggle}

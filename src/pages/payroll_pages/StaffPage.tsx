@@ -24,6 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from '@/hooks/use-toast';
 import { useUpiAccounts } from '@/hooks/useUpiAccounts';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { useSelectedLocation } from '@/hooks/useSelectedLocation';
 
 interface Staff {
   id: string;
@@ -71,6 +72,7 @@ const StaffPage: React.FC = () => {
   const [filterRole, setFilterRole] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const selectedLocationId = useSelectedLocation();
 
   // Add Staff form state
   const [name, setName] = useState('');
@@ -80,7 +82,6 @@ const StaffPage: React.FC = () => {
   const [monthlySalary, setMonthlySalary] = useState<string>('');
   const [paymentMode, setPaymentMode] = useState<'Cash' | 'UPI' | ''>('');
   const [selectedUpiAccountId, setSelectedUpiAccountId] = useState<string>('');
-  const [selectedLocationId, setSelectedLocationId] = useState<string>('');
   // Payments state
   const [showPaymentPanel, setShowPaymentPanel] = useState(false);
   const [paymentStaffId, setPaymentStaffId] = useState<string>('');
@@ -97,14 +98,6 @@ const StaffPage: React.FC = () => {
   const [leaves, setLeaves] = useState<Array<{ id: string; staff_id: string; start_date: string; end_date: string; leave_type: 'Paid' | 'Unpaid'; notes: string | null }>>([]);
   const [leavesLoading, setLeavesLoading] = useState(false);
 
-  // Derive selected location for UPI hook
-  useEffect(() => {
-    if (!user?.id) return;
-    try {
-      const stored = localStorage.getItem(`selectedLocation_${user.id}`);
-      setSelectedLocationId(stored || '');
-    } catch (_) {}
-  }, [user?.id]);
 
   const { accounts: upiAccounts } = useUpiAccounts(selectedLocationId);
   const [editMemberId, setEditMemberId] = useState<string | null>(null);
@@ -406,17 +399,16 @@ const StaffPage: React.FC = () => {
           return;
         }
 
-        // Determine selected location from localStorage (set by top bar)
-        let selectedLocation = '';
-        try {
-          const stored = localStorage.getItem(`selectedLocation_${user.id}`);
-          selectedLocation = stored || '';
-        } catch (_) {}
+        // Only load staff if we have a selected location
+        if (!selectedLocationId) {
+          setStaff([]);
+          return;
+        }
 
         // Use a public updatable view to expose payroll.staff: public.payroll_staff
         const tableName = 'payroll_staff';
-        const baseQuery = supabase.from(tableName).select('*');
-        const { data: staffData, error: staffError } = selectedLocation ? await baseQuery.eq('branch_id', selectedLocation) : await baseQuery;
+        const baseQuery = supabase.from(tableName).select('*').eq('branch_id', selectedLocationId);
+        const { data: staffData, error: staffError } = await baseQuery;
         if (staffError) throw staffError;
 
         let mapped = (staffData || []).map((row: any) => ({
@@ -452,20 +444,15 @@ const StaffPage: React.FC = () => {
     loadStaff();
     loadActivities(0);
     // leaves will load after staff is set in a separate effect below
-  }, [user?.id]);
+  }, [selectedLocationId]);
 
   const refreshStaff = async () => {
-    if (!user?.id) return;
+    if (!user?.id || !selectedLocationId) return;
     setLoading(true);
     try {
-      let selectedLocation = '';
-      try {
-        const stored = localStorage.getItem(`selectedLocation_${user.id}`);
-        selectedLocation = stored || '';
-      } catch (_) {}
       const tableName = 'payroll_staff';
-      const baseQuery = supabase.from(tableName).select('*');
-      const { data: staffData } = selectedLocation ? await baseQuery.eq('branch_id', selectedLocation) : await baseQuery;
+      const baseQuery = supabase.from(tableName).select('*').eq('branch_id', selectedLocationId);
+      const { data: staffData } = await baseQuery;
       let mapped = (staffData || []).map((row: any) => ({
         id: row.id,
         name: row.name,
@@ -506,12 +493,7 @@ const StaffPage: React.FC = () => {
       return;
     }
 
-    let selectedLocation = '';
-    try {
-      const stored = localStorage.getItem(`selectedLocation_${user.id}`);
-      selectedLocation = stored || '';
-    } catch (_) {}
-    if (!selectedLocation) {
+    if (!selectedLocationId) {
       toast({ title: 'No location selected', description: 'Select a location from the top bar', variant: 'destructive' });
       return;
     }
@@ -522,7 +504,7 @@ const StaffPage: React.FC = () => {
       const contactToSave = (contact || '').trim();
       let lastError: any = null;
       const payloadSnake = {
-        branch_id: selectedLocation,
+        branch_id: selectedLocationId,
         name: name.trim(),
         role_title: roleTitle.trim(),
         contact: contactToSave || null,
@@ -634,18 +616,18 @@ const StaffPage: React.FC = () => {
           </p>
         </div>
 
-        {user?.role === 'owner' && (
-          <div className="flex items-center gap-2">
-            <Button onClick={() => setShowPaymentPanel((v) => !v)} variant="outline" className="hover:bg-muted">
-              <CreditCard className="h-4 w-4 mr-2" />
-              {showPaymentPanel ? 'Close Payments' : 'Make Payment'}
-            </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => setShowPaymentPanel((v) => !v)} variant="outline" className="hover:bg-muted">
+            <CreditCard className="h-4 w-4 mr-2" />
+            {showPaymentPanel ? 'Close Payments' : 'Make Payment'}
+          </Button>
+          {user?.role === 'owner' && (
             <Button onClick={() => setShowAddForm((v) => !v)} className="bg-primary text-primary-foreground hover:bg-primary/90">
               <Plus className="h-4 w-4 mr-2" />
               {showAddForm ? 'Close' : 'Add Staff Member'}
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {showAddForm && (
@@ -738,7 +720,7 @@ const StaffPage: React.FC = () => {
         </Card>
       )}
 
-      {showPaymentPanel && user?.role === 'owner' && (
+      {showPaymentPanel && (
         <Card className="p-6">
           <h3 className="text-lg font-semibold mb-4">Make Payment</h3>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -763,7 +745,9 @@ const StaffPage: React.FC = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Advance">Advance</SelectItem>
-                  <SelectItem value="Salary">Salary</SelectItem>
+                  {user?.role === 'owner' && (
+                    <SelectItem value="Salary">Salary</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -895,7 +879,7 @@ const StaffPage: React.FC = () => {
         </Card>
       )}
 
-      {user?.role === 'owner' && editMemberId && (
+      {editMemberId && (
         <Card className="p-6">
           <h3 className="text-lg font-semibold mb-4">Edit Staff</h3>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -1058,29 +1042,33 @@ const StaffPage: React.FC = () => {
           </div>
         </Card>
         
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Total Salaries</p>
-              <p className="text-xl font-bold text-foreground">
-                {formatCurrency(staff.reduce((sum, s) => sum + (s.monthlySalary || 0), 0))}
-              </p>
-            </div>
-            <IndianRupee className="h-8 w-8 text-orange-600" />
-          </div>
-        </Card>
-        
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Payable</p>
-              <p className="text-xl font-bold text-green-600">
-                {formatCurrency(staff.reduce((sum, s) => sum + (s.payableSalary || 0), 0))}
-              </p>
-            </div>
-            <Calendar className="h-8 w-8 text-green-600" />
-          </div>
-        </Card>
+        {user?.role === 'owner' && (
+          <>
+            <Card className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Salaries</p>
+                  <p className="text-xl font-bold text-foreground">
+                    {formatCurrency(staff.reduce((sum, s) => sum + (s.monthlySalary || 0), 0))}
+                  </p>
+                </div>
+                <IndianRupee className="h-8 w-8 text-orange-600" />
+              </div>
+            </Card>
+            
+            <Card className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Payable</p>
+                  <p className="text-xl font-bold text-green-600">
+                    {formatCurrency(staff.reduce((sum, s) => sum + (s.payableSalary || 0), 0))}
+                  </p>
+                </div>
+                <Calendar className="h-8 w-8 text-green-600" />
+              </div>
+            </Card>
+          </>
+        )}
       </div>
 
       {/* Staff Table */}
@@ -1101,11 +1089,15 @@ const StaffPage: React.FC = () => {
                 <th className="text-left p-4 font-medium text-foreground">Contact</th>
                 <th className="text-left p-4 font-medium text-foreground">Joining Date</th>
                 <th className="text-left p-4 font-medium text-foreground">Payment Method</th>
-                <th className="text-right p-4 font-medium text-foreground">Salary</th>
+                {user?.role === 'owner' && (
+                  <th className="text-right p-4 font-medium text-foreground">Salary</th>
+                )}
                 <th className="text-center p-4 font-medium text-foreground">Attendance</th>
                 <th className="text-center p-4 font-medium text-foreground">Leaves</th>
                 <th className="text-center p-4 font-medium text-foreground">Advances</th>
-                <th className="text-right p-4 font-medium text-foreground">Payable</th>
+                {user?.role === 'owner' && (
+                  <th className="text-right p-4 font-medium text-foreground">Payable</th>
+                )}
                 <th className="text-center p-4 font-medium text-foreground">Status</th>
                 <th className="text-center p-4 font-medium text-foreground">Actions</th>
               </tr>
@@ -1142,20 +1134,22 @@ const StaffPage: React.FC = () => {
                   </td>
                   <td className="p-4 text-foreground">{formatDate(member.dateOfJoining)}</td>
                   <td className="p-4 text-foreground">{renderPaymentMethod(member)}</td>
-                  <td className="p-4 text-right font-medium text-foreground">
-                    <div className="flex flex-col items-end">
-                      <span>{formatCurrency(member.monthlySalary || 0)}</span>
-                      {member.salaryPaid && member.salaryPaid > 0 && (
-                        <span className={
-                          member.salaryPaid >= (member.monthlySalary || 0)
-                            ? 'text-green-600 text-xs'
-                            : 'text-amber-600 text-xs'
-                        }>
-                          {member.salaryPaid >= (member.monthlySalary || 0) ? 'Paid' : `Paid ${formatCurrency(member.salaryPaid)}`}
-                        </span>
-                      )}
-                    </div>
-                  </td>
+                  {user?.role === 'owner' && (
+                    <td className="p-4 text-right font-medium text-foreground">
+                      <div className="flex flex-col items-end">
+                        <span>{formatCurrency(member.monthlySalary || 0)}</span>
+                        {member.salaryPaid && member.salaryPaid > 0 && (
+                          <span className={
+                            member.salaryPaid >= (member.monthlySalary || 0)
+                              ? 'text-green-600 text-xs'
+                              : 'text-amber-600 text-xs'
+                          }>
+                            {member.salaryPaid >= (member.monthlySalary || 0) ? 'Paid' : `Paid ${formatCurrency(member.salaryPaid)}`}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  )}
                   <td className="p-4 text-center text-foreground">
                     <div className="flex flex-col items-center">
                       <span className="text-green-600 font-medium">{`${member.presentDays || 0}P`}</span>
@@ -1169,7 +1163,9 @@ const StaffPage: React.FC = () => {
                     </div>
                   </td>
                   <td className="p-4 text-center font-medium text-foreground">{formatCurrency(member.totalAdvances || 0)}</td>
-                  <td className="p-4 text-right font-semibold text-foreground">{formatCurrency(member.payableSalary || 0)}</td>
+                  {user?.role === 'owner' && (
+                    <td className="p-4 text-right font-semibold text-foreground">{formatCurrency(member.payableSalary || 0)}</td>
+                  )}
                   <td className="p-4 text-center">
                     {member.isActive ? (
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">

@@ -25,6 +25,7 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
+import { useSelectedLocation } from '@/hooks/useSelectedLocation';
 
 ChartJS.register(
   CategoryScale,
@@ -46,7 +47,7 @@ const ReportsPage: React.FC = () => {
   const [reportType, setReportType] = useState<'salary' | 'expense' | 'combined'>('combined');
   const [salaryReport, setSalaryReport] = useState<any>(null);
   const [expenseReport, setExpenseReport] = useState<any>(null);
-  const [selectedLocationId, setSelectedLocationId] = useState<string>('');
+  const selectedLocationId = useSelectedLocation();
   const [prevExpenseTotal, setPrevExpenseTotal] = useState<number>(0);
   const [prevSalaryTotals, setPrevSalaryTotals] = useState<{ salaries: number; advances: number }>({ salaries: 0, advances: 0 });
   const [salaryFilterRole, setSalaryFilterRole] = useState<string>('');
@@ -128,13 +129,6 @@ const ReportsPage: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    if (!user?.id) return;
-    try {
-      const stored = localStorage.getItem(`selectedLocation_${user.id}`);
-      setSelectedLocationId(stored || '');
-    } catch (_) {}
-  }, [user?.id]);
 
   useEffect(() => {
     const loadBranchName = async () => {
@@ -150,6 +144,17 @@ const ReportsPage: React.FC = () => {
     const loadReports = async () => {
       try {
         setLoading(true);
+        
+        // Only load if we have a selected location
+        if (!selectedLocationId) {
+          setExpenseReport(null);
+          setSalaryReport(null);
+          setPrevExpenseTotal(0);
+          setPrevSalaryTotals({ salaries: 0, advances: 0 });
+          setLoading(false);
+          return;
+        }
+        
         // Build date window
         const monthStart = `${selectedMonth}-01`;
         const monthEnd = new Date(new Date(monthStart).getFullYear(), new Date(monthStart).getMonth() + 1, 0)
@@ -161,16 +166,16 @@ const ReportsPage: React.FC = () => {
           .from('expenses')
           .select('id, amount, date, category_id, payment_mode, notes, branch_id')
           .gte('date', monthStart)
-          .lte('date', monthEnd);
-        if (selectedLocationId) expQuery = expQuery.eq('branch_id', selectedLocationId);
+          .lte('date', monthEnd)
+          .eq('branch_id', selectedLocationId);
         const { data: expRows, error: expErr } = await expQuery;
         if (expErr) throw expErr;
 
         // Load categories for naming
         let catQuery: any = supabase
           .from('expense_categories')
-          .select('id, name, branch_id');
-        if (selectedLocationId) catQuery = catQuery.eq('branch_id', selectedLocationId);
+          .select('id, name, branch_id')
+          .eq('branch_id', selectedLocationId);
         const { data: catRows } = await catQuery;
         const catMap: Record<string, string> = {};
         (catRows || []).forEach((c: any) => { catMap[c.id] = c.name; });
@@ -200,8 +205,8 @@ const ReportsPage: React.FC = () => {
           .from('expenses')
           .select('amount, date, branch_id')
           .gte('date', prevStart)
-          .lte('date', prevEnd);
-        if (selectedLocationId) prevExpQuery = prevExpQuery.eq('branch_id', selectedLocationId);
+          .lte('date', prevEnd)
+          .eq('branch_id', selectedLocationId);
         const { data: prevRows } = await prevExpQuery;
         setPrevExpenseTotal((prevRows || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0));
 
@@ -221,8 +226,8 @@ const ReportsPage: React.FC = () => {
         const staffRows = await selectWithFallback(
           ['payroll_staff', 'payroll.staff'],
           async (q: any) => {
-            let query = q.select('id, monthly_salary, branch_id, role_title, default_payment_mode, name');
-            if (selectedLocationId) query = query.eq('branch_id', selectedLocationId);
+            let query = q.select('id, monthly_salary, branch_id, role_title, default_payment_mode, name')
+              .eq('branch_id', selectedLocationId);
             const { data, error } = await query;
             return { data, error };
           }

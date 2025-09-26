@@ -42,6 +42,7 @@ import PayrollAttendancePage from "./pages/payroll_pages/AttendancePage";
 import PayrollExpensesPage from "./pages/payroll_pages/ExpensesPage";
 import PayrollReportsPage from "./pages/payroll_pages/ReportsPage";
 import PayrollSettingsPage from "./pages/payroll_pages/SettingsPage";
+import { ProtectedPayrollRoute } from "./components/ProtectedPayrollRoute";
 
 // Manager pages
 import ManagerPortal from "./pages/ManagerPortal";
@@ -378,8 +379,22 @@ const App = () => (
                 <Route path="staff" element={<PayrollStaffPage />} />
                 <Route path="attendance" element={<PayrollAttendancePage />} />
                 <Route path="expenses" element={<PayrollExpensesPage />} />
-                <Route path="reports" element={<PayrollReportsPage />} />
-                <Route path="settings" element={<PayrollSettingsPage />} />
+                <Route 
+                  path="reports" 
+                  element={
+                    <ProtectedPayrollRoute allowedRoles={["owner"]}>
+                      <PayrollReportsPage />
+                    </ProtectedPayrollRoute>
+                  } 
+                />
+                <Route 
+                  path="settings" 
+                  element={
+                    <ProtectedPayrollRoute allowedRoles={["owner"]}>
+                      <PayrollSettingsPage />
+                    </ProtectedPayrollRoute>
+                  } 
+                />
               </Route>
               
               {/* Catch all route */}

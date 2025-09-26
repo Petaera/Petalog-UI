@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { toast } from '@/hooks/use-toast';
+import { useSelectedLocation } from '@/hooks/useSelectedLocation';
 
 interface Staff {
   id: string;
@@ -44,6 +45,7 @@ const AttendancePage: React.FC = () => {
   const [leaveType, setLeaveType] = useState<'Paid' | 'Unpaid' | ''>('');
   const [leaveNotes, setLeaveNotes] = useState<string>('');
   const [leaveSaving, setLeaveSaving] = useState(false);
+  const selectedLocationId = useSelectedLocation();
 
   const submitLongLeave = async () => {
     if (user?.role !== 'manager' && user?.role !== 'owner') {
@@ -85,20 +87,26 @@ const AttendancePage: React.FC = () => {
     }
   };
 
+
   useEffect(() => {
     const loadData = async () => {
       try {
         setLoading(true);
+        
+        if (!selectedLocationId) {
+          setStaff([]);
+          setDailyAttendance({});
+          setLoading(false);
+          return;
+        }
         
         // Fetch staff with schema fallback (payroll -> public)
         const fetchStaff = async () => {
           let q = supabase
             .from('staff')
             .select('id, name, role_title, is_active, branch_id')
-            .eq('is_active', true);
-          if (user?.role === 'manager' && user?.assigned_location) {
-            q = q.eq('branch_id', user.assigned_location);
-          }
+            .eq('is_active', true)
+            .eq('branch_id', selectedLocationId);
           const { data, error } = await q;
           if (error) throw error;
           return data || [];
@@ -167,7 +175,7 @@ const AttendancePage: React.FC = () => {
     };
 
     loadData();
-  }, []);
+  }, [selectedLocationId]);
 
   // Reload attendance when date changes (after staff is loaded)
   useEffect(() => {
