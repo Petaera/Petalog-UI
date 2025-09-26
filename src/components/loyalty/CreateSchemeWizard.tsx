@@ -909,13 +909,15 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
           Back
         </Button>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={handleQuickSave}
-            disabled={isCreating || isCooldown}
-          >
-            Make changes
-          </Button>
+          {isEditMode && (
+            <Button
+              variant="outline"
+              onClick={handleQuickSave}
+              disabled={isCreating || isCooldown}
+            >
+              Make changes
+            </Button>
+          )}
           <Button
             variant="outline"
             onClick={handleNext}

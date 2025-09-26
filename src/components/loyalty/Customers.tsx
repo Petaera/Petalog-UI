@@ -17,6 +17,7 @@ import {
   Zap
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
 import { useLocation } from 'react-router-dom';
 
 const typeColors = {
@@ -37,6 +38,7 @@ const statusColors = {
 
 export function Customers() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const location = useLocation();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -92,6 +94,11 @@ export function Customers() {
   const [existingVehicle, setExistingVehicle] = useState<any>(null);
   const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
   const [showVehicleSuggestions, setShowVehicleSuggestions] = useState(false);
+  const [showRenewModal, setShowRenewModal] = useState(false);
+  const [renewPaymentMethod, setRenewPaymentMethod] = useState('cash');
+  const [renewUpiAccounts, setRenewUpiAccounts] = useState<Array<{ id: string; account_name: string; upi_id: string; qr_code_url: string }>>([]);
+  const [renewSelectedUpiAccountId, setRenewSelectedUpiAccountId] = useState('');
+  const [renewShowQr, setRenewShowQr] = useState(false);
 
   // Function to fetch existing customer by phone
   const fetchExistingCustomer = async (phone: string) => {
@@ -109,10 +116,10 @@ export function Customers() {
         .eq('owner_id', user?.id);
       
       const locationIds = userLocations?.map(l => l.location_id) || [];
-      console.log('User locations for customer search:', locationIds);
+      // info popup removed
       
       if (locationIds.length === 0) {
-        console.log('No locations found for user');
+        // no locations
         setExistingCustomer(null);
         setShowCustomerSuggestions(false);
         return;
@@ -139,7 +146,7 @@ export function Customers() {
         }
       }
 
-      console.log('Customer query result:', customer);
+      // customer search completed
 
       if (customer) {
         setExistingCustomer(customer);
@@ -158,7 +165,7 @@ export function Customers() {
         setShowCustomerSuggestions(false);
       }
     } catch (error) {
-      console.error('Error fetching customer:', error);
+      toast({ title: 'Fetch failed', description: 'Could not fetch customer details', variant: 'destructive' });
       setExistingCustomer(null);
       setShowCustomerSuggestions(false);
     }
@@ -173,7 +180,7 @@ export function Customers() {
     }
 
     try {
-      console.log('Fetching vehicle for:', numberPlate.trim().toUpperCase(), 'User ID:', user?.id);
+      // fetching vehicle
       
       // First get the user's permitted locations
       const { data: userLocations } = await supabase
@@ -182,10 +189,10 @@ export function Customers() {
         .eq('owner_id', user?.id);
       
       const locationIds = userLocations?.map(l => l.location_id) || [];
-      console.log('User locations:', locationIds);
+      // resolved locations for vehicle fetch
       
       if (locationIds.length === 0) {
-        console.log('No locations found for user');
+        // no locations
         setExistingVehicle(null);
         setShowVehicleSuggestions(false);
         return;
@@ -227,7 +234,7 @@ export function Customers() {
         }
       }
 
-      console.log('Vehicle query result:', vehicle, 'Error:', vehicleError);
+      // vehicle query finished
 
       if (vehicle) {
         setExistingVehicle(vehicle);
@@ -244,7 +251,7 @@ export function Customers() {
 
         // Also fetch and autofill the associated customer details
         if (vehicle.owner_id) {
-          console.log('Fetching customer for vehicle owner:', vehicle.owner_id);
+          // fetching owner for vehicle
           
           const { data: customer, error: customerError } = await supabase
             .from('customers')
@@ -252,7 +259,7 @@ export function Customers() {
             .eq('id', vehicle.owner_id)
             .maybeSingle();
 
-          console.log('Customer query result:', customer, 'Error:', customerError);
+          // customer fetch finished
 
           if (customer) {
             setExistingCustomer(customer);
@@ -269,12 +276,12 @@ export function Customers() {
           }
         }
       } else {
-        console.log('No vehicle found');
+        // no vehicle found
         setExistingVehicle(null);
         setShowVehicleSuggestions(false);
       }
     } catch (error) {
-      console.error('Error fetching vehicle:', error);
+      toast({ title: 'Fetch failed', description: 'Could not fetch vehicle details', variant: 'destructive' });
       setExistingVehicle(null);
       setShowVehicleSuggestions(false);
     }
@@ -507,7 +514,7 @@ export function Customers() {
       if (planIds.length > 0) {
         const { data: plans } = await supabase
           .from('subscription_plans')
-          .select('id, name, type, price, max_redemptions, currency')
+          .select('id, name, type, price, max_redemptions, currency, multiplier, plan_amount')
           .in('id', planIds);
         const map: Record<string, any> = {};
         (plans || []).forEach(p => { map[p.id] = p; });
@@ -716,14 +723,14 @@ export function Customers() {
 
   // Debounced fetch during identify step as user types
   useEffect(() => {
-    console.log('useEffect triggered:', { planType, phoneInput, vehicleNumberInput, user: user?.id });
+    // identify effect triggered
     
     const timeoutId = setTimeout(() => {
       if (planType === 'credit' && phoneInput.trim()) {
-        console.log('Fetching customer for phone:', phoneInput);
+        // fetching customer by phone
         fetchExistingCustomer(phoneInput);
       } else if (planType !== 'credit' && vehicleNumberInput.trim()) {
-        console.log('Fetching vehicle for number:', vehicleNumberInput);
+        // fetching vehicle by number
         fetchExistingVehicle(vehicleNumberInput);
       }
     }, 500); // 500ms debounce
@@ -753,12 +760,12 @@ export function Customers() {
 
     try {
       if (!(selectedPlanId || selectedScheme)) {
-        alert('Please select a plan');
+        toast({ title: 'Select a plan', variant: 'destructive' });
         setIsLoading(false);
         return;
       }
       if (!customerDetails?.phone) {
-        alert('Phone number is required');
+        toast({ title: 'Phone number required', variant: 'destructive' });
         setIsLoading(false);
         return;
       }
@@ -982,7 +989,7 @@ export function Customers() {
           .select('id')
           .limit(1);
         if (payErr) {
-          console.error('[payment] insert error', payErr);
+          toast({ title: 'Payment failed', description: 'Could not save payment', variant: 'destructive' });
         } else if (isCredit) {
           // For credit plans, record a credit_transactions topup referencing this payment
           const relatedPaymentId = payIns && payIns[0]?.id;
@@ -1004,7 +1011,7 @@ export function Customers() {
                   created_by: user?.id || null,
                 }
               ]);
-            if (txErr) console.error('[credit_tx] insert error', txErr);
+            if (txErr) { toast({ title: 'Transaction failed', description: 'Could not record credit transaction', variant: 'destructive' }); }
           }
         }
       }
@@ -1020,7 +1027,7 @@ export function Customers() {
             .eq('id', currentPlanId)
             .maybeSingle();
           if (planErr) {
-            console.error('[credit] plan fetch error', planErr);
+            toast({ title: 'Plan fetch failed', variant: 'destructive' });
           }
           const typeNorm = String(planRow?.type || '').toLowerCase().trim();
           if (typeNorm === 'credit') {
@@ -1037,7 +1044,7 @@ export function Customers() {
               .from('credit_accounts')
               .insert([insertPayload]);
             if (insErr) {
-              console.warn('[credit] insert error', insErr);
+              // ignore duplicate handling below
               // If duplicate (already exists), increment totals
               const duplicate = String(insErr?.message || '').toLowerCase().includes('duplicate') || insErr?.code === '23505';
               if (duplicate) {
@@ -1054,15 +1061,15 @@ export function Customers() {
                     .update({ total_deposited: newTotalDeposited, balance: newBalance, currency: 'INR', last_topup_at: nowIso })
                     .eq('id', existing.id);
                   if (updErr) {
-                    console.error('[credit] update after duplicate failed', updErr);
-                    alert('Failed to update existing credit balance');
+                    // silent fail
+                    toast({ title: 'Update failed', description: 'Could not update credit balance', variant: 'destructive' });
                   }
                 } else if (selErr) {
-                  console.error('[credit] select after duplicate failed', selErr);
-                  alert('Failed to update credit account');
+                  // silent fail
+                  toast({ title: 'Update failed', description: 'Could not update credit account', variant: 'destructive' });
                 }
               } else {
-                alert('Failed to create credit account. Check permissions/policies.');
+                toast({ title: 'Create failed', description: 'Could not create credit account', variant: 'destructive' });
               }
             }
           }
@@ -1078,7 +1085,7 @@ export function Customers() {
         setShowAddModal(false);
       }, 1200);
     } catch (e: any) {
-      alert(e?.message || 'Something went wrong');
+      toast({ title: 'Error', description: e?.message || 'Something went wrong', variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
@@ -1101,6 +1108,24 @@ export function Customers() {
     };
     loadTopupUpi();
   }, [topupMethod, selectedPurchase?.location_id]);
+
+  useEffect(() => {
+    const loadRenewUpi = async () => {
+      if (renewPaymentMethod !== 'UPI' || !selectedPurchase?.location_id) {
+        setRenewUpiAccounts([]);
+        setRenewSelectedUpiAccountId('');
+        return;
+      }
+      const { data } = await supabase
+        .from('upi_accounts_with_locations')
+        .select('id, account_name, upi_id, qr_code_url')
+        .eq('location_id', selectedPurchase.location_id)
+        .eq('is_active', true);
+      setRenewUpiAccounts(data || []);
+      if ((data || []).length === 1) setRenewSelectedUpiAccountId((data as any)[0].id);
+    };
+    loadRenewUpi();
+  }, [renewPaymentMethod, selectedPurchase?.location_id]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -1449,7 +1474,18 @@ export function Customers() {
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium text-foreground">Status:</span>
-                    <Badge variant="outline">{String(customer.status || '').charAt(0).toUpperCase() + String(customer.status || '').slice(1)}</Badge>
+                    <Badge 
+                      variant="outline" 
+                      className={
+                        String(customer.status || '').toLowerCase() === 'active' 
+                          ? 'border-green-500 text-green-700 bg-green-50' 
+                          : String(customer.status || '').toLowerCase() === 'expired'
+                          ? 'border-red-500 text-red-700 bg-red-50'
+                          : 'border-gray-500 text-gray-700 bg-gray-50'
+                      }
+                    >
+                      {String(customer.status || '').charAt(0).toUpperCase() + String(customer.status || '').slice(1)}
+                    </Badge>
                   </div>
                   {customer.expiry_date && (
                     <div className="flex items-center justify-between">
@@ -1517,17 +1553,32 @@ export function Customers() {
                   </div>
                   
                   {/* Show Remove from Plan button for expired customers below the details */}
-                  {(customer.status === 'expired' || 
-                    (customer.expiry_date && new Date(customer.expiry_date) < new Date()) ||
-                    (customer.remaining_visits !== null && customer.remaining_visits <= 0) ||
-                    (String(plan.type || '').toLowerCase() === 'credit' && Number(creditAccountMap[customer.customer_id]?.balance ?? 0) <= 0)) && (
+                  {(() => {
+                    const currentCreditBalance = Number(creditAccountMap[customer.customer_id]?.balance ?? 0);
+                    const planType = String(plan.type || '').toLowerCase();
+                    const isExpiredByDate = customer.expiry_date && new Date(customer.expiry_date) < new Date();
+                    const isExpiredByVisits = customer.remaining_visits !== null && customer.remaining_visits <= 0;
+                    const isExpiredByCredit = planType === 'credit' && currentCreditBalance <= 0;
+                    const isExpiredByStatus = customer.status === 'expired';
+                    
+                    // Only show expiry notice if truly expired and no active value remaining
+                    const shouldShowExpired = (isExpiredByStatus || isExpiredByDate || isExpiredByVisits || isExpiredByCredit) &&
+                      // Additional safety checks
+                      (planType !== 'credit' || currentCreditBalance <= 0) &&
+                      (planType === 'credit' || customer.remaining_visits === 0 || customer.remaining_visits === null);
+                    
+                    if (!shouldShowExpired) return null;
+                    
+                    const expiryReason = isExpiredByStatus ? 'This plan has expired' :
+                                       isExpiredByDate ? 'This plan has expired (date)' :
+                                       isExpiredByVisits ? 'This plan has expired (no visits left)' :
+                                       isExpiredByCredit ? 'This plan has expired (no credit left)' :
+                                       'This plan has expired';
+                    
+                    return (
                     <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
                       <div className="text-sm text-red-700 font-medium mb-2">
-                        {customer.status === 'expired' ? 'This plan has expired' :
-                         customer.expiry_date && new Date(customer.expiry_date) < new Date() ? 'This plan has expired (date)' :
-                         customer.remaining_visits !== null && customer.remaining_visits <= 0 ? 'This plan has expired (no visits left)' :
-                         String(plan.type || '').toLowerCase() === 'credit' && Number(creditAccountMap[customer.customer_id]?.balance ?? 0) <= 0 ? 'This plan has expired (no credit left)' :
-                         'This plan has expired'}
+                          {expiryReason}
                       </div>
                       <Button 
                         size="sm" 
@@ -1540,7 +1591,7 @@ export function Customers() {
                             .delete()
                             .eq('id', customer.id);
                           if (delErr) { 
-                            alert('Failed to remove from plan'); 
+                              toast({ title: 'Delete failed', description: 'Could not remove from plan', variant: 'destructive' }); 
                             return; 
                           }
                           setSubscriptionCustomers(prev => prev.filter(p => p.id !== customer.id));
@@ -1549,7 +1600,8 @@ export function Customers() {
                         Remove from Plan
                       </Button>
                     </div>
-                  )}
+                    );
+                  })()}
                 </div>
                 {/* Plan Details Card */}
                 <Card className="bg-muted/30 border border-border">
@@ -1582,27 +1634,67 @@ export function Customers() {
                       Top-up
                     </Button>
                   )}
-                  {(String(plan.type || '').toLowerCase() === 'package' || String(plan.type || '').toLowerCase() === 'visit') && (
-                    <Button size="sm" variant="outline" onClick={() => { setSelectedPurchase(customer); setShowMarkVisit(true); setVisitNotes(''); setVisitService('full wash'); }}>
-                      Mark Visit
+                  {(String(plan.type || '').toLowerCase() === 'package' || String(plan.type || '').toLowerCase() === 'visit') && 
+                   (customer.remaining_visits === 0 || customer.status === 'expired') && (
+                    <Button size="sm" variant="outline" onClick={() => { 
+                      setSelectedPurchase(customer); 
+                      setRenewPaymentMethod('cash'); 
+                      setRenewSelectedUpiAccountId(''); 
+                      setShowRenewModal(true); 
+                    }}>
+                      Renew Plan
                     </Button>
                   )}
-                  {String(plan.type || '').toLowerCase() === 'credit' && (
-                    <Button size="sm" variant="outline" onClick={() => { setSelectedPurchase(customer); setShowMarkEntry(true); setEntryAmount(''); setEntryService('full wash'); setEntryNotes(''); }}>
-                      Mark Entry
-                    </Button>
-                  )}
-                  {customer.expiry_date && new Date(customer.expiry_date) < new Date() && (
-                    <Button size="sm" variant="outline" className="text-red-600 border-red-300" onClick={async () => {
-                      if (!confirm('Remove this customer from the plan?')) return;
+                  {/* Delete button for completed/expired plans */}
+                  {(() => {
+                    const currentCreditBalance = Number(creditAccountMap[customer.customer_id]?.balance ?? 0);
+                    const planType = String(plan.type || '').toLowerCase();
+                    const isExpiredByDate = customer.expiry_date && new Date(customer.expiry_date) < new Date();
+                    const isExpiredByVisits = customer.remaining_visits !== null && customer.remaining_visits <= 0;
+                    const isExpiredByCredit = planType === 'credit' && currentCreditBalance <= 0;
+                    const isExpiredByStatus = customer.status === 'expired';
+                    
+                    // Only show delete if truly expired and no active value remaining
+                    const shouldShowDelete = (isExpiredByStatus || isExpiredByDate || isExpiredByVisits || isExpiredByCredit) &&
+                      // Additional safety checks
+                      (planType !== 'credit' || currentCreditBalance <= 0) &&
+                      (planType === 'credit' || customer.remaining_visits === 0 || customer.remaining_visits === null);
+                    
+                    return shouldShowDelete && (
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="text-red-600 border-red-300 hover:bg-red-50" 
+                        onClick={async () => {
+                          if (!confirm('Delete this subscription plan? This will permanently remove the subscription record.')) return;
                       const { error: delErr } = await supabase
                         .from('subscription_purchases')
                         .delete()
                         .eq('id', customer.id);
-                      if (delErr) { alert('Failed to remove from plan'); return; }
+                          if (delErr) { 
+                            toast({ title: 'Delete failed', description: 'Could not delete plan', variant: 'destructive' }); 
+                            return; 
+                          }
                       setSubscriptionCustomers(prev => prev.filter(p => p.id !== customer.id));
-                    }}>
-                      Remove from Plan
+                          toast({ title: 'Plan deleted' });
+                        }}
+                      >
+                        Delete
+                      </Button>
+                    );
+                  })()}
+                  {(String(plan.type || '').toLowerCase() === 'package' || String(plan.type || '').toLowerCase() === 'visit') && 
+                   customer.remaining_visits > 0 && 
+                   customer.status === 'active' && (
+                    <Button size="sm" variant="outline" onClick={() => { setSelectedPurchase(customer); setShowMarkVisit(true); setVisitNotes(''); setVisitService('full wash'); }}>
+                      Mark Visit
+                    </Button>
+                  )}
+                  {String(plan.type || '').toLowerCase() === 'credit' && 
+                   Number(creditAccountMap[customer.customer_id]?.balance ?? 0) > 0 && 
+                   customer.status === 'active' && (
+                    <Button size="sm" variant="outline" onClick={() => { setSelectedPurchase(customer); setShowMarkEntry(true); setEntryAmount(''); setEntryService('full wash'); setEntryNotes(''); }}>
+                      Mark Entry
                     </Button>
                   )}
                 </div>
@@ -1661,7 +1753,18 @@ export function Customers() {
                       </div>
                       <div>
                         <div className="text-xs text-muted-foreground">Status</div>
-                        <div className="font-medium">{String(selectedPurchase.status || '').charAt(0).toUpperCase() + String(selectedPurchase.status || '').slice(1)}</div>
+                        <Badge 
+                          variant="outline" 
+                          className={
+                            String(selectedPurchase.status || '').toLowerCase() === 'active' 
+                              ? 'border-green-500 text-green-700 bg-green-50' 
+                              : String(selectedPurchase.status || '').toLowerCase() === 'expired'
+                              ? 'border-red-500 text-red-700 bg-red-50'
+                              : 'border-gray-500 text-gray-700 bg-gray-50'
+                          }
+                        >
+                          {String(selectedPurchase.status || '').charAt(0).toUpperCase() + String(selectedPurchase.status || '').slice(1)}
+                        </Badge>
                       </div>
                     </div>
                     <Card className="bg-muted/30 border border-border">
@@ -1764,8 +1867,28 @@ export function Customers() {
             </div>
             <CardContent className="p-6 space-y-4">
               <div>
-                <label className="block mb-1 font-medium">Amount (INR)</label>
-                <Input type="number" min="1" value={topupAmount} onChange={(e) => setTopupAmount(e.target.value)} placeholder="Enter amount" />
+                <label className="block mb-1 font-medium">Amount to Pay (INR)</label>
+                <Input type="number" min="1" value={topupAmount} onChange={(e) => setTopupAmount(e.target.value)} placeholder="Enter amount you want to pay" />
+                {(() => {
+                  const plan = planDetailsMap[selectedPurchase?.plan_id];
+                  const multiplier = Number(plan?.multiplier || 1);
+                  const payAmount = Number(topupAmount || 0);
+                  const creditAmount = payAmount * multiplier;
+                  
+                  if (payAmount > 0 && multiplier > 0) {
+                    return (
+                      <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="text-sm font-medium text-blue-900">Credit Calculation:</div>
+                        <div className="text-sm text-blue-700">
+                          <div>Amount you pay: ₹{payAmount.toLocaleString()}</div>
+                          <div>Plan multiplier: {multiplier}x</div>
+                          <div className="font-medium">Credit you'll receive: ₹{creditAmount.toLocaleString()}</div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
               <div>
                 <label className="block mb-1 font-medium">Payment Method</label>
@@ -1798,10 +1921,16 @@ export function Customers() {
               <div className="flex justify-end gap-2 pt-2">
                 <Button variant="outline" onClick={() => setShowTopupModal(false)}>Close</Button>
                 <Button onClick={async () => {
-                  const amount = Number(topupAmount || '0');
-                  if (!amount || amount <= 0) { alert('Enter valid amount'); return; }
+                  const payAmount = Number(topupAmount || '0');
+                  if (!payAmount || payAmount <= 0) { toast({ title: 'Invalid amount', description: 'Enter a valid amount', variant: 'destructive' }); return; }
+                  
+                  // Calculate credit amount using multiplier
+                  const plan = planDetailsMap[selectedPurchase?.plan_id];
+                  const multiplier = Number(plan?.multiplier || 1);
+                  const creditAmount = Math.round(payAmount * multiplier);
+                  
                   try {
-                    // Create payment row
+                    // Create payment row (record what customer actually paid)
                     const paymentMeta = (() => {
                       if (topupMethod !== 'upi') return null;
                       const sel = topupUpiAccounts.find(a => a.id === topupSelectedUpiAccountId);
@@ -1813,7 +1942,7 @@ export function Customers() {
                         {
                           purchase_id: selectedPurchase.id,
                           customer_id: selectedPurchase.customer_id,
-                          amount,
+                          amount: payAmount, // Record actual payment amount
                           payment_method: topupMethod,
                           payment_meta: paymentMeta,
                           created_by: user?.id || null,
@@ -1821,7 +1950,7 @@ export function Customers() {
                       ])
                       .select('id')
                       .limit(1);
-                    if (payErr) { alert('Payment insert failed'); return; }
+                    if (payErr) { toast({ title: 'Payment failed', description: 'Could not save payment', variant: 'destructive' }); return; }
                     const relatedPaymentId = payIns && payIns[0]?.id;
                     // Ensure/create credit account
                     const { data: creditAcc } = await supabase
@@ -1832,16 +1961,27 @@ export function Customers() {
                     if (creditAcc?.id) {
                       const { error: updErr } = await supabase
                         .from('credit_accounts')
-                        .update({ total_deposited: Number(creditAcc.total_deposited || 0) + amount, balance: Number(creditAcc.balance || 0) + amount, last_topup_at: new Date().toISOString(), currency: 'INR' })
+                        .update({ 
+                          total_deposited: Number(creditAcc.total_deposited || 0) + creditAmount, 
+                          balance: Number(creditAcc.balance || 0) + creditAmount, 
+                          last_topup_at: new Date().toISOString(), 
+                          currency: 'INR' 
+                        })
                         .eq('id', creditAcc.id);
-                      if (updErr) { alert('Credit account update failed'); return; }
+                      if (updErr) { toast({ title: 'Update failed', description: 'Could not update credit account', variant: 'destructive' }); return; }
                     } else {
                       const { error: insErr } = await supabase
                         .from('credit_accounts')
-                        .insert([{ customer_id: selectedPurchase.customer_id, total_deposited: amount, balance: amount, currency: 'INR', last_topup_at: new Date().toISOString() }]);
-                      if (insErr) { alert('Credit account create failed'); return; }
+                        .insert([{ 
+                          customer_id: selectedPurchase.customer_id, 
+                          total_deposited: creditAmount, 
+                          balance: creditAmount, 
+                          currency: 'INR', 
+                          last_topup_at: new Date().toISOString() 
+                        }]);
+                      if (insErr) { toast({ title: 'Create failed', description: 'Could not create credit account', variant: 'destructive' }); return; }
                     }
-                    // Insert credit transaction
+                    // Insert credit transaction (record credit amount, not payment amount)
                     const { data: creditAcc2 } = await supabase
                       .from('credit_accounts')
                       .select('id')
@@ -1850,8 +1990,14 @@ export function Customers() {
                     if (creditAcc2?.id) {
                       const { error: txErr } = await supabase
                         .from('credit_transactions')
-                        .insert([{ credit_account_id: creditAcc2.id, transaction_type: 'topup', amount, related_payment_id: relatedPaymentId || null, created_by: user?.id || null }]);
-                      if (txErr) { alert('Credit transaction insert failed'); return; }
+                        .insert([{ 
+                          credit_account_id: creditAcc2.id, 
+                          transaction_type: 'topup', 
+                          amount: creditAmount, // Credit amount, not payment amount
+                          related_payment_id: relatedPaymentId || null, 
+                          created_by: user?.id || null 
+                        }]);
+                      if (txErr) { toast({ title: 'Transaction failed', description: 'Could not record credit transaction', variant: 'destructive' }); return; }
                     }
                     // Refresh credit account map for this customer
                     const { data: refreshed } = await supabase
@@ -1862,10 +2008,26 @@ export function Customers() {
                     if (refreshed) {
                       setCreditAccountMap(prev => ({ ...prev, [selectedPurchase.customer_id]: { id: refreshed.id, balance: Number(refreshed.balance || 0), total_deposited: Number(refreshed.total_deposited || 0) } }));
                     }
+                    
+                    // If the plan was expired due to zero credit, reactivate it
+                    if (selectedPurchase.status === 'expired' && creditAmount > 0) {
+                      const { error: statusErr } = await supabase
+                        .from('subscription_purchases')
+                        .update({ status: 'active' })
+                        .eq('id', selectedPurchase.id);
+                      
+                      if (!statusErr) {
+                        // Update local state to reflect the status change
+                        setSubscriptionCustomers(prev => 
+                          prev.map(p => p.id === selectedPurchase.id ? { ...p, status: 'active' } : p)
+                        );
+                      }
+                    }
+                    
                     setShowTopupModal(false);
-                    alert('Top-up successful');
+                    toast({ title: 'Top-up success', description: `Paid ₹${payAmount.toLocaleString()} • Credit +₹${creditAmount.toLocaleString()}` });
                   } catch (e) {
-                    alert('Top-up failed');
+                    toast({ title: 'Top-up failed', variant: 'destructive' });
                   }
                 }}>Top-up</Button>
               </div>
@@ -1922,7 +2084,7 @@ export function Customers() {
                     const { error: insErr } = await supabase
                       .from('package_usages')
                       .insert([payload]);
-                    if (insErr) { alert('Failed to mark visit'); return; }
+                    if (insErr) { toast({ title: 'Mark visit failed', variant: 'destructive' }); return; }
                     
                     // Also insert into loyalty_visits for audit log
                     const loyaltyVisitPayload = {
@@ -1939,7 +2101,7 @@ export function Customers() {
                     const { error: loyaltyErr } = await supabase
                       .from('loyalty_visits')
                       .insert([loyaltyVisitPayload]);
-                    if (loyaltyErr) { console.warn('Failed to log loyalty visit:', loyaltyErr); }
+                    if (loyaltyErr) { /* silent */ }
                     // Decrement remaining_visits on the purchase
                     const current = subscriptionCustomers.find(p => p.id === selectedPurchase.id);
                     const newRemaining = Math.max(0, Number(current?.remaining_visits ?? 0) - 1);
@@ -1955,7 +2117,7 @@ export function Customers() {
                       .from('subscription_purchases')
                       .update(updateData)
                       .eq('id', selectedPurchase.id);
-                    if (updErr) { console.warn('remaining_visits update failed', updErr); }
+                    if (updErr) { /* silent */ }
                     
                     // Update local state: usage history and remaining_visits
                     setUsageHistoryMap(prev => ({
@@ -1978,12 +2140,151 @@ export function Customers() {
                     setSubscriptionCustomers(prev => prev.map(p => p.id === selectedPurchase.id ? { ...p, remaining_visits: newRemaining, status: shouldExpire ? 'expired' : p.status } : p));
                     setShowMarkVisit(false);
                   } catch (e) {
-                    alert('Error while marking visit');
+                    toast({ title: 'Mark visit failed', variant: 'destructive' });
                   }
                 }}>Mark</Button>
               </div>
             </CardContent>
           </Card>
+        </div>
+      )}
+
+      {/* Renew Plan Modal */}
+      {showRenewModal && selectedPurchase && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 transition-all duration-300 animate-fade-in" onClick={() => setShowRenewModal(false)}>
+          <Card className="w-full max-w-md p-0 overflow-hidden shadow-2xl animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <h2 className="text-xl font-bold">Renew Plan</h2>
+              <Button variant="ghost" onClick={() => setShowRenewModal(false)}>Cancel</Button>
+            </div>
+            <CardContent className="p-6 space-y-4">
+              {(() => {
+                const plan = planDetailsMap[selectedPurchase?.plan_id];
+                const planAmount = Number(plan?.plan_amount || plan?.price || 0);
+                
+                return (
+                  <div className="space-y-4">
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="text-sm font-medium text-blue-900 mb-2">Plan Details:</div>
+                      <div className="text-sm text-blue-700">
+                        <div>Plan Name: {plan?.name || 'N/A'}</div>
+                        <div>Type: {plan?.type || 'N/A'}</div>
+                        <div>Price: ₹{planAmount.toLocaleString()}</div>
+                        <div>Max Visits: {plan?.max_redemptions || 'N/A'}</div>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label className="block mb-1 font-medium">Payment Method</label>
+                      <select className="w-full border rounded px-2 py-1" value={renewPaymentMethod} onChange={(e) => setRenewPaymentMethod(e.target.value)}>
+                        <option value="cash">Cash</option>
+                        <option value="card">Card</option>
+                        <option value="UPI">UPI</option>
+                        <option value="Pay later">Pay later</option>
+                      </select>
+                    </div>
+                    
+                    {renewPaymentMethod === 'UPI' && (
+                      <div className="space-y-2">
+                        <div>
+                          <label className="block mb-1 font-medium">UPI Account</label>
+                          <select className="w-full border rounded px-2 py-1" value={renewSelectedUpiAccountId} onChange={(e) => setRenewSelectedUpiAccountId(e.target.value)}>
+                            <option value="">Select UPI account</option>
+                            {renewUpiAccounts.map(a => (
+                              <option key={a.id} value={a.id}>{a.account_name} ({a.upi_id})</option>
+                            ))}
+                          </select>
+                        </div>
+                        {renewSelectedUpiAccountId && (
+                          <button type="button" className="text-blue-600 underline" onClick={() => setRenewShowQr(true)}>
+                            View QR code
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+              
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setShowRenewModal(false)}>Close</Button>
+                <Button onClick={async () => {
+                  try {
+                    const plan = planDetailsMap[selectedPurchase?.plan_id];
+                    const planAmount = Number(plan?.plan_amount || plan?.price || 0);
+                    
+                    if (!plan) {
+                      toast({ title: 'Plan not found', variant: 'destructive' });
+                      return;
+                    }
+                    
+                    // Create new subscription purchase
+                    const now = new Date();
+                    const startDate = now.toISOString();
+                    const expiryDate = plan?.duration_days ? new Date(now.getTime() + (Number(plan.duration_days) || 0) * 24 * 60 * 60 * 1000).toISOString() : null;
+                    const totalValue = Number(plan?.price || 0);
+                    const remainingVisits = plan?.max_redemptions != null ? Number(plan.max_redemptions) : null;
+                    
+                    // Build payment method string
+                    let purchasePaymentMethod: string | null = null;
+                    if (renewPaymentMethod === 'UPI') {
+                      const sel = renewUpiAccounts.find(a => a.id === renewSelectedUpiAccountId);
+                      purchasePaymentMethod = sel ? `UPI:${sel.account_name},${sel.upi_id}` : 'UPI';
+                    } else {
+                      purchasePaymentMethod = renewPaymentMethod === 'Pay later' ? 'paylater' : renewPaymentMethod;
+                    }
+                    
+                    const { error: purchaseError } = await supabase
+                      .from('subscription_purchases')
+                      .insert([
+                        {
+                          plan_id: selectedPurchase.plan_id,
+                          customer_id: selectedPurchase.customer_id,
+                          vehicle_id: selectedPurchase.vehicle_id,
+                          location_id: selectedPurchase.location_id,
+                          status: 'active',
+                          created_by: user?.id || null,
+                          start_date: startDate,
+                          expiry_date: expiryDate,
+                          total_value: totalValue,
+                          remaining_visits: remainingVisits,
+                          source_payment_method: purchasePaymentMethod,
+                        }
+                      ]);
+                    
+                    if (purchaseError) {
+                      toast({ title: 'Renew failed', variant: 'destructive' });
+                      return;
+                    }
+                    
+                    // Refresh the purchases list
+                    await fetchPurchases();
+                    setShowRenewModal(false);
+                    toast({ title: 'Plan renewed' });
+                  } catch (e) {
+                    toast({ title: 'Renew failed', variant: 'destructive' });
+                  }
+                }}>Renew Plan</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Renew UPI QR Modal */}
+      {renewShowQr && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setRenewShowQr(false)}>
+          <div className="bg-white p-4 rounded shadow-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-2">
+              <div className="font-semibold">UPI QR</div>
+              <button className="text-sm text-muted-foreground" onClick={() => setRenewShowQr(false)}>Close</button>
+            </div>
+            {(() => {
+              const sel = renewUpiAccounts.find(a => a.id === renewSelectedUpiAccountId);
+              if (!sel?.qr_code_url) return <div className="text-sm text-muted-foreground">No QR available</div>;
+              return <img src={sel.qr_code_url} alt="UPI QR" className="w-full h-auto" />;
+            })()}
+          </div>
         </div>
       )}
 
@@ -2019,7 +2320,7 @@ export function Customers() {
                 <Button variant="outline" onClick={() => setShowMarkEntry(false)}>Close</Button>
                 <Button onClick={async () => {
                   const amount = Number(entryAmount || '0');
-                  if (!amount || amount <= 0) { alert('Enter valid amount'); return; }
+                  if (!amount || amount <= 0) { toast({ title: 'Invalid amount', description: 'Enter a valid amount', variant: 'destructive' }); return; }
                   
                   try {
                     // Check if customer has enough credit
@@ -2029,11 +2330,11 @@ export function Customers() {
                       .eq('customer_id', selectedPurchase.customer_id)
                       .maybeSingle();
                     
-                    if (!creditAccount) { alert('Credit account not found'); return; }
+                    if (!creditAccount) { toast({ title: 'Credit account not found', variant: 'destructive' }); return; }
                     
                     const currentBalance = Number(creditAccount.balance || 0);
                     if (currentBalance < amount) { 
-                      alert(`Insufficient credit. Available: ₹${currentBalance.toLocaleString()}`); 
+                      toast({ title: 'Insufficient credit', description: `Available ₹${currentBalance.toLocaleString()}`, variant: 'destructive' }); 
                       return; 
                     }
                     
@@ -2044,7 +2345,7 @@ export function Customers() {
                       .update({ balance: newBalance })
                       .eq('id', creditAccount.id);
                     
-                    if (creditErr) { alert('Failed to deduct credit'); return; }
+                    if (creditErr) { toast({ title: 'Deduction failed', description: 'Could not deduct credit', variant: 'destructive' }); return; }
                     
                     // Insert credit transaction
                     const { error: txErr } = await supabase
@@ -2056,7 +2357,7 @@ export function Customers() {
                         created_by: user?.id || null,
                       }]);
                     
-                    if (txErr) { console.warn('Failed to log credit transaction:', txErr); }
+                    if (txErr) { /* silent */ }
                     
                     // Insert into loyalty_visits for audit log
                     const loyaltyVisitPayload = {
@@ -2074,7 +2375,7 @@ export function Customers() {
                       .from('loyalty_visits')
                       .insert([loyaltyVisitPayload]);
                     
-                    if (loyaltyErr) { console.warn('Failed to log loyalty visit:', loyaltyErr); }
+                    if (loyaltyErr) { /* silent */ }
                     
                     // Update local credit balance
                     setCreditAccountMap(prev => ({
@@ -2109,9 +2410,9 @@ export function Customers() {
                     }
                     
                     setShowMarkEntry(false);
-                    alert('Entry marked successfully');
+                    toast({ title: 'Entry recorded', description: `Deducted ₹${amount.toLocaleString()}` });
                   } catch (e) {
-                    alert('Error while marking entry');
+                    toast({ title: 'Mark entry failed', variant: 'destructive' });
                   }
                 }}>Mark Entry</Button>
               </div>

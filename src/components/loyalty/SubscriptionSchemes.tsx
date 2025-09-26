@@ -17,18 +17,20 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { Select, SelectTrigger, SelectContent, SelectItem } from '@/components/ui/select'; // Import Select for filters
 import { Input } from '@/components/ui/input'; // Import Input for search
+import { useToast } from '@/hooks/use-toast';
 
 export function SubscriptionSchemes() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [schemes, setSchemes] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
 
   useEffect(() => {
     async function fetchSchemes() {
-      const { data, error } = await supabase.from('subscription_plans').select();
+      const { data, error } = await supabase.from('subscription_plans').select('*, plan_amount');
       if (error) {
-        console.error('Error fetching subscription plans:', error);
+        toast({ title: 'Failed to load plans', description: 'Please refresh and try again.', variant: 'destructive' });
       } else {
         setSchemes(data);
       }
@@ -37,11 +39,28 @@ export function SubscriptionSchemes() {
   }, []);
 
   const handleDelete = async (id: string) => {
+    // Check if there are any members (active or historical purchases) for this plan
+    const { count, error: countErr } = await supabase
+      .from('subscription_purchases')
+      .select('id', { count: 'exact', head: true })
+      .eq('plan_id', id);
+
+    if (countErr) {
+      toast({ title: 'Check failed', description: 'Unable to verify plan membership.', variant: 'destructive' });
+      return;
+    }
+
+    if ((count || 0) > 0) {
+      toast({ title: "Can't delete", description: 'There are members in this plan.', variant: 'destructive' });
+      return;
+    }
+
     const { error } = await supabase.from('subscription_plans').delete().eq('id', id);
     if (error) {
-      console.error('Error deleting subscription plan:', error);
+      toast({ title: 'Delete failed', description: 'Could not delete this plan.', variant: 'destructive' });
     } else {
       setSchemes((prev) => prev.filter((scheme) => scheme.id !== id));
+      toast({ title: 'Plan deleted' });
     }
   };
 
@@ -147,7 +166,18 @@ export function SubscriptionSchemes() {
                   <Badge variant="outline" className="text-primary border-primary">
                     {getDisplayType(scheme.type)} {/* Display 'package' as 'Subscription' */}
                   </Badge>
-                  <span className="text-sm font-medium text-foreground">₹{scheme.price}</span>
+                  <div className="text-right">
+                    {scheme.type === 'credit' ? (
+                      <div className="text-sm">
+                        <div className="font-medium text-foreground">₹{scheme.price} credit</div>
+                        {scheme.plan_amount && (
+                          <div className="text-xs text-muted-foreground">₹{scheme.plan_amount} pays</div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-sm font-medium text-foreground">₹{scheme.price}</span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Stats */}
