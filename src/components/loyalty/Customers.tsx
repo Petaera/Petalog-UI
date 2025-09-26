@@ -99,6 +99,17 @@ export function Customers() {
   const [renewUpiAccounts, setRenewUpiAccounts] = useState<Array<{ id: string; account_name: string; upi_id: string; qr_code_url: string }>>([]);
   const [renewSelectedUpiAccountId, setRenewSelectedUpiAccountId] = useState('');
   const [renewShowQr, setRenewShowQr] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteTargetPurchase, setDeleteTargetPurchase] = useState<any | null>(null);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportFilters, setExportFilters] = useState({
+    locationId: '',
+    planType: '',
+    status: '',
+    startDate: '',
+    endDate: ''
+  });
+  const [isExporting, setIsExporting] = useState(false);
 
   // Function to fetch existing customer by phone
   const fetchExistingCustomer = async (phone: string) => {
@@ -317,11 +328,36 @@ export function Customers() {
   };
 
   const fetchPurchases = async () => {
+    if (!user?.id) return;
+
+    // Get user's permitted locations first
+    let permittedLocationIds: string[] = [];
+    const isManager = String(user.role || '').toLowerCase().includes('manager');
+    
+    if (isManager && user.assigned_location) {
+      // Manager: only their assigned location
+      permittedLocationIds = [user.assigned_location];
+    } else {
+      // Owner: get all locations they own
+      const { data: ownerships } = await supabase
+        .from('location_owners')
+        .select('location_id')
+        .eq('owner_id', user.id);
+      permittedLocationIds = (ownerships || []).map((o: any) => o.location_id).filter(Boolean);
+    }
+
+    if (permittedLocationIds.length === 0) {
+      setSubscriptionCustomers([]);
+      return;
+    }
+
+    // Fetch purchases filtered by permitted locations
     const { data } = await supabase
       .from('subscription_purchases')
       .select('*')
+      .in('location_id', permittedLocationIds)
       .order('created_at', { ascending: false })
-      .limit(30);
+      .limit(100); // Increased limit since we're filtering by location
     
     // Check for expired purchases and update their status
     if (data && data.length > 0) {
@@ -434,11 +470,44 @@ export function Customers() {
   // Fetch available subscription plans
   useEffect(() => {
     async function fetchPlans() {
-      const { data, error } = await supabase.from('subscription_plans').select('id, name, type, price, active, duration_days, max_redemptions, plan_amount');
-      if (!error) setSchemes(data || []);
+      if (!user?.id) return;
+
+      // Get user's permitted locations
+      let permittedLocationIds: string[] = [];
+      const isManager = String(user.role || '').toLowerCase().includes('manager');
+      
+      if (isManager && user.assigned_location) {
+        permittedLocationIds = [user.assigned_location];
+      } else {
+        const { data: ownerships } = await supabase
+          .from('location_owners')
+          .select('location_id')
+          .eq('owner_id', user.id);
+        permittedLocationIds = (ownerships || []).map((o: any) => o.location_id).filter(Boolean);
+      }
+
+      if (permittedLocationIds.length === 0) {
+        setSchemes([]);
+        return;
+      }
+
+      // Fetch plans that are available for user's locations
+      const { data, error } = await supabase
+        .from('subscription_plans')
+        .select('id, name, type, price, active, duration_days, max_redemptions, plan_amount, locations')
+        .eq('active', true);
+      
+      if (!error && data) {
+        // Filter plans that are available for user's locations
+        const filteredPlans = data.filter(plan => {
+          if (!plan.locations || !Array.isArray(plan.locations)) return true; // No location restriction
+          return plan.locations.some(locId => permittedLocationIds.includes(locId));
+        });
+        setSchemes(filteredPlans);
+      }
     }
     fetchPlans();
-  }, []);
+  }, [user?.id, user?.role, user?.assigned_location]);
 
   // Fetch UPI accounts for location when UPI is chosen
   useEffect(() => {
@@ -495,19 +564,20 @@ export function Customers() {
 
   useEffect(() => {
     async function fetchDetails() {
-      // Get all unique customer_ids and plan_ids from purchases
+      // Get all unique customer_ids, plan_ids, and vehicle_ids from purchases
       const customerIds = Array.from(new Set(subscriptionCustomers.map(c => c.customer_id).filter(Boolean)));
       const planIds = Array.from(new Set(subscriptionCustomers.map(c => c.plan_id).filter(Boolean)));
+      const vehicleIds = Array.from(new Set(subscriptionCustomers.map(c => c.vehicle_id).filter(Boolean)));
 
-      // Fetch customer details
+      // Fetch customer details first
+      let customerMap: Record<string, any> = {};
       if (customerIds.length > 0) {
         const { data: customers } = await supabase
           .from('customers')
-          .select('id, name, phone, email')
+          .select('id, name, phone, email, default_vehicle_id')
           .in('id', customerIds);
-        const map: Record<string, any> = {};
-        (customers || []).forEach(c => { map[c.id] = c; });
-        setCustomerDetailsMap(map);
+        (customers || []).forEach(c => { customerMap[c.id] = c; });
+        setCustomerDetailsMap(customerMap);
       }
 
       // Fetch plan details
@@ -519,6 +589,39 @@ export function Customers() {
         const map: Record<string, any> = {};
         (plans || []).forEach(p => { map[p.id] = p; });
         setPlanDetailsMap(map);
+      }
+
+      // Fetch vehicle details for both subscription vehicles and customer default vehicles
+      const allVehicleIds = Array.from(new Set([
+        ...vehicleIds,
+        ...Object.values(customerMap).map((c: any) => c.default_vehicle_id).filter(Boolean)
+      ]));
+
+      if (allVehicleIds.length > 0) {
+        const { data: vehicles } = await supabase
+          .from('vehicles')
+          .select(`
+            id, 
+            number_plate, 
+            type, 
+            Brand, 
+            model,
+            Vehicles_in_india!vehicles_model_fkey (
+              Models,
+              "Vehicle Brands"
+            )
+          `)
+          .in('id', allVehicleIds);
+        
+        const vehicleMap: Record<string, any> = {};
+        (vehicles || []).forEach(v => { 
+          vehicleMap[v.id] = {
+            ...v,
+            Model: v.Vehicles_in_india?.[0]?.Models || v.model || '',
+            Brand: v.Vehicles_in_india?.[0]?.['Vehicle Brands'] || v.Brand || ''
+          };
+        });
+        setVehicleInfoMap(vehicleMap);
       }
 
       // Fetch credit accounts for these customers
@@ -1127,19 +1230,259 @@ export function Customers() {
     loadRenewUpi();
   }, [renewPaymentMethod, selectedPurchase?.location_id]);
 
+  // Export function
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      // Get user's permitted locations for filtering
+      let permittedLocationIds: string[] = [];
+      const isManager = String(user.role || '').toLowerCase().includes('manager');
+      
+      if (isManager && user.assigned_location) {
+        permittedLocationIds = [user.assigned_location];
+      } else {
+        const { data: ownerships } = await supabase
+          .from('location_owners')
+          .select('location_id')
+          .eq('owner_id', user.id);
+        permittedLocationIds = (ownerships || []).map((o: any) => o.location_id).filter(Boolean);
+      }
+
+      if (permittedLocationIds.length === 0) {
+        toast({ title: 'No data to export', description: 'No accessible locations found', variant: 'destructive' });
+        return;
+      }
+
+      // Build query with filters - fetch data separately to avoid FK issues
+      let query = supabase
+        .from('subscription_purchases')
+        .select('*')
+        .in('location_id', permittedLocationIds)
+        .order('created_at', { ascending: false });
+
+      // Apply filters
+      if (exportFilters.locationId) {
+        query = query.eq('location_id', exportFilters.locationId);
+      }
+      if (exportFilters.status) {
+        query = query.eq('status', exportFilters.status);
+      }
+      if (exportFilters.startDate) {
+        query = query.gte('created_at', new Date(exportFilters.startDate).toISOString());
+      }
+      if (exportFilters.endDate) {
+        query = query.lte('created_at', new Date(exportFilters.endDate + 'T23:59:59').toISOString());
+      }
+
+      const { data: exportData, error } = await query.limit(1000);
+
+      if (error) {
+        toast({ title: 'Export failed', description: 'Could not fetch data for export', variant: 'destructive' });
+        return;
+      }
+
+      if (!exportData || exportData.length === 0) {
+        toast({ title: 'No data to export', description: 'No records match the selected filters', variant: 'destructive' });
+        return;
+      }
+
+      // Get unique IDs for related data
+      const customerIds = Array.from(new Set(exportData.map(item => item.customer_id).filter(Boolean)));
+      const planIds = Array.from(new Set(exportData.map(item => item.plan_id).filter(Boolean)));
+      const vehicleIds = Array.from(new Set(exportData.map(item => item.vehicle_id).filter(Boolean)));
+      const locationIds = Array.from(new Set(exportData.map(item => item.location_id).filter(Boolean)));
+
+      // Fetch related data separately
+      const [customersData, plansData, vehiclesData, locationsData] = await Promise.all([
+        customerIds.length > 0 ? supabase
+          .from('customers')
+          .select('id, name, phone, email, default_vehicle_id')
+          .in('id', customerIds) : Promise.resolve({ data: [] }),
+        
+        planIds.length > 0 ? supabase
+          .from('subscription_plans')
+          .select('id, name, type, price, max_redemptions, plan_amount, multiplier')
+          .in('id', planIds) : Promise.resolve({ data: [] }),
+        
+        vehicleIds.length > 0 ? supabase
+          .from('vehicles')
+          .select('id, number_plate, type, Brand, model')
+          .in('id', vehicleIds) : Promise.resolve({ data: [] }),
+        
+        locationIds.length > 0 ? supabase
+          .from('locations')
+          .select('id, name')
+          .in('id', locationIds) : Promise.resolve({ data: [] })
+      ]);
+
+      // Check for errors in related data fetching
+      if (customersData.error) {
+        console.error('Error fetching customers:', customersData.error);
+      }
+      if (plansData.error) {
+        console.error('Error fetching plans:', plansData.error);
+      }
+      if (vehiclesData.error) {
+        console.error('Error fetching vehicles:', vehiclesData.error);
+      }
+      if (locationsData.error) {
+        console.error('Error fetching locations:', locationsData.error);
+      }
+
+      // Create lookup maps
+      const customersMap: Record<string, any> = {};
+      const plansMap: Record<string, any> = {};
+      const vehiclesMap: Record<string, any> = {};
+      const locationsMap: Record<string, any> = {};
+
+      (customersData.data || []).forEach(c => { customersMap[c.id] = c; });
+      (plansData.data || []).forEach(p => { plansMap[p.id] = p; });
+      (vehiclesData.data || []).forEach(v => { 
+        vehiclesMap[v.id] = {
+          ...v,
+          Model: v.model || '',
+          Brand: v.Brand || ''
+        };
+      });
+      (locationsData.data || []).forEach(l => { locationsMap[l.id] = l; });
+
+      // Filter by plan type if specified
+      let filteredData = exportData;
+      if (exportFilters.planType) {
+        filteredData = exportData.filter(item => {
+          const plan = plansMap[item.plan_id];
+          return String(plan?.type || '').toLowerCase() === exportFilters.planType.toLowerCase();
+        });
+      }
+
+      // Fetch credit account details for credit plans
+      const creditCustomerIds = filteredData
+        .filter(item => {
+          const plan = plansMap[item.plan_id];
+          return String(plan?.type || '').toLowerCase() === 'credit';
+        })
+        .map(item => item.customer_id)
+        .filter(Boolean);
+
+      let creditAccountsMap: Record<string, any> = {};
+      if (creditCustomerIds.length > 0) {
+        const { data: creditAccounts } = await supabase
+          .from('credit_accounts')
+          .select('customer_id, balance, total_deposited')
+          .in('customer_id', creditCustomerIds);
+        
+        (creditAccounts || []).forEach(account => {
+          creditAccountsMap[account.customer_id] = account;
+        });
+      }
+
+      // Prepare CSV data
+      const csvData = filteredData.map(item => {
+        const customer = customersMap[item.customer_id] || {};
+        const plan = plansMap[item.plan_id] || {};
+        const vehicle = vehiclesMap[item.vehicle_id] || {};
+        const location = locationsMap[item.location_id] || {};
+        const creditAccount = creditAccountsMap[item.customer_id] || {};
+
+        return {
+          'Customer Name': customer.name || '',
+          'Phone': customer.phone || '',
+          'Email': customer.email || '',
+          'Location': location.name || '',
+          'Plan Name': plan.name || '',
+          'Plan Type': plan.type || '',
+          'Plan Price': plan.price ? `₹${plan.price}` : '',
+          'Plan Amount': plan.plan_amount ? `₹${plan.plan_amount}` : '',
+          'Multiplier': plan.multiplier || '',
+          'Vehicle Number': vehicle.number_plate || '',
+          'Vehicle Model': vehicle.Model || '',
+          'Vehicle Brand': vehicle.Brand || '',
+          'Vehicle Type': vehicle.type || '',
+          'Status': item.status || '',
+          'Start Date': item.start_date ? new Date(item.start_date).toLocaleDateString() : '',
+          'Expiry Date': item.expiry_date ? new Date(item.expiry_date).toLocaleDateString() : '',
+          'Remaining Visits': item.remaining_visits ?? '',
+          'Total Value': item.total_value ? `₹${item.total_value}` : '',
+          'Amount Paid': item.amount ? `₹${item.amount}` : '',
+          'Credit Balance': creditAccount.balance ? `₹${creditAccount.balance}` : '',
+          'Total Deposited': creditAccount.total_deposited ? `₹${creditAccount.total_deposited}` : '',
+          'Purchase Date': item.created_at ? new Date(item.created_at).toLocaleDateString() : '',
+          'Payment Method': item.source_payment_method || '',
+        };
+      });
+
+      // Generate filename
+      const today = new Date().toISOString().split('T')[0];
+      let filename = 'Customer_details';
+      
+      if (exportFilters.locationId) {
+        const selectedLocation = permittedLocations.find(l => l.id === exportFilters.locationId);
+        filename += `_${selectedLocation?.name || 'location'}`;
+      }
+      
+      if (exportFilters.planType) {
+        filename += `_${exportFilters.planType}`;
+      }
+      
+      if (exportFilters.startDate || exportFilters.endDate) {
+        filename += `_${exportFilters.startDate || 'start'}_to_${exportFilters.endDate || 'end'}`;
+      } else {
+        filename += `_${today}`;
+      }
+
+      // Check if we have data to export
+      if (csvData.length === 0) {
+        toast({ title: 'No data to export', description: 'No records match the selected filters after processing', variant: 'destructive' });
+        return;
+      }
+
+      // Convert to CSV
+      const headers = Object.keys(csvData[0]);
+      const csvContent = [
+        headers.join(','),
+        ...csvData.map(row => 
+          headers.map(header => {
+            const value = row[header as keyof typeof row] || '';
+            // Escape commas and quotes in CSV
+            return `"${String(value).replace(/"/g, '""')}"`;
+          }).join(',')
+        )
+      ].join('\n');
+
+      // Download CSV
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `${filename}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      setShowExportModal(false);
+      toast({ title: 'Export successful', description: `Exported ${csvData.length} records to ${filename}.csv` });
+
+    } catch (error) {
+      toast({ title: 'Export failed', description: 'An error occurred during export', variant: 'destructive' });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground mb-2">Customers</h1>
-          <p className="text-muted-foreground">Manage your subscription and loyalty members</p>
+      <div className="flex flex-col gap-4">
+        <div className="text-center sm:text-left">
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">Customers</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">Manage your subscription and loyalty members</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-2">
+          <Button variant="outline" className="w-full sm:w-auto" onClick={() => setShowExportModal(true)}>
             Export Data
           </Button>
-          <Button className="bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg" onClick={handleAddCustomerClick}>
+          <Button className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg" onClick={handleAddCustomerClick}>
             <Plus className="w-4 h-4 mr-2" />
             Add Customer
           </Button>
@@ -1148,8 +1491,8 @@ export function Customers() {
 
       {/* Add Customer Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 transition-all duration-300 animate-fade-in">
-          <Card className="w-full max-w-2xl p-0 overflow-hidden shadow-2xl animate-slide-up">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 transition-all duration-300 animate-fade-in p-4">
+          <Card className="w-full max-w-2xl p-0 overflow-hidden shadow-2xl animate-slide-up max-h-[90vh]">
             <div className="flex items-center justify-between px-6 py-4 border-b">
               <Button variant="ghost" onClick={handleDiscard}>
                 Discard
@@ -1157,7 +1500,7 @@ export function Customers() {
               <h2 className="text-xl font-bold">Add Customer</h2>
               <div style={{ width: 60 }}></div>
             </div>
-            <CardContent className="max-h-[78vh] overflow-auto p-6">
+            <CardContent className="max-h-[78vh] overflow-auto p-4 sm:p-6">
               {addStep === 'selectPlan' && (
                 <div className="space-y-6">
                   <div className="font-medium mb-2">Select Plan</div>
@@ -1383,24 +1726,24 @@ export function Customers() {
       )}
 
       {/* Search and Filters */}
-      <div className="flex flex-col sm:flex-row gap-4 p-4 bg-gradient-card rounded-xl border border-border">
-        <div className="flex-1 relative">
+      <div className="flex flex-col gap-4 p-3 sm:p-4 bg-gradient-card rounded-xl border border-border">
+        <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Search by name, vehicle number, or scheme..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
+            className="pl-10 text-sm sm:text-base"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="grid grid-cols-2 sm:flex gap-2">
           {['all', 'Active', 'Expiring Soon', 'Expired'].map((status) => (
             <Button
               key={status}
               variant={filterStatus === status ? 'default' : 'outline'}
               size="sm"
               onClick={() => setFilterStatus(status)}
-              className={filterStatus === status ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm hover:shadow-md' : 'hover:bg-primary/10'}
+              className={`text-xs sm:text-sm ${filterStatus === status ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm hover:shadow-md' : 'hover:bg-primary/10'}`}
             >
               {status === 'all' ? 'All' : status}
             </Button>
@@ -1409,7 +1752,7 @@ export function Customers() {
       </div>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
         {[
           { label: 'Total Customers', value: filteredCustomers.length, color: 'primary' },
           { label: 'Active', value: subscriptionCustomers.filter(c => String(c.status || '').toLowerCase() === 'active').length, color: 'success' },
@@ -1417,16 +1760,16 @@ export function Customers() {
           { label: 'Expired', value: subscriptionCustomers.filter(c => String(c.status || '').toLowerCase() === 'expired').length, color: 'destructive' }
         ].map((stat, index) => (
           <Card key={stat.label} className="animate-slide-up" style={{ animationDelay: `${index * 100}ms` }}>
-            <CardContent className="p-4 text-center">
-              <div className={`text-2xl font-bold text-${stat.color} mb-1`}>{stat.value}</div>
-              <div className="text-sm text-muted-foreground">{stat.label}</div>
+            <CardContent className="p-3 sm:p-4 text-center">
+              <div className={`text-xl sm:text-2xl font-bold text-${stat.color} mb-1`}>{stat.value}</div>
+              <div className="text-xs sm:text-sm text-muted-foreground">{stat.label}</div>
             </CardContent>
           </Card>
         ))}
       </div>
 
       {/* Customers Grid */}
-       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
         {filteredCustomers.map((customer, index) => {
           const cust = customerDetailsMap[customer.customer_id] || {};
           const plan = planDetailsMap[customer.plan_id] || {};
@@ -1438,17 +1781,17 @@ export function Customers() {
               className="hover:shadow-card transition-all duration-300 bg-gradient-card animate-slide-up"
               style={{ animationDelay: `${index * 100}ms` }}
             >
-              <CardHeader className="pb-3">
+              <CardHeader className="pb-3 p-3 sm:p-6 sm:pb-3">
                 <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-semibold text-foreground">{cust.name || 'Customer'}</h3>
-                    <p className="text-sm text-muted-foreground">{cust.phone ? `Phone: ${cust.phone}` : ''}</p>
-                    <p className="text-sm text-muted-foreground">{cust.email ? `Email: ${cust.email}` : ''}</p>
+                  <div className="min-w-0 flex-1 pr-2">
+                    <h3 className="font-semibold text-foreground text-sm sm:text-base truncate">{cust.name || 'Customer'}</h3>
+                    <p className="text-xs sm:text-sm text-muted-foreground truncate">{cust.phone ? `Phone: ${cust.phone}` : ''}</p>
+                    <p className="text-xs sm:text-sm text-muted-foreground truncate">{cust.email ? `Email: ${cust.email}` : ''}</p>
                     {showVehicleInfo && (
                       <>
-                        <p className="text-sm text-muted-foreground">{vehicleInfo.Model ? `Model: ${vehicleInfo.Model}` : ''}</p>
-                        <p className="text-sm text-muted-foreground">{vehicleInfo.Brand ? `Brand: ${vehicleInfo.Brand}` : ''}</p>
-                        <p className="text-sm text-muted-foreground">{vehicleInfo.number_plate ? `Vehicle: ${vehicleInfo.number_plate}` : ''}</p>
+                        <p className="text-xs sm:text-sm text-muted-foreground truncate">{vehicleInfo.Model ? `Model: ${vehicleInfo.Model}` : ''}</p>
+                        <p className="text-xs sm:text-sm text-muted-foreground truncate">{vehicleInfo.Brand ? `Brand: ${vehicleInfo.Brand}` : ''}</p>
+                        <p className="text-xs sm:text-sm text-muted-foreground truncate">{vehicleInfo.number_plate ? `Vehicle: ${vehicleInfo.number_plate}` : ''}</p>
                       </>
                     )}
                   </div>
@@ -1470,7 +1813,7 @@ export function Customers() {
                   </DropdownMenu>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 p-3 sm:p-6">
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium text-foreground">Status:</span>
@@ -1584,17 +1927,9 @@ export function Customers() {
                         size="sm" 
                         variant="outline" 
                         className="text-red-600 border-red-300 hover:bg-red-50" 
-                        onClick={async () => {
-                          if (!confirm('Remove this customer from the plan? This will delete the subscription record but keep the customer and vehicle data.')) return;
-                          const { error: delErr } = await supabase
-                            .from('subscription_purchases')
-                            .delete()
-                            .eq('id', customer.id);
-                          if (delErr) { 
-                              toast({ title: 'Delete failed', description: 'Could not remove from plan', variant: 'destructive' }); 
-                            return; 
-                          }
-                          setSubscriptionCustomers(prev => prev.filter(p => p.id !== customer.id));
+                        onClick={() => {
+                          setDeleteTargetPurchase(customer);
+                          setShowDeleteConfirm(true);
                         }}
                       >
                         Remove from Plan
@@ -1617,11 +1952,11 @@ export function Customers() {
                     </div>
                   </CardContent>
                 </Card>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => { setSelectedPurchase(customer); setShowViewModal(true); }}>
+                <div className="flex flex-wrap gap-1 sm:gap-2">
+                  <Button size="sm" variant="outline" className="text-xs sm:text-sm flex-1 sm:flex-none" onClick={() => { setSelectedPurchase(customer); setShowViewModal(true); }}>
                     View
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => {
+                  <Button size="sm" variant="outline" className="text-xs sm:text-sm flex-1 sm:flex-none" onClick={() => {
                     setSelectedPurchase(customer);
                     const c = customerDetailsMap[customer.customer_id] || {};
                     setEditCustomerDraft({ id: c.id, name: c.name || '', phone: c.phone || '', email: c.email || '', date_of_birth: c.date_of_birth || '' });
@@ -1630,13 +1965,13 @@ export function Customers() {
                     Edit
                   </Button>
                   {String(plan.type || '').toLowerCase() === 'credit' && (
-                    <Button size="sm" variant="outline" onClick={() => { setSelectedPurchase(customer); setTopupAmount(''); setTopupMethod('cash'); setTopupUpiId(''); setShowTopupModal(true); }}>
+                    <Button size="sm" variant="outline" className="text-xs sm:text-sm flex-1 sm:flex-none" onClick={() => { setSelectedPurchase(customer); setTopupAmount(''); setTopupMethod('cash'); setTopupUpiId(''); setShowTopupModal(true); }}>
                       Top-up
                     </Button>
                   )}
                   {(String(plan.type || '').toLowerCase() === 'package' || String(plan.type || '').toLowerCase() === 'visit') && 
                    (customer.remaining_visits === 0 || customer.status === 'expired') && (
-                    <Button size="sm" variant="outline" onClick={() => { 
+                    <Button size="sm" variant="outline" className="text-xs sm:text-sm flex-1 sm:flex-none" onClick={() => { 
                       setSelectedPurchase(customer); 
                       setRenewPaymentMethod('cash'); 
                       setRenewSelectedUpiAccountId(''); 
@@ -1664,19 +1999,10 @@ export function Customers() {
                       <Button 
                         size="sm" 
                         variant="outline" 
-                        className="text-red-600 border-red-300 hover:bg-red-50" 
-                        onClick={async () => {
-                          if (!confirm('Delete this subscription plan? This will permanently remove the subscription record.')) return;
-                      const { error: delErr } = await supabase
-                        .from('subscription_purchases')
-                        .delete()
-                        .eq('id', customer.id);
-                          if (delErr) { 
-                            toast({ title: 'Delete failed', description: 'Could not delete plan', variant: 'destructive' }); 
-                            return; 
-                          }
-                      setSubscriptionCustomers(prev => prev.filter(p => p.id !== customer.id));
-                          toast({ title: 'Plan deleted' });
+                        className="text-red-600 border-red-300 hover:bg-red-50 text-xs sm:text-sm flex-1 sm:flex-none" 
+                        onClick={() => {
+                          setDeleteTargetPurchase(customer);
+                          setShowDeleteConfirm(true);
                         }}
                       >
                         Delete
@@ -1686,14 +2012,14 @@ export function Customers() {
                   {(String(plan.type || '').toLowerCase() === 'package' || String(plan.type || '').toLowerCase() === 'visit') && 
                    customer.remaining_visits > 0 && 
                    customer.status === 'active' && (
-                    <Button size="sm" variant="outline" onClick={() => { setSelectedPurchase(customer); setShowMarkVisit(true); setVisitNotes(''); setVisitService('full wash'); }}>
+                    <Button size="sm" variant="outline" className="text-xs sm:text-sm flex-1 sm:flex-none" onClick={() => { setSelectedPurchase(customer); setShowMarkVisit(true); setVisitNotes(''); setVisitService('full wash'); }}>
                       Mark Visit
                     </Button>
                   )}
                   {String(plan.type || '').toLowerCase() === 'credit' && 
                    Number(creditAccountMap[customer.customer_id]?.balance ?? 0) > 0 && 
                    customer.status === 'active' && (
-                    <Button size="sm" variant="outline" onClick={() => { setSelectedPurchase(customer); setShowMarkEntry(true); setEntryAmount(''); setEntryService('full wash'); setEntryNotes(''); }}>
+                    <Button size="sm" variant="outline" className="text-xs sm:text-sm flex-1 sm:flex-none" onClick={() => { setSelectedPurchase(customer); setShowMarkEntry(true); setEntryAmount(''); setEntryService('full wash'); setEntryNotes(''); }}>
                       Mark Entry
                     </Button>
                   )}
@@ -1726,16 +2052,17 @@ export function Customers() {
 
       {/* View Modal */}
       {showViewModal && selectedPurchase && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 transition-all duration-300 animate-fade-in" onClick={() => setShowViewModal(false)}>
-          <Card className="w-full max-w-xl p-0 overflow-hidden shadow-2xl animate-slide-up" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b">
-              <h2 className="text-xl font-bold">Customer Details</h2>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 transition-all duration-300 animate-fade-in p-4" onClick={() => setShowViewModal(false)}>
+          <Card className="w-full max-w-xl max-h-[90vh] p-0 overflow-hidden shadow-2xl animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="px-4 sm:px-6 py-4 border-b">
+              <h2 className="text-lg sm:text-xl font-bold">Customer Details</h2>
             </div>
-            <CardContent className="p-6 space-y-4">
+            <CardContent className="p-4 sm:p-6 space-y-4 overflow-auto max-h-[calc(90vh-120px)]">
               {(() => {
                 const cust = customerDetailsMap[selectedPurchase.customer_id] || {};
                 const plan = planDetailsMap[selectedPurchase.plan_id] || {};
-                const vehicle = vehicleInfoMap[cust.default_vehicle_id] || {};
+                // Use the vehicle_id from the subscription purchase, fallback to customer's default vehicle
+                const vehicle = vehicleInfoMap[selectedPurchase.vehicle_id] || vehicleInfoMap[cust.default_vehicle_id] || {};
                 return (
                   <div className="space-y-3">
                     <div className="grid grid-cols-2 gap-3">
@@ -1769,7 +2096,7 @@ export function Customers() {
                     </div>
                     <Card className="bg-muted/30 border border-border">
                       <CardHeader>
-                        <div className="font-semibold text-primary">Plan</div>
+                        <div className="font-semibold text-primary">Plan Details</div>
                       </CardHeader>
                       <CardContent>
                         <div className="text-sm text-muted-foreground grid grid-cols-2 gap-2">
@@ -1777,24 +2104,41 @@ export function Customers() {
                           <div>Type: {plan.type || '-'}</div>
                           <div>Price: {plan.price ? `₹${plan.price}` : '-'}</div>
                           <div>Max Redemptions: {plan.max_redemptions ?? '-'}</div>
-                          <div>Expiry: {selectedPurchase.expiry_date ? selectedPurchase.expiry_date.slice(0,10) : '-'}</div>
+                          <div>Start Date: {selectedPurchase.start_date ? new Date(selectedPurchase.start_date).toLocaleDateString() : '-'}</div>
+                          <div>Expiry: {selectedPurchase.expiry_date ? new Date(selectedPurchase.expiry_date).toLocaleDateString() : '-'}</div>
                           <div>Remaining Visits: {selectedPurchase.remaining_visits ?? '-'}</div>
+                          <div>Total Value: {selectedPurchase.total_value ? `₹${selectedPurchase.total_value}` : '-'}</div>
                         </div>
                       </CardContent>
                     </Card>
                     <Card className="bg-muted/30 border border-border">
                       <CardHeader>
-                        <div className="font-semibold text-primary">Vehicle</div>
+                        <div className="font-semibold text-primary">Vehicle Details</div>
                       </CardHeader>
                       <CardContent>
                         <div className="text-sm text-muted-foreground grid grid-cols-2 gap-2">
-                          <div>Number: {vehicle.number_plate || '-'}</div>
+                          <div>Number Plate: {vehicle.number_plate || '-'}</div>
                           <div>Model: {vehicle.Model || '-'}</div>
                           <div>Brand: {vehicle.Brand || '-'}</div>
                           <div>Type: {vehicle.type || '-'}</div>
                         </div>
                       </CardContent>
                     </Card>
+                    {String(plan.type || '').toLowerCase() === 'credit' && (
+                      <Card className="bg-muted/30 border border-border">
+                        <CardHeader>
+                          <div className="font-semibold text-primary">Credit Details</div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-sm text-muted-foreground grid grid-cols-2 gap-2">
+                            <div>Current Balance: {creditAccountMap[selectedPurchase.customer_id] ? `₹${Number(creditAccountMap[selectedPurchase.customer_id].balance || 0).toLocaleString()}` : '-'}</div>
+                            <div>Total Deposited: {creditAccountMap[selectedPurchase.customer_id] ? `₹${Number(creditAccountMap[selectedPurchase.customer_id].total_deposited || 0).toLocaleString()}` : '-'}</div>
+                            <div>Plan Multiplier: {plan.multiplier ? `${plan.multiplier}x` : '-'}</div>
+                            <div>Plan Amount: {plan.plan_amount ? `₹${plan.plan_amount}` : '-'}</div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
                   </div>
                 );
               })()}
@@ -1808,13 +2152,13 @@ export function Customers() {
 
       {/* Edit Modal */}
       {showEditModal && selectedPurchase && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 transition-all duration-300 animate-fade-in" onClick={() => setShowEditModal(false)}>
-          <Card className="w-full max-w-lg p-0 overflow-hidden shadow-2xl animate-slide-up" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b flex items-center justify-between">
-              <h2 className="text-xl font-bold">Edit Customer</h2>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 transition-all duration-300 animate-fade-in p-4" onClick={() => setShowEditModal(false)}>
+          <Card className="w-full max-w-lg max-h-[90vh] p-0 overflow-hidden shadow-2xl animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="px-4 sm:px-6 py-4 border-b flex items-center justify-between">
+              <h2 className="text-lg sm:text-xl font-bold">Edit Customer</h2>
               <Button variant="ghost" onClick={() => setShowEditModal(false)}>Cancel</Button>
             </div>
-            <CardContent className="p-6 space-y-4">
+            <CardContent className="p-4 sm:p-6 space-y-4 overflow-auto max-h-[calc(90vh-120px)]">
               <div>
                 <label className="block mb-1 font-medium">Name</label>
                 <Input value={editCustomerDraft.name || ''} onChange={e => setEditCustomerDraft({ ...editCustomerDraft, name: e.target.value })} />
@@ -1859,13 +2203,13 @@ export function Customers() {
 
       {/* Top-up Modal */}
       {showTopupModal && selectedPurchase && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 transition-all duration-300 animate-fade-in" onClick={() => setShowTopupModal(false)}>
-          <Card className="w-full max-w-md p-0 overflow-hidden shadow-2xl animate-slide-up" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b flex items-center justify-between">
-              <h2 className="text-xl font-bold">Top-up Credit</h2>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 transition-all duration-300 animate-fade-in p-4" onClick={() => setShowTopupModal(false)}>
+          <Card className="w-full max-w-md max-h-[90vh] p-0 overflow-hidden shadow-2xl animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="px-4 sm:px-6 py-4 border-b flex items-center justify-between">
+              <h2 className="text-lg sm:text-xl font-bold">Top-up Credit</h2>
               <Button variant="ghost" onClick={() => setShowTopupModal(false)}>Cancel</Button>
             </div>
-            <CardContent className="p-6 space-y-4">
+            <CardContent className="p-4 sm:p-6 space-y-4 overflow-auto max-h-[calc(90vh-120px)]">
               <div>
                 <label className="block mb-1 font-medium">Amount to Pay (INR)</label>
                 <Input type="number" min="1" value={topupAmount} onChange={(e) => setTopupAmount(e.target.value)} placeholder="Enter amount you want to pay" />
@@ -2415,6 +2759,162 @@ export function Customers() {
                     toast({ title: 'Mark entry failed', variant: 'destructive' });
                   }
                 }}>Mark Entry</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && deleteTargetPurchase && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 transition-all duration-300 animate-fade-in" onClick={() => setShowDeleteConfirm(false)}>
+          <Card className="w-full max-w-md p-0 overflow-hidden shadow-2xl animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <h2 className="text-xl font-bold text-red-600">Confirm Removal</h2>
+              <Button variant="ghost" onClick={() => setShowDeleteConfirm(false)}>Cancel</Button>
+            </div>
+            <CardContent className="p-6 space-y-4">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.728-.833-2.498 0L4.316 15.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold text-foreground mb-2">Are you sure?</h3>
+                <p className="text-muted-foreground mb-4">
+                  This will remove the customer from this plan and delete the subscription record. 
+                  Customer and vehicle data will be preserved.
+                </p>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  variant="destructive"
+                  onClick={async () => {
+                    try {
+                      const { error: delErr } = await supabase
+                        .from('subscription_purchases')
+                        .delete()
+                        .eq('id', deleteTargetPurchase.id);
+                      
+                      if (delErr) { 
+                        toast({ title: 'Delete failed', description: 'Could not remove from plan', variant: 'destructive' }); 
+                        return; 
+                      }
+                      
+                      setSubscriptionCustomers(prev => prev.filter(p => p.id !== deleteTargetPurchase.id));
+                      setShowDeleteConfirm(false);
+                      setDeleteTargetPurchase(null);
+                      toast({ title: 'Removed from plan', description: 'Customer has been successfully removed from the plan' });
+                    } catch (e) {
+                      toast({ title: 'Delete failed', description: 'An error occurred while removing from plan', variant: 'destructive' });
+                    }
+                  }}
+                >
+                  Yes, Remove
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Export Modal */}
+      {showExportModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 transition-all duration-300 animate-fade-in p-4" onClick={() => setShowExportModal(false)}>
+          <Card className="w-full max-w-lg max-h-[90vh] p-0 overflow-hidden shadow-2xl animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="px-4 sm:px-6 py-4 border-b flex items-center justify-between">
+              <h2 className="text-lg sm:text-xl font-bold">Export Customer Data</h2>
+              <Button variant="ghost" onClick={() => setShowExportModal(false)}>Cancel</Button>
+            </div>
+            <CardContent className="p-4 sm:p-6 space-y-4 overflow-auto max-h-[calc(90vh-120px)]">
+              <div className="space-y-4">
+                <div>
+                  <label className="block mb-2 text-sm font-medium">Location Filter</label>
+                  <select 
+                    className="w-full border rounded px-3 py-2 text-sm"
+                    value={exportFilters.locationId}
+                    onChange={(e) => setExportFilters({ ...exportFilters, locationId: e.target.value })}
+                  >
+                    <option value="">All Locations</option>
+                    {permittedLocations.map(location => (
+                      <option key={location.id} value={location.id}>{location.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block mb-2 text-sm font-medium">Plan Type Filter</label>
+                  <select 
+                    className="w-full border rounded px-3 py-2 text-sm"
+                    value={exportFilters.planType}
+                    onChange={(e) => setExportFilters({ ...exportFilters, planType: e.target.value })}
+                  >
+                    <option value="">All Plan Types</option>
+                    <option value="credit">Credit</option>
+                    <option value="visit">Visit</option>
+                    <option value="package">Package</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block mb-2 text-sm font-medium">Status Filter</label>
+                  <select 
+                    className="w-full border rounded px-3 py-2 text-sm"
+                    value={exportFilters.status}
+                    onChange={(e) => setExportFilters({ ...exportFilters, status: e.target.value })}
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="active">Active</option>
+                    <option value="expired">Expired</option>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block mb-2 text-sm font-medium">Start Date</label>
+                    <Input 
+                      type="date" 
+                      value={exportFilters.startDate}
+                      onChange={(e) => setExportFilters({ ...exportFilters, startDate: e.target.value })}
+                      className="text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-2 text-sm font-medium">End Date</label>
+                    <Input 
+                      type="date" 
+                      value={exportFilters.endDate}
+                      onChange={(e) => setExportFilters({ ...exportFilters, endDate: e.target.value })}
+                      className="text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <h4 className="font-medium text-blue-900 mb-2">Export Information</h4>
+                  <ul className="text-sm text-blue-700 space-y-1">
+                    <li>• Export will include customer details, plan information, and vehicle data</li>
+                    <li>• Credit plans will include balance and deposit information</li>
+                    <li>• File will be named based on selected filters and current date</li>
+                    <li>• Maximum 1000 records per export</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button variant="outline" onClick={() => setShowExportModal(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleExport}
+                  disabled={isExporting}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {isExporting ? 'Exporting...' : 'Export CSV'}
+                </Button>
               </div>
             </CardContent>
           </Card>
