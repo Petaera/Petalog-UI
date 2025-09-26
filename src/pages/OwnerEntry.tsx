@@ -1256,6 +1256,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         setUseCustomDateTime(false);
         setCustomEntryDate(new Date().toISOString().split('T')[0]);
         setCustomEntryTime(new Date().toTimeString().slice(0, 5));
+        setSelectedDateOption('today');
       }
     } catch (err: any) {
       toast.error('Submission failed: ' + (err?.message || err));

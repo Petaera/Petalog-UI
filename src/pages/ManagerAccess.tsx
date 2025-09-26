@@ -173,6 +173,8 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
           email: u.email,
           role: typeof u.role === 'string' ? u.role.trim() : u.role,
           assigned_location: u.assigned_location,
+          first_name: (u as any).first_name,
+          last_name: (u as any).last_name,
           // Map actual status from database
           name: (u.first_name || u.last_name)
             ? `${u.first_name || ''} ${u.last_name || ''}`.trim()
@@ -335,7 +337,9 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
           email: u.email,
           role: typeof u.role === 'string' ? u.role.trim() : u.role,
           assigned_location: u.assigned_location,
-          name: (u.first_name || u.last_name)
+          first_name: (u as any).first_name,
+          last_name: (u as any).last_name,
+          name: ((u as any).first_name || (u as any).last_name)
             ? `${u.first_name || ''} ${u.last_name || ''}`.trim()
             : (u.email?.split('@')[0] || '—'),
           status: u.status === true ? 'Active' : 'Inactive',
@@ -603,7 +607,6 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
                   <TableHead>Email</TableHead>
                   <TableHead>Assigned Location</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Last Login</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -630,7 +633,6 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
                         />
                       </div>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{manager.lastLogin}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
                         <Button variant="ghost" size="sm" onClick={() => openEditDialog(manager)}>
@@ -663,7 +665,6 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
                   <TableHead>Email</TableHead>
                   <TableHead>Assigned Location</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Last Login</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -690,7 +691,6 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
                         />
                       </div>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{worker.lastLogin}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
                         <Button variant="ghost" size="sm" onClick={() => openEditDialog(worker)}>
