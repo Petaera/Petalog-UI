@@ -51,7 +51,7 @@ const Dashboard: React.FC = () => {
     netCost: 0,
   });
   const [expenseBreakdown, setExpenseBreakdown] = useState<{ category: string; total: number }[]>([]);
-  const [recentActivities, setRecentActivities] = useState<Array<{ id: string; kind: 'Expense' | 'Advance' | 'SalaryPayment'; date: string; title: string; amount: number; note?: string }>>([]);
+  const [recentActivities, setRecentActivities] = useState<Array<{ id: string; kind: 'Expense' | 'Advance' | 'SalaryPayment'; date: string; title: string; description?: string; amount: number; note?: string }>>([]);
   const [attendanceAlerts, setAttendanceAlerts] = useState<Array<{ type: 'leave' | 'absent'; staffName: string; date: string; endDate?: string; reason?: string }>>([]);
 
 
@@ -93,6 +93,7 @@ const Dashboard: React.FC = () => {
 
         // Advances in month
         let totalAdvances = 0;
+        let advancesData: any[] = [];
         if (staffIds.length > 0) {
           for (const t of ['payroll_advances', 'advances', 'payroll.advances']) {
             try {
@@ -104,7 +105,8 @@ const Dashboard: React.FC = () => {
                 .in('staff_id', staffIds);
               const { data, error } = await q;
               if (error) throw error;
-              totalAdvances = (data || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+              advancesData = data || [];
+              totalAdvances = advancesData.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
               break;
             } catch (_) {}
           }
@@ -112,18 +114,20 @@ const Dashboard: React.FC = () => {
 
         // Salary payments (activity logs) in month for branch
         let totalSalaryPaid = 0;
+        let salaryPaymentsData: any[] = [];
         for (const t of ['payroll_activity_logs', 'activity_logs', 'payroll.activity_logs']) {
           try {
             let q: any = supabase
               .from(t)
-              .select('kind, amount, date, branch_id')
+              .select('kind, amount, date, branch_id, ref_id')
               .eq('kind', 'SalaryPayment')
               .gte('date', monthStart)
               .lte('date', monthEnd);
             if (selectedLocationId) q = q.eq('branch_id', selectedLocationId);
             const { data, error } = await q;
             if (error) throw error;
-            totalSalaryPaid = (data || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+            salaryPaymentsData = data || [];
+            totalSalaryPaid = salaryPaymentsData.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
             break;
           } catch (_) {}
         }
@@ -190,7 +194,13 @@ const Dashboard: React.FC = () => {
         // Remove old pending attendance calculation - now using real alerts
 
         const totalSalaries = staffMapped.reduce((sum, s) => sum + (s.monthlySalary || 0), 0);
-        const totalPayable = Math.max(0, totalSalaries - totalAdvances - totalSalaryPaid);
+        // Calculate payable salary per staff: individual salary - individual advances - individual salary paid, then sum
+        const totalPayable = staffMapped.reduce((sum, s) => {
+          const staffAdvances = advancesData.filter(r => r.staff_id === s.id).reduce((advSum, r) => advSum + Number(r.amount || 0), 0);
+          const staffSalaryPaid = salaryPaymentsData.filter(r => r.ref_id === s.id).reduce((paidSum, r) => paidSum + Number(r.amount || 0), 0);
+          const payableForStaff = Math.max(0, (s.monthlySalary || 0) - staffAdvances - staffSalaryPaid);
+          return sum + payableForStaff;
+        }, 0);
         setTotals({ totalSalaries, totalAdvances, totalSalaryPaid, totalExpenses, totalPayable });
 
         // Build Recent Activities: Expenses + Advances + Salary Payments (top 5 by date desc) with names
@@ -199,7 +209,8 @@ const Dashboard: React.FC = () => {
           id: `exp_${r.id}`,
           kind: 'Expense' as const,
           date: r.date,
-          title: `Expense: ${catMap[r.category_id] || 'Uncategorized'}`,
+          title: `Expense Payment`,
+          description: `${catMap[r.category_id] || 'Uncategorized'}${r.notes ? ` - ${r.notes}` : ''}`,
           amount: Number(r.amount || 0),
           note: r.notes || undefined,
         }));
@@ -256,7 +267,8 @@ const Dashboard: React.FC = () => {
             id: `pay_${r.id}`,
             kind: (r.kind as 'Advance' | 'SalaryPayment'),
             date: r.date,
-            title: r.kind === 'Advance' ? `Advance to ${staffName || 'staff'}` : `Salary paid to ${staffName || 'staff'}`,
+            title: r.kind === 'Advance' ? `Advance Payment` : `Salary Payment`,
+            description: `To ${staffName || 'staff member'}${r.description ? ` - ${r.description}` : ''}`,
             amount: Number(r.amount || 0),
             note: r.description || undefined,
           });
@@ -452,6 +464,7 @@ const Dashboard: React.FC = () => {
   const totalPayable = totals.totalPayable;
   const totalAdvances = totals.totalAdvances;
   const totalExpenses = totals.totalExpenses;
+  const totalSalaryPaid = totals.totalSalaryPaid;
 
   if (loading) {
     return (
@@ -645,24 +658,24 @@ const Dashboard: React.FC = () => {
           {/* Monthly Overview (Bars) */}
           <Card className="p-6">
             <h3 className="text-lg font-semibold text-foreground mb-4">Monthly Overview</h3>
-            <div className="h-64 flex items-end justify-center gap-6 p-4">
+            <div className="h-64 flex items-end justify-center gap-4 p-4">
               {(() => {
-                const bars = [
-                  { label: 'Salaries', value: totalSalaries, color: '#10b981' },
-                  { label: 'Advances', value: totalAdvances, color: '#f59e0b' },
-                  { label: 'Paid', value: totals.totalSalaryPaid, color: '#3b82f6' },
-                  { label: 'Expenses', value: totalExpenses, color: '#ef4444' },
-                  { label: 'Net', value: totalSalaries + totalExpenses, color: '#6366f1' },
-                ];
+              const bars = [
+                { label: 'Total Salaries', value: totalSalaries, color: '#10b981' },
+                { label: 'Advances Given', value: totalAdvances, color: '#f59e0b' },
+                { label: 'Salaries Paid', value: totalSalaryPaid, color: '#3b82f6' },
+                { label: 'Payable Amount', value: totalPayable, color: '#8b5cf6' },
+                { label: 'Expenses', value: totalExpenses, color: '#ef4444' },
+              ];
                 const max = Math.max(1, ...bars.map(b => b.value || 0));
                 return bars.map((b) => {
                   const h = Math.round(((b.value || 0) / max) * 180);
                   return (
                     <div key={b.label} className="flex flex-col items-center">
                       <div className="text-xs mb-2 text-foreground">{`₹${(b.value||0).toLocaleString('en-IN')}`}</div>
-                      <div className="w-10 rounded-t-md" style={{ height: `${h}px`, backgroundColor: b.color }} />
-                      <div className="text-xs mt-2 text-muted-foreground">{b.label}</div>
-              </div>
+                      <div className="w-8 rounded-t-md" style={{ height: `${h}px`, backgroundColor: b.color }} />
+                      <div className="text-xs mt-2 text-muted-foreground text-center">{b.label}</div>
+            </div>
                   );
                 });
               })()}
@@ -674,8 +687,8 @@ const Dashboard: React.FC = () => {
       {/* Recent Activity */}
       <Card>
         <div className="p-6 border-b border-border">
-          <h3 className="text-lg font-semibold text-foreground">Recent Activity</h3>
-          <p className="text-sm text-muted-foreground">Latest 5 expenses, advances, and salary payments</p>
+          <h3 className="text-lg font-semibold text-foreground">Recent Payments</h3>
+          <p className="text-sm text-muted-foreground">Latest expense payments, advance payments, and salary payments made by owners/managers</p>
         </div>
         <div className="p-4">
           {recentActivities.length === 0 ? (
@@ -684,22 +697,29 @@ const Dashboard: React.FC = () => {
             <ul className="divide-y divide-border">
               {recentActivities.map(act => (
                 <li key={act.id} className="py-3 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${act.kind === 'Expense' ? 'bg-red-100 text-red-700' : act.kind === 'Advance' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${act.kind === 'Expense' ? 'bg-red-100 text-red-700' : act.kind === 'Advance' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
                       {act.kind === 'Expense' ? 'E' : act.kind === 'Advance' ? 'A' : 'S'}
                     </div>
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium text-foreground">
-                        {act.kind === 'Expense' ? `${act.title}` : `${act.title}`}
+                        {act.title}
                       </div>
-                      {act.note && (
-                        <div className="text-xs text-muted-foreground truncate max-w-[48ch]">{act.note}</div>
+                      {act.description && (
+                        <div className="text-xs text-muted-foreground truncate">{act.description}</div>
                       )}
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {new Date(act.date).toLocaleDateString('en-IN')} at {new Date(act.date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                      </div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm font-semibold text-foreground">{`₹${(act.amount||0).toLocaleString('en-IN')}`}</div>
-                    <div className="text-xs text-muted-foreground">{new Date(act.date).toLocaleString('en-IN')}</div>
+                  <div className="text-right flex-shrink-0">
+                    <div className={`text-lg font-bold ${act.kind === 'Expense' ? 'text-red-600' : 'text-green-600'}`}>
+                      ₹{(act.amount||0).toLocaleString('en-IN')}
+                    </div>
+                    <div className="text-xs text-muted-foreground uppercase tracking-wide">
+                      {act.kind === 'Expense' ? 'EXPENSE' : act.kind === 'Advance' ? 'ADVANCE' : 'SALARY'}
+                    </div>
                   </div>
                 </li>
               ))}
