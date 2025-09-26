@@ -2,6 +2,7 @@ import { Users, Plus, Trash2, UserPlus, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -29,6 +30,7 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
   const [managers, setManagers] = useState<any[]>([]);
   const [workers, setWorkers] = useState<any[]>([]);
   const [listLoading, setListLoading] = useState<boolean>(false);
+  const [statusUpdating, setStatusUpdating] = useState<{ [id: string]: boolean }>({});
    
   // Form state
   const [formData, setFormData] = useState({
@@ -185,6 +187,55 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
       ...prev,
       [field]: value
     }));
+  };
+
+  const handleToggleStatus = async (userId: string, nextActive: boolean) => {
+    try {
+      setStatusUpdating(prev => ({ ...prev, [userId]: true }));
+
+      // Optimistically update UI
+      const toLabel = nextActive ? 'Active' : 'Inactive';
+      setManagers(prev => prev.map(u => u.id === userId ? { ...u, status: toLabel } : u));
+      setWorkers(prev => prev.map(u => u.id === userId ? { ...u, status: toLabel } : u));
+
+      const { error } = await supabase
+        .from('users')
+        .update({ status: nextActive })
+        .eq('id', userId);
+      if (error) throw error;
+
+      toast.success(`Status updated to ${toLabel}`);
+    } catch (err: any) {
+      // Revert on failure by refetching list
+      toast.error(err?.message || 'Failed to update status');
+      try {
+        // Best-effort refresh of staff lists
+        setListLoading(true);
+        let query = supabase
+          .from('users')
+          .select('id, email, role, assigned_location, status');
+        const locationId = selectedLocation || formData.assignedLocation || undefined;
+        if (locationId) {
+          query = query.eq('assigned_location', locationId);
+        }
+        const { data } = await query;
+        const normalized = (data || []).map((u: any) => ({
+          id: u.id,
+          email: u.email,
+          role: typeof u.role === 'string' ? u.role.trim() : u.role,
+          assigned_location: u.assigned_location,
+          name: u.email?.split('@')[0] || '—',
+          status: u.status === true ? 'Active' : 'Inactive',
+          lastLogin: '—',
+        }));
+        setManagers(normalized.filter((u: any) => u.role === 'manager'));
+        setWorkers(normalized.filter((u: any) => u.role === 'worker'));
+      } finally {
+        setListLoading(false);
+      }
+    } finally {
+      setStatusUpdating(prev => ({ ...prev, [userId]: false }));
+    }
   };
 
   const handleCreateManager = async (e: React.FormEvent) => {
@@ -454,9 +505,17 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
                     <TableCell>{manager.email}</TableCell>
                     <TableCell>{manager.assigned_location || '—'}</TableCell>
                     <TableCell>
-                      <Badge variant={manager.status === "Active" ? "default" : "secondary"}>
-                        {manager.status}
-                      </Badge>
+                      <div className="flex items-center gap-3">
+                        <Badge variant={manager.status === "Active" ? "default" : "secondary"}>
+                          {manager.status}
+                        </Badge>
+                        <Switch
+                          checked={manager.status === 'Active'}
+                          disabled={!!statusUpdating[manager.id]}
+                          onCheckedChange={(checked) => handleToggleStatus(manager.id, checked)}
+                          aria-label={`Toggle status for ${manager.email}`}
+                        />
+                      </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{manager.lastLogin}</TableCell>
                     <TableCell>
@@ -504,9 +563,17 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
                     <TableCell>{worker.email}</TableCell>
                     <TableCell>{worker.assigned_location || '—'}</TableCell>
                     <TableCell>
-                      <Badge variant={worker.status === "Active" ? "default" : "secondary"}>
-                        {worker.status}
-                      </Badge>
+                      <div className="flex items-center gap-3">
+                        <Badge variant={worker.status === "Active" ? "default" : "secondary"}>
+                          {worker.status}
+                        </Badge>
+                        <Switch
+                          checked={worker.status === 'Active'}
+                          disabled={!!statusUpdating[worker.id]}
+                          onCheckedChange={(checked) => handleToggleStatus(worker.id, checked)}
+                          aria-label={`Toggle status for ${worker.email}`}
+                        />
+                      </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{worker.lastLogin}</TableCell>
                     <TableCell>
