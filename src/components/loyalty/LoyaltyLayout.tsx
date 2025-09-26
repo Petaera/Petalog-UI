@@ -140,45 +140,47 @@ export function LoyaltyLayout() {
 
       {/* Desktop Header */}
       {!isMobile && (
-        <div className="hidden md:block fixed top-4 right-4 z-30">
-          <div className="flex items-center gap-3">
-            <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
-              {user?.role === 'owner' ? 'Owner' : 'Manager'}
-            </Badge>
-            
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="flex items-center gap-2 bg-white/90 backdrop-blur border border-border shadow-sm hover:bg-white">
-                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground">
-                    <User className="h-4 w-4" />
-                  </div>
-                  <span className="font-medium text-sm">{user?.email}</span>
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>My Account</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem>
-                  <User className="mr-2 h-4 w-4" />
-                  Profile Settings
-                </DropdownMenuItem>
-                {user?.role === 'owner' && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => navigate('/manager-settings')}>
-                      <Settings className="mr-2 h-4 w-4" />
-                      Manager Settings
-                    </DropdownMenuItem>
-                  </>
-                )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout} className="text-destructive">
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Logout
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+        <div className="hidden md:block fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-md border-b border-border/50 p-4 z-20 shadow-sm">
+          <div className="flex items-center justify-end transition-all duration-300" style={{ marginLeft: sidebarCollapsed ? '5rem' : '20rem' }}>
+            <div className="flex items-center gap-3">
+              <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
+                {user?.role === 'owner' ? 'Owner' : 'Manager'}
+              </Badge>
+              
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="flex items-center gap-2 hover:bg-primary/10 transition-colors">
+                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground">
+                      <User className="h-4 w-4" />
+                    </div>
+                    <span className="font-medium text-sm">{user?.email}</span>
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem>
+                    <User className="mr-2 h-4 w-4" />
+                    Profile Settings
+                  </DropdownMenuItem>
+                  {user?.role === 'owner' && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => navigate('/manager-settings')}>
+                        <Settings className="mr-2 h-4 w-4" />
+                        Manager Settings
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleLogout} className="text-destructive">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Logout
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
           </div>
         </div>
       )}
@@ -191,7 +193,7 @@ export function LoyaltyLayout() {
       />
 
       {/* Main Content */}
-      <main className={`flex-1 overflow-auto ${isMobile ? 'pt-20' : 'md:pt-0'}`}>
+      <main className={`flex-1 overflow-auto ${isMobile ? 'pt-20' : 'md:pt-16'}`}>
         <div className="p-4 md:p-6">
           <Outlet />
         </div>

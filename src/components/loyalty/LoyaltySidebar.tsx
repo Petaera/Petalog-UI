@@ -239,7 +239,7 @@ export function LoyaltySidebar({ activeSection, collapsed = false, onToggle }: L
   // Desktop sidebar
   return (
     <div className={cn(
-      "bg-white border-r border-border flex flex-col transition-all duration-300 hidden md:flex",
+      "bg-white border-r border-border flex flex-col transition-all duration-300 hidden md:flex fixed left-0 top-0 h-full z-30",
       collapsed ? "w-20" : "w-80 lg:w-80"
     )}>
       

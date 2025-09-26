@@ -473,40 +473,73 @@ export function Customers() {
   // Fetch available subscription plans
   useEffect(() => {
     async function fetchPlans() {
-      if (!user?.id) return;
-
-      // Get user's permitted locations
-      let permittedLocationIds: string[] = [];
-      const isManager = String(user.role || '').toLowerCase().includes('manager');
-      
-      if (isManager && user.assigned_location) {
-        permittedLocationIds = [user.assigned_location];
-      } else {
-        const { data: ownerships } = await supabase
-          .from('location_owners')
-          .select('location_id')
-          .eq('owner_id', user.id);
-        permittedLocationIds = (ownerships || []).map((o: any) => o.location_id).filter(Boolean);
-      }
-
-      if (permittedLocationIds.length === 0) {
-        setSchemes([]);
+      if (!user?.id) {
+        console.log('No user ID, skipping plan fetch');
         return;
       }
 
-      // Fetch plans that are available for user's locations
-      const { data, error } = await supabase
-        .from('subscription_plans')
-        .select('id, name, type, price, active, duration_days, max_redemptions, plan_amount, locations')
-        .eq('active', true);
-      
-      if (!error && data) {
-        // Filter plans that are available for user's locations
-        const filteredPlans = data.filter(plan => {
-          if (!plan.locations || !Array.isArray(plan.locations)) return true; // No location restriction
-          return plan.locations.some(locId => permittedLocationIds.includes(locId));
-        });
-        setSchemes(filteredPlans);
+      try {
+        // Get user's permitted locations
+        let permittedLocationIds: string[] = [];
+        const isManager = String(user.role || '').toLowerCase().includes('manager');
+        
+        console.log('User role:', user.role, 'isManager:', isManager);
+        
+        if (isManager && user.assigned_location) {
+          permittedLocationIds = [user.assigned_location];
+          console.log('Manager assigned location:', user.assigned_location);
+        } else {
+          const { data: ownerships, error: ownershipError } = await supabase
+            .from('location_owners')
+            .select('location_id')
+            .eq('owner_id', user.id);
+          
+          if (ownershipError) {
+            console.error('Error fetching location ownerships:', ownershipError);
+            toast({ title: 'Error loading locations', description: 'Could not fetch your locations', variant: 'destructive' });
+            return;
+          }
+          
+          permittedLocationIds = (ownerships || []).map((o: any) => o.location_id).filter(Boolean);
+          console.log('Owner locations:', permittedLocationIds);
+        }
+
+        if (permittedLocationIds.length === 0) {
+          console.log('No permitted locations found');
+          // Note: Since location-based filtering is not yet implemented in the database,
+          // we'll proceed to fetch all plans regardless of user permissions
+          console.log('Proceeding to fetch all plans since location filtering is not available');
+        }
+
+        // Fetch plans that are available for user's locations
+        const { data, error } = await supabase
+          .from('subscription_plans')
+          .select('id, name, type, price, active, duration_days, max_redemptions, plan_amount, currency, multiplier')
+          .eq('active', true);
+        
+        if (error) {
+          console.error('Error fetching plans:', error);
+          toast({ title: 'Error loading plans', description: 'Could not fetch subscription plans', variant: 'destructive' });
+          return;
+        }
+        
+        console.log('Fetched plans:', data);
+
+        if (data) {
+          // Since the locations column doesn't exist in the database yet,
+          // show all active plans for now. Location-based filtering will be
+          // implemented when the database schema is updated.
+          setSchemes(data);
+          
+          console.log('Available plans:', data);
+          
+          if (data.length === 0) {
+            toast({ title: 'No plans available', description: 'No active subscription plans found', variant: 'destructive' });
+          }
+        }
+      } catch (error) {
+        console.error('Unexpected error in fetchPlans:', error);
+        toast({ title: 'Error', description: 'An unexpected error occurred while loading plans', variant: 'destructive' });
       }
     }
     fetchPlans();
@@ -1548,20 +1581,30 @@ export function Customers() {
                 <div className="space-y-6">
                   <div className="font-medium mb-2">Select Plan</div>
                   <div className="space-y-2 max-h-64 overflow-auto pr-2">
-                    {schemes.filter((p) => p.active !== false).map((p) => {
-                      const type = String(p.type || '').toLowerCase();
-                      const typeColor = type === 'credit' ? 'bg-green-100 text-green-700 border-green-200' : type === 'visit' ? 'bg-orange-100 text-orange-700 border-orange-200' : 'bg-blue-100 text-blue-700 border-blue-200';
-                      return (
-                        <Button
-                          key={p.id}
-                          className={`w-full justify-between border transition-colors ${selectedPlanId === p.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-foreground hover:bg-muted border-border'}`}
-                          onClick={() => handlePlanSelect(p.id)}
-                        >
-                          <span>{p.name}</span>
-                          <span className={`ml-2 px-2 py-0.5 rounded text-xs border ${selectedPlanId === p.id ? 'bg-white/10 text-white border-white/20' : typeColor}`}>{type.charAt(0).toUpperCase() + type.slice(1)}</span>
-                        </Button>
-                      );
-                    })}
+                    {schemes.filter((p) => p.active !== false).length === 0 ? (
+                      <div className="text-center py-8">
+                        <div className="text-muted-foreground mb-2">No plans available</div>
+                        <div className="text-sm text-muted-foreground">
+                          No subscription plans are currently available for your locations.
+                          Please contact your administrator to create plans.
+                        </div>
+                      </div>
+                    ) : (
+                      schemes.filter((p) => p.active !== false).map((p) => {
+                        const type = String(p.type || '').toLowerCase();
+                        const typeColor = type === 'credit' ? 'bg-green-100 text-green-700 border-green-200' : type === 'visit' ? 'bg-orange-100 text-orange-700 border-orange-200' : 'bg-blue-100 text-blue-700 border-blue-200';
+                        return (
+                          <Button
+                            key={p.id}
+                            className={`w-full justify-between border transition-colors ${selectedPlanId === p.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-foreground hover:bg-muted border-border'}`}
+                            onClick={() => handlePlanSelect(p.id)}
+                          >
+                            <span>{p.name} - ₹{p.price || p.plan_amount || 0}</span>
+                            <span className={`ml-2 px-2 py-0.5 rounded text-xs border ${selectedPlanId === p.id ? 'bg-white/10 text-white border-white/20' : typeColor}`}>{type.charAt(0).toUpperCase() + type.slice(1)}</span>
+                          </Button>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
               )}
