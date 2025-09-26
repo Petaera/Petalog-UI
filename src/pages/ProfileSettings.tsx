@@ -26,8 +26,6 @@ const templateOptions: TemplateOption[] = [
       "Summary cards with key metrics",
       "Payment mode breakdown with UPI details", 
       "Service breakdown with percentages",
-      "Vehicle distribution charts",
-      "Hourly sales visualization"
     ],
     icon: <Mail className="w-6 h-6" />,
     previewColor: "bg-gradient-to-br from-slate-50 to-slate-100",
@@ -38,8 +36,6 @@ const templateOptions: TemplateOption[] = [
     name: "Modern Analytics",
     description: "Chart-focused design with interactive visual elements",
     features: [
-      "Advanced pie charts for distributions",
-      "Bar charts for hourly analysis",
       "Modern card-based layout",
       "Enhanced data visualization",
       "Clean typography and spacing"
@@ -54,9 +50,7 @@ const templateOptions: TemplateOption[] = [
     description: "Premium design with advanced insights and gradient styling",
     features: [
       "Gradient-based visual design",
-      "Key insights and recommendations",
       "Advanced performance metrics",
-      "Interactive hourly performance charts",
       "Professional BI-style layout"
     ],
     icon: <TrendingUp className="w-6 h-6" />,
@@ -137,13 +131,10 @@ export function ProfileSettings() {
   }
 
   return (
-    <div className="container max-w-4xl mx-auto p-6 space-y-8">
+    <div className="container max-w-6xl mx-auto p-6 space-y-8">
       {/* Header */}
       <div className="space-y-2">
         <h1 className="text-3xl font-bold tracking-tight">Profile Settings</h1>
-        <p className="text-muted-foreground">
-          Customize your account preferences and report settings.
-        </p>
       </div>
 
       {/* Email Report Templates Section */}
@@ -267,9 +258,6 @@ export function ProfileSettings() {
 
       {/* Placeholder for future settings sections */}
       <div className="pt-8 border-t">
-        <div className="text-center text-muted-foreground">
-          <p className="text-sm">More settings options will be available here in the future.</p>
-        </div>
       </div>
     </div>
   );
