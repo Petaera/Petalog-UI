@@ -69,14 +69,19 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
   // Load existing plan in edit mode
   React.useEffect(() => {
     const loadPlan = async () => {
-      if (!isEditMode || !planId) return;
+      if (!isEditMode || !planId || !user?.id) return;
+      
+      // Ensure user can only edit their own plans
       const { data: plan, error } = await supabase
         .from('subscription_plans')
-        .select('id, name, type, duration_days, price, multiplier, short_description, currency, allow_multiple_locations, max_redemptions, allowed_payment_methods, allowed_locations, mixed_handling, allow_mixed_handling, expiry, refund_policy')
+        .select('id, name, type, duration_days, price, multiplier, short_description, currency, allow_multiple_locations, max_redemptions, allowed_payment_methods, allowed_locations, mixed_handling, allow_mixed_handling, expiry, refund_policy, owner_id')
         .eq('id', planId)
+        .eq('owner_id', user.id) // Only allow editing plans owned by the current user
         .maybeSingle();
+        
       if (error || !plan) {
-        toast({ title: 'Error', description: 'Failed to load scheme for editing', status: 'error' });
+        toast({ title: 'Error', description: 'Plan not found or you do not have permission to edit this scheme', status: 'error' });
+        navigate('/loyalty/schemes'); // Redirect back to schemes list
         return;
       }
       setFormData((prev: any) => ({

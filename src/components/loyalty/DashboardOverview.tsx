@@ -129,13 +129,53 @@ export function DashboardOverview({ onNavigate }: DashboardOverviewProps) {
       // Expiring soon
       let expSoonCount = 0; let expiringThisMonth = 0; let expiringPrevMonth = 0;
 
-      // Common datasets
+      // Common datasets - fetch purchases for user's permitted locations
       const { data: purchases } = await supabase
         .from('subscription_purchases')
         .select('id, plan_id, customer_id, status, total_value, created_at, expiry_date, location_id')
         .in('location_id', permittedLocationIds.length > 0 ? permittedLocationIds : ['00000000-0000-0000-0000-000000000000']);
+      
+      // Additional filtering: ensure purchases are only for plans owned by the user (or accessible to manager)
+      let filteredPurchases = purchases || [];
+      if (filteredPurchases.length > 0) {
+        const purchasePlanIds = Array.from(new Set(filteredPurchases.map(p => p.plan_id).filter(Boolean)));
+        if (purchasePlanIds.length > 0) {
+          let validPlanIds: string[] = [];
+          
+          const isManager = String(user.role || '').toLowerCase().includes('manager');
+          if (isManager && user.assigned_location) {
+            // For managers: get plans from owners who have the manager's assigned location
+            const { data: ownerIds } = await supabase
+              .from('location_owners')
+              .select('owner_id')
+              .eq('location_id', user.assigned_location);
+            
+            const validOwnerIds = (ownerIds || []).map(o => o.owner_id).filter(Boolean);
+            
+            if (validOwnerIds.length > 0) {
+              const { data: validPlans } = await supabase
+                .from('subscription_plans')
+                .select('id')
+                .in('id', purchasePlanIds)
+                .in('owner_id', validOwnerIds);
+              validPlanIds = (validPlans || []).map(p => p.id);
+            }
+          } else {
+            // For owners: only include plans they own
+            const { data: validPlans } = await supabase
+              .from('subscription_plans')
+              .select('id')
+              .in('id', purchasePlanIds)
+              .eq('owner_id', user.id);
+            validPlanIds = (validPlans || []).map(p => p.id);
+          }
+          
+          // Filter purchases to only include those with valid plan IDs
+          filteredPurchases = filteredPurchases.filter(p => validPlanIds.includes(p.plan_id));
+        }
+      }
 
-      const purchaseRows = purchases || [];
+      const purchaseRows = filteredPurchases;
       activeCount = purchaseRows.filter(r => String(r.status || '').toLowerCase() === 'active').length;
       activeThisMonth = purchaseRows.filter(r => String(r.status || '').toLowerCase() === 'active' && new Date(r.created_at) >= startOfThisMonth && new Date(r.created_at) <= endOfThisMonth).length;
       activePrevMonth = purchaseRows.filter(r => String(r.status || '').toLowerCase() === 'active' && new Date(r.created_at) >= startOfPrevMonth && new Date(r.created_at) <= endOfPrevMonth).length;

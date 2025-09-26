@@ -55,7 +55,7 @@ const allSidebarItems = [
     icon: BarChart3,
     path: '/loyalty/analytics',
     description: 'Insights & Data',
-    roles: ['owner'] // Owner only
+    roles: ['owner', 'manager'] // Available to both
   }
 ];
 

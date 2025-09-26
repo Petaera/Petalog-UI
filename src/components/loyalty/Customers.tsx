@@ -511,11 +511,34 @@ export function Customers() {
           console.log('Proceeding to fetch all plans since location filtering is not available');
         }
 
-        // Fetch plans that are available for user's locations
-        const { data, error } = await supabase
+        // Fetch plans that are available for user's locations and owned by the user (or their location owners for managers)
+        let plansQuery = supabase
           .from('subscription_plans')
           .select('id, name, type, price, active, duration_days, max_redemptions, plan_amount, currency, multiplier')
           .eq('active', true);
+        
+        if (isManager && user.assigned_location) {
+          // For managers: fetch plans from owners who have the manager's assigned location
+          const validOwnerIds = permittedLocationIds.length > 0 ? 
+            await supabase
+              .from('location_owners')
+              .select('owner_id')
+              .eq('location_id', user.assigned_location)
+              .then(result => (result.data || []).map(o => o.owner_id).filter(Boolean)) : [];
+          
+          if (validOwnerIds.length > 0) {
+            plansQuery = plansQuery.in('owner_id', validOwnerIds);
+          } else {
+            // No valid owners found, return empty
+            setSchemes([]);
+            return;
+          }
+        } else {
+          // For owners: only fetch their own plans
+          plansQuery = plansQuery.eq('owner_id', user.id);
+        }
+        
+        const { data, error } = await plansQuery;
         
         if (error) {
           console.error('Error fetching plans:', error);

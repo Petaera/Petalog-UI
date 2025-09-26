@@ -34,21 +34,48 @@ export function SubscriptionSchemes() {
 
   useEffect(() => {
     async function fetchSchemes() {
-      let query = supabase.from('subscription_plans').select('*, plan_amount');
+      if (!user?.id) return;
       
-      // For managers, we still fetch all schemes but filter them on the client side
-      // This is because scheme availability is determined by the `locations` field
-      // which is handled in the filteredSchemes logic below
-      
-      const { data, error } = await query;
-      if (error) {
-        toast({ title: 'Failed to load plans', description: 'Please refresh and try again.', variant: 'destructive' });
-      } else {
-        setSchemes(data || []);
+      try {
+        let query = supabase.from('subscription_plans').select('*, plan_amount');
+        
+        // Filter plans based on user role and permissions
+        if (isManager && userAssignedLocation) {
+          // For managers: fetch plans that are either available for their location or have no location restrictions
+          // Since we can't do complex JSON array filtering in the query, we'll fetch all plans by owner and filter client-side
+          const { data: ownerIds } = await supabase
+            .from('location_owners')
+            .select('owner_id')
+            .eq('location_id', userAssignedLocation);
+          
+          const validOwnerIds = (ownerIds || []).map(o => o.owner_id).filter(Boolean);
+          
+          if (validOwnerIds.length > 0) {
+            query = query.in('owner_id', validOwnerIds);
+          } else {
+            // No valid owners found for this location, return empty
+            setSchemes([]);
+            return;
+          }
+        } else {
+          // For owners: only fetch their own plans
+          query = query.eq('owner_id', user.id);
+        }
+        
+        const { data, error } = await query;
+        if (error) {
+          console.error('Error fetching subscription plans:', error);
+          toast({ title: 'Failed to load plans', description: 'Please refresh and try again.', variant: 'destructive' });
+        } else {
+          setSchemes(data || []);
+        }
+      } catch (error) {
+        console.error('Unexpected error in fetchSchemes:', error);
+        toast({ title: 'Error', description: 'An unexpected error occurred while loading plans', variant: 'destructive' });
       }
     }
     fetchSchemes();
-  }, []);
+  }, [user?.id, isManager, userAssignedLocation]);
 
   const handleDelete = async (id: string) => {
     // Check if there are any members (active or historical purchases) for this plan
