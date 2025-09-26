@@ -193,7 +193,7 @@ export function LoyaltyLayout() {
       />
 
       {/* Main Content */}
-      <main className={`flex-1 overflow-auto ${isMobile ? 'pt-20' : 'md:pt-16'}`}>
+      <main className={`flex-1 overflow-auto ${isMobile ? 'pt-20' : 'md:pt-16'} ${!isMobile ? (sidebarCollapsed ? 'md:ml-20' : 'md:ml-80') : ''} transition-all duration-300`}>
         <div className="p-4 md:p-6">
           <Outlet />
         </div>
