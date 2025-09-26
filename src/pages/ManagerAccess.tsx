@@ -1,4 +1,4 @@
-import { Users, Plus, Trash2, UserPlus, Loader2 } from "lucide-react";
+import { Users, Plus, UserPlus, Loader2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +31,9 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
   const [workers, setWorkers] = useState<any[]>([]);
   const [listLoading, setListLoading] = useState<boolean>(false);
   const [statusUpdating, setStatusUpdating] = useState<{ [id: string]: boolean }>({});
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editForm, setEditForm] = useState<{ id: string; email: string; role: 'manager' | 'worker'; assignedLocation: string; firstName?: string; lastName?: string; newPassword?: string } | null>(null);
    
   // Form state
   const [formData, setFormData] = useState({
@@ -143,15 +146,26 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
         // Build base query scoped by location if provided/selected
         const locationId = selectedLocation || formData.assignedLocation || undefined;
 
-        let query = supabase
-          .from('users')
-          .select('id, email, role, assigned_location, status');
+        // Attempt to select with name columns; if they don't exist yet, fall back without them
+        const runSelect = async (withNames: boolean) => {
+          let q = supabase
+            .from('users')
+            .select(
+              withNames
+                ? 'id, email, role, assigned_location, status, first_name, last_name'
+                : 'id, email, role, assigned_location, status'
+            );
+          if (locationId) q = q.eq('assigned_location', locationId);
+          return await q;
+        };
 
-        if (locationId) {
-          query = query.eq('assigned_location', locationId);
+        let { data, error } = await runSelect(true);
+        if (error) {
+          // Fallback if columns don't exist yet
+          const fallback = await runSelect(false);
+          data = fallback.data;
+          error = fallback.error;
         }
-
-        const { data, error } = await query;
         if (error) throw error;
 
         const normalized = (data || []).map((u: any) => ({
@@ -160,7 +174,9 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
           role: typeof u.role === 'string' ? u.role.trim() : u.role,
           assigned_location: u.assigned_location,
           // Map actual status from database
-          name: u.email?.split('@')[0] || '—',
+          name: (u.first_name || u.last_name)
+            ? `${u.first_name || ''} ${u.last_name || ''}`.trim()
+            : (u.email?.split('@')[0] || '—'),
           status: u.status === true ? 'Active' : 'Inactive',
           lastLogin: '—',
         }));
@@ -189,6 +205,91 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
     }));
   };
 
+  const openEditDialog = (staff: any) => {
+    setEditForm({
+      id: staff.id,
+      email: staff.email,
+      role: (staff.role === 'worker' ? 'worker' : 'manager'),
+      assignedLocation: staff.assigned_location || '',
+      firstName: staff.first_name || '',
+      lastName: staff.last_name || '',
+    });
+    setShowEditDialog(true);
+  };
+
+  const setEditField = (field: 'role' | 'assignedLocation' | 'firstName' | 'lastName' | 'email' | 'newPassword', value: string) => {
+    if (!editForm) return;
+    setEditForm({ ...editForm, [field]: value } as any);
+  };
+
+  const saveEdit = async () => {
+    if (!editForm) return;
+    try {
+      setEditSaving(true);
+      const updates: any = {
+        role: editForm.role,
+        assigned_location: editForm.assignedLocation || null,
+        first_name: editForm.firstName || null,
+        last_name: editForm.lastName || null,
+      };
+      if (editForm.email) {
+        updates.email = editForm.email;
+      }
+      const { error } = await supabase
+        .from('users')
+        .update(updates)
+        .eq('id', editForm.id);
+      if (error) throw error;
+
+      // Update Auth email/password via serverless function if changed
+      if ((editForm.email && editForm.email !== '') || (editForm.newPassword && editForm.newPassword.length >= 6)) {
+        try {
+          const resp = await fetch('/api/updateAuthUser', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: editForm.id, email: editForm.email, password: editForm.newPassword })
+          });
+          const json = await resp.json();
+          if (!resp.ok) throw new Error(json.error || 'Failed to update auth');
+        } catch (e: any) {
+          toast.error(e?.message || 'Failed to update login credentials');
+        }
+      }
+
+      // Optimistically update local lists
+      setManagers(prev => prev.map(u => u.id === editForm.id ? { ...u, role: editForm.role, assigned_location: editForm.assignedLocation, first_name: editForm.firstName, last_name: editForm.lastName, email: editForm.email } : u));
+      setWorkers(prev => prev.map(u => u.id === editForm.id ? { ...u, role: editForm.role, assigned_location: editForm.assignedLocation, first_name: editForm.firstName, last_name: editForm.lastName, email: editForm.email } : u));
+      // Move between lists if role changed
+      setManagers(prev => {
+        const all = prev.filter(u => !(u.id === editForm.id && editForm.role === 'worker'));
+        return all;
+      });
+      setWorkers(prev => {
+        const isInManagers = managers.find(u => u.id === editForm.id);
+        if (editForm.role === 'worker' && isInManagers) {
+          return [...prev, { ...isInManagers, role: 'worker' }];
+        }
+        const all = prev.filter(u => !(u.id === editForm.id && editForm.role === 'manager'));
+        return all;
+      });
+      setManagers(prev => {
+        const isInWorkers = workers.find(u => u.id === editForm.id);
+        if (editForm.role === 'manager' && isInWorkers) {
+          return [...prev, { ...isInWorkers, role: 'manager' }];
+        }
+        return prev;
+      });
+
+      toast.success('Staff details updated');
+      setShowEditDialog(false);
+      setEditForm(null);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to update staff details');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   const handleToggleStatus = async (userId: string, nextActive: boolean) => {
     try {
       setStatusUpdating(prev => ({ ...prev, [userId]: true }));
@@ -211,20 +312,32 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
       try {
         // Best-effort refresh of staff lists
         setListLoading(true);
-        let query = supabase
-          .from('users')
-          .select('id, email, role, assigned_location, status');
         const locationId = selectedLocation || formData.assignedLocation || undefined;
-        if (locationId) {
-          query = query.eq('assigned_location', locationId);
+        const runSelect = async (withNames: boolean) => {
+          let q = supabase
+            .from('users')
+            .select(
+              withNames
+                ? 'id, email, role, assigned_location, status, first_name, last_name'
+                : 'id, email, role, assigned_location, status'
+            );
+          if (locationId) q = q.eq('assigned_location', locationId);
+          return await q;
+        };
+        let { data, error } = await runSelect(true);
+        if (error) {
+          const fallback = await runSelect(false);
+          data = fallback.data;
+          error = fallback.error;
         }
-        const { data } = await query;
         const normalized = (data || []).map((u: any) => ({
           id: u.id,
           email: u.email,
           role: typeof u.role === 'string' ? u.role.trim() : u.role,
           assigned_location: u.assigned_location,
-          name: u.email?.split('@')[0] || '—',
+          name: (u.first_name || u.last_name)
+            ? `${u.first_name || ''} ${u.last_name || ''}`.trim()
+            : (u.email?.split('@')[0] || '—'),
           status: u.status === true ? 'Active' : 'Inactive',
           lastLogin: '—',
         }));
@@ -491,7 +604,7 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
                   <TableHead>Assigned Location</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Last Login</TableHead>
-                  <TableHead>Delete</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -519,9 +632,11 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
                     </TableCell>
                     <TableCell className="text-muted-foreground">{manager.lastLogin}</TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => openEditDialog(manager)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -549,7 +664,7 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
                   <TableHead>Assigned Location</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Last Login</TableHead>
-                  <TableHead>Delete</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -577,9 +692,11 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
                     </TableCell>
                     <TableCell className="text-muted-foreground">{worker.lastLogin}</TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => openEditDialog(worker)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -630,6 +747,69 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
             </div>
           </CardContent>
         </Card>
+
+        {/* Edit Staff Dialog */}
+        <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Edit Staff</DialogTitle>
+              <DialogDescription>Update role and assigned location.</DialogDescription>
+            </DialogHeader>
+            {editForm && (
+              <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>First name</Label>
+                  <Input value={editForm.firstName || ''} onChange={(e) => setEditField('firstName', e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Last name</Label>
+                  <Input value={editForm.lastName || ''} onChange={(e) => setEditField('lastName', e.target.value)} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input type="email" value={editForm.email} onChange={(e) => setEditField('email', e.target.value)} />
+              </div>
+                <div className="space-y-2">
+                  <Label>Role</Label>
+                  <Select value={editForm.role} onValueChange={(v) => setEditField('role', v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="manager">Manager</SelectItem>
+                      <SelectItem value="worker">Worker</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Assigned Location</Label>
+                  <Select value={editForm.assignedLocation} onValueChange={(v) => setEditField('assignedLocation', v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select location" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {locations.map((location) => (
+                        <SelectItem key={location.id} value={location.id}>
+                          {location.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>New password</Label>
+                  <Input type="password" value={editForm.newPassword || ''} onChange={(e) => setEditField('newPassword', e.target.value)} placeholder="Leave blank to keep unchanged" />
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <Button variant="outline" className="flex-1" onClick={() => setShowEditDialog(false)} disabled={editSaving}>Cancel</Button>
+                  <Button className="flex-1" onClick={saveEdit} disabled={editSaving}>{editSaving ? 'Saving...' : 'Save Changes'}</Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
   );
 }
