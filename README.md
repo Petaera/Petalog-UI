@@ -66,6 +66,7 @@ CREATE TABLE users (
   role TEXT NOT NULL,
   own_id UUID,
   assigned_location UUID,
+  status BOOLEAN DEFAULT true NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```

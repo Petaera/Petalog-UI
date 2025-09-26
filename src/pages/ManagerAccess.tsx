@@ -143,7 +143,7 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
 
         let query = supabase
           .from('users')
-          .select('id, email, role, assigned_location');
+          .select('id, email, role, assigned_location, status');
 
         if (locationId) {
           query = query.eq('assigned_location', locationId);
@@ -157,9 +157,9 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
           email: u.email,
           role: typeof u.role === 'string' ? u.role.trim() : u.role,
           assigned_location: u.assigned_location,
-          // Placeholder fields for UI columns
+          // Map actual status from database
           name: u.email?.split('@')[0] || '—',
-          status: 'Active',
+          status: u.status === true ? 'Active' : 'Inactive',
           lastLogin: '—',
         }));
 
