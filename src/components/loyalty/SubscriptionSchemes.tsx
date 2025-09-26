@@ -18,21 +18,33 @@ import { useNavigate } from 'react-router-dom';
 import { Select, SelectTrigger, SelectContent, SelectItem } from '@/components/ui/select'; // Import Select for filters
 import { Input } from '@/components/ui/input'; // Import Input for search
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 export function SubscriptionSchemes() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [schemes, setSchemes] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
+  
+  // Check if user is manager and get their role
+  const isManager = user?.role?.toLowerCase() === 'manager';
+  const userAssignedLocation = user?.assigned_location;
 
   useEffect(() => {
     async function fetchSchemes() {
-      const { data, error } = await supabase.from('subscription_plans').select('*, plan_amount');
+      let query = supabase.from('subscription_plans').select('*, plan_amount');
+      
+      // For managers, we still fetch all schemes but filter them on the client side
+      // This is because scheme availability is determined by the `locations` field
+      // which is handled in the filteredSchemes logic below
+      
+      const { data, error } = await query;
       if (error) {
         toast({ title: 'Failed to load plans', description: 'Please refresh and try again.', variant: 'destructive' });
       } else {
-        setSchemes(data);
+        setSchemes(data || []);
       }
     }
     fetchSchemes();
@@ -90,7 +102,15 @@ export function SubscriptionSchemes() {
       filterType === 'all' ||
       (filterType === 'subscription' && (scheme.type === 'subscription' || scheme.type === 'package')) || // Include 'package' as 'subscription'
       scheme.type === filterType;
-    return matchesSearch && matchesFilter;
+    
+    // For managers, only show schemes available for their assigned location
+    const matchesLocation = !isManager || !userAssignedLocation || 
+      !scheme.locations || 
+      !Array.isArray(scheme.locations) || 
+      scheme.locations.length === 0 || // No location restriction
+      scheme.locations.includes(userAssignedLocation);
+    
+    return matchesSearch && matchesFilter && matchesLocation;
   });
 
   return (
@@ -99,14 +119,21 @@ export function SubscriptionSchemes() {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-foreground mb-2">Subscription Schemes</h1>
-          <p className="text-muted-foreground">Manage your loyalty and subscription programs</p>
+          <p className="text-muted-foreground">
+            {isManager 
+              ? 'View available subscription schemes for your location'
+              : 'Manage your loyalty and subscription programs'
+            }
+          </p>
         </div>
-        <Button
-          className="bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg transition-all duration-300"
-          onClick={() => navigate('/loyalty/create')}
-        >
-          Create New Scheme
-        </Button>
+        {!isManager && (
+          <Button
+            className="bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg transition-all duration-300"
+            onClick={() => navigate('/loyalty/create')}
+          >
+            Create New Scheme
+          </Button>
+        )}
       </div>
 
       {/* Filters */}
@@ -205,17 +232,29 @@ export function SubscriptionSchemes() {
 
                 {/* Actions */}
                 <div className="flex gap-2 pt-3 border-t border-border">
-                  <Button size="sm" variant="outline" className="flex-1" onClick={() => navigate(`/loyalty/edit/${scheme.id}`)}>
-                    <Edit className="w-4 h-4 mr-2" />
-                    Edit
-                  </Button>
-                  <Button size="sm" variant="outline" className="flex-1" onClick={() => navigate(`/loyalty/analytics?plan=${scheme.id}`)}>
-                    <BarChart3 className="w-4 h-4 mr-2" />
-                    Analytics
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => handleDelete(scheme.id)}>
-                    <Archive className="w-4 h-4" />
-                  </Button>
+                  {!isManager && (
+                    <Button size="sm" variant="outline" className="flex-1" onClick={() => navigate(`/loyalty/edit/${scheme.id}`)}>
+                      <Edit className="w-4 h-4 mr-2" />
+                      Edit
+                    </Button>
+                  )}
+                  {!isManager && (
+                    <Button size="sm" variant="outline" className="flex-1" onClick={() => navigate(`/loyalty/analytics?plan=${scheme.id}`)}>
+                      <BarChart3 className="w-4 h-4 mr-2" />
+                      Analytics
+                    </Button>
+                  )}
+                  {!isManager && (
+                    <Button size="sm" variant="outline" onClick={() => handleDelete(scheme.id)}>
+                      <Archive className="w-4 h-4" />
+                    </Button>
+                  )}
+                  {isManager && (
+                    <Button size="sm" variant="outline" className="flex-1" onClick={() => navigate(`/loyalty/customers?scheme=${scheme.id}`)}>
+                      <Users className="w-4 h-4 mr-2" />
+                      View Members
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -233,9 +272,11 @@ export function SubscriptionSchemes() {
           <p className="text-muted-foreground mb-4">
             Create your first subscription scheme to get started.
           </p>
-          <Button className="bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg" onClick={() => navigate('/loyalty/create')}>
-            Create New Scheme
-          </Button>
+          {!isManager && (
+            <Button className="bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg" onClick={() => navigate('/loyalty/create')}>
+              Create New Scheme
+            </Button>
+          )}
         </Card>
       )}
     </div>

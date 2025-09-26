@@ -40,6 +40,9 @@ export function Customers() {
   const { user } = useAuth();
   const { toast } = useToast();
   const location = useLocation();
+  
+  // Check if user is manager
+  const isManager = String(user?.role || '').toLowerCase().includes('manager');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [expiringMode, setExpiringMode] = useState(false);
@@ -224,7 +227,7 @@ export function Customers() {
           model,
           location_id,
           owner_id,
-          Vehicles_in_india!vehicles_model_fkey (
+          Vehicles_in_india (
             Models,
             "Vehicle Brands"
           )
@@ -606,7 +609,7 @@ export function Customers() {
             type, 
             Brand, 
             model,
-            Vehicles_in_india!vehicles_model_fkey (
+            Vehicles_in_india (
               Models,
               "Vehicle Brands"
             )
@@ -614,11 +617,44 @@ export function Customers() {
           .in('id', allVehicleIds);
         
         const vehicleMap: Record<string, any> = {};
+        
+        // First, let's fetch the model names separately for vehicles that have UUIDs
+        const vehicleUUIDs = (vehicles || [])
+          .map(v => v.model)
+          .filter(model => model && model.length === 36 && model.includes('-')); // Detect UUIDs
+        
+        let modelNameMap: Record<string, string> = {};
+        if (vehicleUUIDs.length > 0) {
+          const { data: modelData } = await supabase
+            .from('Vehicles_in_india')
+            .select('id, Models')
+            .in('id', vehicleUUIDs);
+          
+          (modelData || []).forEach(model => {
+            modelNameMap[model.id] = model.Models;
+          });
+        }
+        
         (vehicles || []).forEach(v => { 
+          // Get the model name from Vehicles_in_india join or fallback to raw model field
+          const joinedData = (v.Vehicles_in_india?.[0] as any) || null;
+          let modelName = joinedData?.Models || '';
+          
+          // If no joined data and model looks like UUID, try our separate lookup
+          if (!modelName && v.model && v.model.length === 36 && v.model.includes('-')) {
+            modelName = modelNameMap[v.model] || '';
+          }
+          
+          const brandName = joinedData?.['Vehicle Brands'] || v.Brand || '';
+          
           vehicleMap[v.id] = {
             ...v,
-            Model: v.Vehicles_in_india?.[0]?.Models || v.model || '',
-            Brand: v.Vehicles_in_india?.[0]?.['Vehicle Brands'] || v.Brand || ''
+            Model: modelName || v.model || '',
+            Brand: brandName,
+            // Store original for debugging
+            originalModel: v.model,
+            joinedModel: joinedData?.Models,
+            lookupModel: modelNameMap[v.model] || null
           };
         });
         setVehicleInfoMap(vehicleMap);
@@ -1476,12 +1512,19 @@ export function Customers() {
       <div className="flex flex-col gap-4">
         <div className="text-center sm:text-left">
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">Customers</h1>
-          <p className="text-sm sm:text-base text-muted-foreground">Manage your subscription and loyalty members</p>
+          <p className="text-sm sm:text-base text-muted-foreground">
+            {isManager 
+              ? 'View and manage customers at your location'
+              : 'Manage your subscription and loyalty members'
+            }
+          </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-2">
+          {!isManager && (
           <Button variant="outline" className="w-full sm:w-auto" onClick={() => setShowExportModal(true)}>
             Export Data
           </Button>
+          )}
           <Button className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg" onClick={handleAddCustomerClick}>
             <Plus className="w-4 h-4 mr-2" />
             Add Customer
@@ -2063,6 +2106,16 @@ export function Customers() {
                 const plan = planDetailsMap[selectedPurchase.plan_id] || {};
                 // Use the vehicle_id from the subscription purchase, fallback to customer's default vehicle
                 const vehicle = vehicleInfoMap[selectedPurchase.vehicle_id] || vehicleInfoMap[cust.default_vehicle_id] || {};
+                
+                // Debug log to see vehicle data
+                console.log('Vehicle data in view modal:', {
+                  vehicleId: selectedPurchase.vehicle_id || cust.default_vehicle_id,
+                  vehicle: vehicle,
+                  originalModel: vehicle.originalModel,
+                  joinedModel: vehicle.joinedModel,
+                  lookupModel: vehicle.lookupModel,
+                  finalModel: vehicle.Model
+                });
                 return (
                   <div className="space-y-3">
                     <div className="grid grid-cols-2 gap-3">
@@ -2118,7 +2171,7 @@ export function Customers() {
                       <CardContent>
                         <div className="text-sm text-muted-foreground grid grid-cols-2 gap-2">
                           <div>Number Plate: {vehicle.number_plate || '-'}</div>
-                          <div>Model: {vehicle.Model || '-'}</div>
+                          <div>Model: {vehicle.Model || vehicle.lookupModel || vehicle.joinedModel || (vehicle.originalModel?.length === 36 ? 'Unknown Model' : vehicle.originalModel) || '-'}</div>
                           <div>Brand: {vehicle.Brand || '-'}</div>
                           <div>Type: {vehicle.type || '-'}</div>
                         </div>

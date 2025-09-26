@@ -18,20 +18,22 @@ import {
   Target
 } from 'lucide-react';
 
-const quickActions = [
+const allQuickActions = [
   {
     title: 'Create New Scheme',
     description: 'Setup subscription or loyalty program',
     icon: Plus,
     action: 'create-scheme',
-    gradient: 'gradient-blue'
+    gradient: 'gradient-blue',
+    ownerOnly: true
   },
   {
     title: 'View All Customers',
     description: 'Manage member directory',
     icon: Eye,
     action: 'customers',
-    gradient: 'gradient-blue'
+    gradient: 'gradient-blue',
+    ownerOnly: false
   }
 ];
 
@@ -42,6 +44,9 @@ interface DashboardOverviewProps {
 export function DashboardOverview({ onNavigate }: DashboardOverviewProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
+  
+  // Check if user is manager
+  const isManager = String(user?.role || '').toLowerCase().includes('manager');
   const [activeSubscriptions, setActiveSubscriptions] = useState<number | null>(null);
   const [totalRevenue, setTotalRevenue] = useState<number | null>(null);
   const [loyaltyMembers, setLoyaltyMembers] = useState<number | null>(null);
@@ -78,12 +83,15 @@ export function DashboardOverview({ onNavigate }: DashboardOverviewProps) {
     return Math.round(((curr - prev) / prev) * 100);
   };
 
-  const statsCards = [
-    { key: 'activeSubs', title: 'Active Subscriptions', valueKey: 'activeSubscriptions', icon: CreditCard, color: 'blue-600' },
-    { key: 'revenue', title: 'Total Revenue', valueKey: 'totalRevenue', icon: TrendingUp, color: 'blue-500' },
-    { key: 'loyalty', title: 'Loyalty Members', valueKey: 'loyaltyMembers', icon: Users, color: 'blue-400' },
-    { key: 'expiring', title: 'Expiring Soon', valueKey: 'expiringSoon', icon: Calendar, color: 'blue-300' }
-  ] as const;
+  const allStatsCards = [
+    { key: 'activeSubs', title: 'Active Subscriptions', valueKey: 'activeSubscriptions', icon: CreditCard, color: 'blue-600', ownerOnly: false },
+    { key: 'revenue', title: 'Total Revenue', valueKey: 'totalRevenue', icon: TrendingUp, color: 'blue-500', ownerOnly: true },
+    { key: 'loyalty', title: 'Loyalty Members', valueKey: 'loyaltyMembers', icon: Users, color: 'blue-400', ownerOnly: false },
+    { key: 'expiring', title: 'Expiring Soon', valueKey: 'expiringSoon', icon: Calendar, color: 'blue-300', ownerOnly: false }
+  ];
+  
+  const statsCards = allStatsCards.filter(card => !isManager || !card.ownerOnly);
+  const quickActions = allQuickActions.filter(action => !isManager || !action.ownerOnly);
 
   // Resolve permitted locations
   useEffect(() => {
@@ -186,10 +194,10 @@ export function DashboardOverview({ onNavigate }: DashboardOverviewProps) {
       const loyaltyVisitMoM = pctChange(loyaltyThisMonth, loyaltyPrevMonth);
       setInsights({ topPlanName, topPlanSharePct, loyaltyVisitMoM, prevMonthName });
 
-      // Recent activity with plan names
+      // Recent activity with plan names (location-filtered for managers)
       const formatTime = (d: string | Date) => { const date = typeof d === 'string' ? new Date(d) : d; return date.toLocaleString(); };
       const activities: any[] = [];
-      // New purchases
+      // New purchases (already filtered by location in purchaseRows)
       const lastPurchases = purchaseRows.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 10);
       const lpPlanIds = Array.from(new Set(lastPurchases.map((p: any) => p.plan_id).filter(Boolean)));
       const lpCustIds = Array.from(new Set(lastPurchases.map((p: any) => p.customer_id).filter(Boolean)));
@@ -213,15 +221,15 @@ export function DashboardOverview({ onNavigate }: DashboardOverviewProps) {
         });
       });
 
-      // Topups via payments mapping
-      const { data: topups } = await supabase
+      // Topups via payments mapping - get all first, then filter by location later
+      const { data: allTopups } = await supabase
         .from('credit_transactions')
         .select('id, amount, created_at, related_payment_id')
         .eq('transaction_type', 'topup')
         .eq('created_by', user.id)
         .order('created_at', { ascending: false })
-        .limit(10);
-      const paymentIds = Array.from(new Set((topups || []).map((t: any) => t.related_payment_id).filter(Boolean)));
+        .limit(50); // Get more to filter by location later
+      const paymentIds = Array.from(new Set((allTopups || []).map((t: any) => t.related_payment_id).filter(Boolean)));
       let paymentMap: Record<string, any> = {};
       if (paymentIds.length > 0) {
         const { data: pays } = await supabase.from('subscription_payments').select('id, purchase_id').in('id', paymentIds);
@@ -243,7 +251,16 @@ export function DashboardOverview({ onNavigate }: DashboardOverviewProps) {
         const { data: customers } = await supabase.from('customers').select('id, name, phone').in('id', purCustIds);
         (customers || []).forEach((c: any) => { custMapLocal[c.id] = c; });
       }
-      (topups || []).forEach((t: any) => {
+      
+      // Filter topups by location for managers
+      const topups = (allTopups || []).filter((t: any) => {
+        const pay = paymentMap[t.related_payment_id];
+        const pr = pay ? purMap[pay.purchase_id] : undefined;
+        // If no purchase found or no location restriction, include it
+        return !pr || permittedLocationIds.includes(pr.location_id);
+      }).slice(0, 10); // Limit to 10 after filtering
+      
+      topups.forEach((t: any) => {
         const pay = paymentMap[t.related_payment_id]; const pr = pay ? purMap[pay.purchase_id] : undefined;
         const planName = pr ? planNameMap[pr.plan_id] : '';
         const cust = pr ? custMapLocal[pr.customer_id] : undefined;
@@ -356,17 +373,17 @@ export function DashboardOverview({ onNavigate }: DashboardOverviewProps) {
     </div>
 
     {/* Recent Activity & Insights */}
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div className={`grid gap-6 ${isManager ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-3'}`}>
       {/* Recent Activity */}
-      <Card className="lg:col-span-2 animate-fade-in bg-white transition-all duration-300 hover:shadow-card hover:-translate-y-1 transform-gpu" style={{ animationDelay: '600ms' }}>
+      <Card className={`${isManager ? '' : 'lg:col-span-2'} animate-fade-in bg-white transition-all duration-300 hover:shadow-card hover:-translate-y-1 transform-gpu`} style={{ animationDelay: '600ms' }}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Zap className="w-5 h-5 text-blue-500" />
-            Recent Activity
+            Recent Activity {isManager ? '(Your Location)' : ''}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {recentActivities.map((activity, index) => (
+          {recentActivities.length > 0 ? recentActivities.map((activity, index) => (
             <div key={index} className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
               <div>
                 <div className="font-medium text-blue-900">{activity.action}</div>
@@ -374,42 +391,49 @@ export function DashboardOverview({ onNavigate }: DashboardOverviewProps) {
               </div>
               <div className="text-xs text-blue-500">{activity.time}</div>
             </div>
-          ))}
+          )) : (
+            <div className="text-center text-blue-600 py-8">
+              <Zap className="w-8 h-8 mx-auto mb-2 text-blue-300" />
+              <p>No recent activity</p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Key Insights */}
-      <Card className="animate-fade-in bg-white transition-all duration-300 hover:shadow-card hover:-translate-y-1 transform-gpu" style={{ animationDelay: '700ms' }}>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Target className="w-5 h-5 text-blue-600" />
-            Key Insights
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <Crown className="w-4 h-4 text-green-600" />
-                <span className="font-medium text-green-600">Most Enrolled</span>
+      {/* Key Insights - Only for Owners */}
+      {!isManager && (
+        <Card className="animate-fade-in bg-white transition-all duration-300 hover:shadow-card hover:-translate-y-1 transform-gpu" style={{ animationDelay: '700ms' }}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Target className="w-5 h-5 text-blue-600" />
+              Key Insights
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Crown className="w-4 h-4 text-green-600" />
+                  <span className="font-medium text-green-600">Most Enrolled</span>
+                </div>
+                <span className="text-green-700 text-sm">{insights.topPlanSharePct != null ? `${insights.topPlanSharePct}% of new signups` : '-'}</span>
               </div>
-              <span className="text-green-700 text-sm">{insights.topPlanSharePct != null ? `${insights.topPlanSharePct}% of new signups` : '-'}</span>
+              <p className="text-sm text-blue-900">{insights.topPlanName || '—'}</p>
             </div>
-            <p className="text-sm text-blue-900">{insights.topPlanName || '—'}</p>
-          </div>
 
-          <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-purple-500" />
-                <span className="font-medium text-purple-500">Loyalty Visits</span>
+            <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-purple-500" />
+                  <span className="font-medium text-purple-500">Loyalty Visits</span>
+                </div>
+                <span className={`text-sm ${Number(insights.loyaltyVisitMoM || 0) >= 0 ? 'text-green-700' : 'text-orange-700'}`}>{insights.prevMonthName}: {insights.loyaltyVisitMoM != null ? `${insights.loyaltyVisitMoM}%` : '-'}</span>
               </div>
-              <span className={`text-sm ${Number(insights.loyaltyVisitMoM || 0) >= 0 ? 'text-green-700' : 'text-orange-700'}`}>{insights.prevMonthName}: {insights.loyaltyVisitMoM != null ? `${insights.loyaltyVisitMoM}%` : '-'}</span>
+              <p className="text-sm text-blue-900">Month-over-month change in visit-based members</p>
             </div>
-            <p className="text-sm text-blue-900">Month-over-month change in visit-based members</p>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   </div>
   );

@@ -6,7 +6,7 @@ import { ArrowLeft, ArrowRight, Check, Currency } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { Input } from '@/components/ui/input';
 import { Select, SelectTrigger, SelectContent, SelectItem } from '@/components/ui/select';
-import { useNavigate, useParams } from 'react-router-dom'; // Import useNavigate for navigation and useParams for edit mode
+import { useNavigate, useParams, Navigate } from 'react-router-dom'; // Import useNavigate for navigation and useParams for edit mode
 import { useAuth } from '@/contexts/AuthContext';
 
 interface CreateSchemeWizardProps {
@@ -27,6 +27,14 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
+  
+  // Check if user is manager - managers can't create schemes
+  const isManager = String(user?.role || '').toLowerCase().includes('manager');
+  
+  // Redirect managers to dashboard
+  if (isManager) {
+    return <Navigate to="/loyalty/dashboard" replace />;
+  }
   const params = useParams();
   const planId = params.id as string | undefined;
   const isEditMode = Boolean(planId);

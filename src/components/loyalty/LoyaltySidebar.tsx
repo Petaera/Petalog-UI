@@ -13,42 +13,49 @@ import {
   Home,
   Menu
 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
-const sidebarItems = [
+// All available sidebar items
+const allSidebarItems = [
   {
     id: 'dashboard',
     label: 'Dashboard',
     icon: LayoutDashboard,
-    path: '/loyalty/dashboard', // Ensure this matches the route in App.tsx
-    description: 'Overview & Stats'
+    path: '/loyalty/dashboard',
+    description: 'Overview & Stats',
+    roles: ['owner', 'manager'] // Available to both
   },
   {
     id: 'schemes',
     label: 'Subscription Schemes',
     icon: CreditCard,
-    path: '/loyalty/schemes', // Updated to match our routes
-    description: 'Manage Plans'
+    path: '/loyalty/schemes',
+    description: 'Manage Plans',
+    roles: ['owner', 'manager'] // Available to both
   },
   {
     id: 'create-scheme',
     label: 'Create New Scheme',
     icon: Plus,
-    path: '/loyalty/create', // Updated to match our routes
-    description: 'Setup Wizard'
+    path: '/loyalty/create',
+    description: 'Setup Wizard',
+    roles: ['owner'] // Owner only
   },
   {
     id: 'customers',
     label: 'Customers',
     icon: Users,
-    path: '/loyalty/customers', // Ensure this matches the route in App.tsx
-    description: 'Member Directory'
+    path: '/loyalty/customers',
+    description: 'Member Directory',
+    roles: ['owner', 'manager'] // Available to both
   },
   {
     id: 'analytics',
     label: 'Analytics & Reports',
     icon: BarChart3,
-    path: '/loyalty/analytics', // Ensure this matches the route in App.tsx
-    description: 'Insights & Data'
+    path: '/loyalty/analytics',
+    description: 'Insights & Data',
+    roles: ['owner'] // Owner only
   }
 ];
 
@@ -61,7 +68,14 @@ interface LoyaltySidebarProps {
 export function LoyaltySidebar({ activeSection, collapsed = false, onToggle }: LoyaltySidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const [isMobile, setIsMobile] = React.useState(false);
+
+  // Filter sidebar items based on user role
+  const sidebarItems = React.useMemo(() => {
+    const userRole = user?.role?.toLowerCase() || 'manager';
+    return allSidebarItems.filter(item => item.roles.includes(userRole));
+  }, [user?.role]);
 
   // Check if mobile on mount and resize
   React.useEffect(() => {

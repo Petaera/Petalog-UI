@@ -1,6 +1,8 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/AuthContext';
+import { Navigate } from 'react-router-dom';
 import { 
   BarChart3, 
   TrendingUp, 
@@ -12,6 +14,16 @@ import {
 } from 'lucide-react';
 
 export function Analytics() {
+  const { user } = useAuth();
+  
+  // Check if user is manager - managers don't have access to analytics
+  const isManager = String(user?.role || '').toLowerCase().includes('manager');
+  
+  // Redirect managers to dashboard
+  if (isManager) {
+    return <Navigate to="/loyalty/dashboard" replace />;
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
