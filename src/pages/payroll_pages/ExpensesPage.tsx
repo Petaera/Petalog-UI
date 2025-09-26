@@ -248,7 +248,11 @@ const ExpensesPage: React.FC = () => {
       };
       const { error } = await supabase.from('expenses').insert(payload);
       if (error) throw error;
-      toast({ title: 'Expense added' });
+      toast({ 
+        title: 'Expense added', 
+        description: 'Your expense has been recorded successfully.',
+        duration: 3000 // Auto-dismiss after 3 seconds
+      });
       resetForm();
       setShowAddForm(false);
       await reloadExpenses();
@@ -282,7 +286,11 @@ const ExpensesPage: React.FC = () => {
       };
       const { error } = await supabase.from('expense_categories').insert(payload);
       if (error) throw error;
-      toast({ title: 'Category added' });
+      toast({ 
+        title: 'Category added', 
+        description: 'New expense category has been created.',
+        duration: 3000
+      });
       resetCategoryForm();
       setShowAddCategory(false);
       await reloadCategories();
@@ -316,7 +324,11 @@ const ExpensesPage: React.FC = () => {
       };
       const { error } = await supabase.from('expense_categories').update(updates).eq('id', editingCategoryId);
       if (error) throw error;
-      toast({ title: 'Category updated' });
+      toast({ 
+        title: 'Category updated', 
+        description: 'Expense category has been updated successfully.',
+        duration: 3000
+      });
       cancelEditCategory();
       await reloadCategories();
     } catch (e: any) {
@@ -346,7 +358,11 @@ const ExpensesPage: React.FC = () => {
     try {
       const { error } = await supabase.from('expense_categories').delete().eq('id', categoryToDelete.id);
       if (error) throw error;
-      toast({ title: 'Category deleted' });
+      toast({ 
+        title: 'Category deleted', 
+        description: 'Expense category has been removed successfully.',
+        duration: 3000
+      });
       setDeleteCategoryOpen(false);
       setCategoryToDelete(null);
       await reloadCategories();
@@ -399,7 +415,11 @@ const ExpensesPage: React.FC = () => {
       };
       const { error } = await supabase.from('expenses').update(updates).eq('id', editingExpenseId);
       if (error) throw error;
-      toast({ title: 'Expense updated' });
+      toast({ 
+        title: 'Expense updated', 
+        description: 'Expense record has been updated successfully.',
+        duration: 3000
+      });
       cancelEditExpense();
       await reloadExpenses();
     } catch (e: any) {
@@ -419,7 +439,11 @@ const ExpensesPage: React.FC = () => {
     try {
       const { error } = await supabase.from('expenses').delete().eq('id', expenseToDeleteId);
       if (error) throw error;
-      toast({ title: 'Expense deleted' });
+      toast({ 
+        title: 'Expense deleted', 
+        description: 'Expense record has been removed successfully.',
+        duration: 3000
+      });
       setDeleteExpenseOpen(false);
       setExpenseToDeleteId(null);
       await reloadExpenses();

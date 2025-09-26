@@ -206,6 +206,10 @@ const PayrollLayout: React.FC = () => {
 
   const handleBackToMainApp = () => {
     navigate('/dashboard');
+    // Close mobile sidebar after navigation
+    if (window.innerWidth < 1024) {
+      setCollapsed(true);
+    }
   };
 
   const handleLogout = async () => {
@@ -281,7 +285,13 @@ const PayrollLayout: React.FC = () => {
             return (
               <button
                 key={item.id}
-                onClick={() => navigate(item.path)}
+                onClick={() => {
+                  navigate(item.path);
+                  // Close mobile sidebar after navigation
+                  if (window.innerWidth < 1024) {
+                    setCollapsed(true);
+                  }
+                }}
                 className={cn(
                   "w-full text-left p-4 rounded-xl transition-all duration-300 group",
                   "hover:bg-primary/10 hover:shadow-card",

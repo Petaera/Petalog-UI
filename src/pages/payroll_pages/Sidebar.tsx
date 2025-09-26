@@ -71,12 +71,14 @@ interface PayrollSidebarProps {
   activeSection?: string;
   collapsed?: boolean;
   onToggle?: () => void;
+  onNavigate?: () => void; // Callback for when navigation occurs
 }
 
 const Sidebar: React.FC<PayrollSidebarProps> = ({ 
   activeSection, 
   collapsed = false, 
-  onToggle 
+  onToggle,
+  onNavigate
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -103,6 +105,22 @@ const Sidebar: React.FC<PayrollSidebarProps> = ({
 
   const handleBackToMainApp = () => {
     navigate('/dashboard');
+    // Close mobile sidebar if open
+    if (isMobile && onToggle) {
+      onToggle();
+    }
+  };
+
+  const handleNavigation = (path: string) => {
+    navigate(path);
+    // Close mobile sidebar after navigation
+    if (isMobile && onToggle) {
+      onToggle();
+    }
+    // Call the onNavigate callback if provided
+    if (onNavigate) {
+      onNavigate();
+    }
   };
 
   // Get current active section
@@ -223,7 +241,7 @@ const Sidebar: React.FC<PayrollSidebarProps> = ({
           return (
             <button
               key={item.id}
-              onClick={() => navigate(item.path)}
+              onClick={() => handleNavigation(item.path)}
               className={cn(
                 "w-full text-left p-4 rounded-xl transition-all duration-300 group",
                 "hover:bg-primary/10 hover:shadow-card",

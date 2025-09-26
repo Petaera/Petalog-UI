@@ -26,7 +26,7 @@ export function Analytics() {
   
   // Check if user is manager - allow managers to view analytics for their assigned location
   const isManager = String(user?.role || '').toLowerCase().includes('manager');
-
+  
   // State for analytics data
   const [analyticsData, setAnalyticsData] = useState({
     totalRevenue: 0,
@@ -392,9 +392,9 @@ export function Analytics() {
 
       {!isLoading && (
         <>
-          {/* Key Metrics */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
+      {/* Key Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {[
               { 
                 title: 'Total Revenue', 
                 value: `₹${analyticsData.totalRevenue.toLocaleString()}`, 
@@ -423,22 +423,22 @@ export function Analytics() {
                 icon: Target,
                 changeColor: analyticsData.monthlyGrowth.avgValue >= 0 ? 'text-green-600' : 'text-red-600'
               }
-            ].map((metric, index) => {
-              const Icon = metric.icon;
-              return (
-                <Card key={metric.title} className="animate-slide-up" style={{ animationDelay: `${index * 100}ms` }}>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-4">
+        ].map((metric, index) => {
+          const Icon = metric.icon;
+          return (
+            <Card key={metric.title} className="animate-slide-up" style={{ animationDelay: `${index * 100}ms` }}>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
                       <Icon className="w-8 h-8 text-blue-600" />
                       <span className={`text-sm font-medium ${metric.changeColor}`}>{metric.change}</span>
-                    </div>
-                    <div className="text-2xl font-bold text-foreground mb-1">{metric.value}</div>
-                    <div className="text-sm text-muted-foreground">{metric.title}</div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
+                </div>
+                <div className="text-2xl font-bold text-foreground mb-1">{metric.value}</div>
+                <div className="text-sm text-muted-foreground">{metric.title}</div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
 
           {/* Additional Metrics Row */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -488,16 +488,16 @@ export function Analytics() {
           </div>
 
           {/* Charts and Tables */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Plan Distribution */}
             <Card className="animate-fade-in" style={{ animationDelay: '800ms' }}>
-              <CardHeader>
+          <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <PieChart className="w-5 h-5 text-blue-600" />
                   Plan Distribution
                 </CardTitle>
-              </CardHeader>
-              <CardContent>
+          </CardHeader>
+          <CardContent>
                 <div className="space-y-4">
                   {analyticsData.planDistribution.length > 0 ? (
                     analyticsData.planDistribution.map((plan, index) => (
@@ -509,7 +509,7 @@ export function Analytics() {
                         <div className="text-right">
                           <div className="text-lg font-bold text-foreground">{plan.count}</div>
                           <div className="text-sm text-muted-foreground">₹{plan.revenue.toLocaleString()}</div>
-                        </div>
+              </div>
                       </div>
                     ))
                   ) : (
@@ -518,19 +518,19 @@ export function Analytics() {
                       <p>No plan data available</p>
                     </div>
                   )}
-                </div>
-              </CardContent>
-            </Card>
+            </div>
+          </CardContent>
+        </Card>
 
             {/* Monthly Trends */}
             <Card className="animate-fade-in" style={{ animationDelay: '900ms' }}>
-              <CardHeader>
+          <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <LineChart className="w-5 h-5 text-blue-600" />
                   Monthly Trends
                 </CardTitle>
-              </CardHeader>
-              <CardContent>
+          </CardHeader>
+          <CardContent>
                 <div className="space-y-3">
                   {analyticsData.monthlyTrends.length > 0 ? (
                     analyticsData.monthlyTrends.map((trend, index) => (
@@ -540,7 +540,7 @@ export function Analytics() {
                           <span className="text-green-600">₹{trend.revenue.toLocaleString()}</span>
                           <span className="text-blue-600">{trend.subscriptions} subs</span>
                           <span className="text-purple-600">{trend.customers} customers</span>
-                        </div>
+              </div>
                       </div>
                     ))
                   ) : (
@@ -549,10 +549,10 @@ export function Analytics() {
                       <p>No trend data available</p>
                     </div>
                   )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
           {/* Location Performance */}
           {analyticsData.topLocations.length > 0 && (
@@ -591,26 +591,26 @@ export function Analytics() {
           {/* Revenue by Type */}
           {analyticsData.revenueByType.length > 0 && (
             <Card className="animate-fade-in" style={{ animationDelay: '1100ms' }}>
-              <CardHeader>
+        <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <BarChart3 className="w-5 h-5 text-blue-600" />
                   Revenue by Plan Type
                 </CardTitle>
-              </CardHeader>
-              <CardContent>
+        </CardHeader>
+        <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {analyticsData.revenueByType.map((type, index) => (
                     <div key={type.type} className="p-4 bg-gradient-to-br from-green-50 to-blue-50 rounded-lg border">
-                      <div className="text-center">
+            <div className="text-center">
                         <div className="text-2xl font-bold text-foreground mb-1">₹{type.revenue.toLocaleString()}</div>
                         <div className="text-sm text-muted-foreground capitalize mb-2">{type.type} Plans</div>
                         <div className="text-xs text-blue-600">{type.count} subscriptions</div>
-                      </div>
+            </div>
                     </div>
                   ))}
-                </div>
-              </CardContent>
-            </Card>
+          </div>
+        </CardContent>
+      </Card>
           )}
         </>
       )}
