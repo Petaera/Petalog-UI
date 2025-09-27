@@ -353,13 +353,13 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
   const normalizeTypeString = (value: any): string => String(value ?? '').trim();
   const mapTypeToWheelCategory = (typeString: string): string => {
     const t = normalizeTypeString(typeString);
-    if (t === '3') return 'other';
+    if (t === '3'||t === 'NULL') return 'other';
     if (t === '2') return '2';
     if (t === '4' || t === '1') return '4';
     return '';
   };
   const mapWheelCategoryToTypeCode = (wheelCat: string): string | null => {
-    if (wheelCat === 'other') return '3';
+    if (wheelCat === 'other') return null; // Return null for 'other' category
     if (wheelCat === '2') return '2';
     if (wheelCat === '4') return '4';
     return null;
@@ -367,7 +367,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
   const doesTypeMatchWheelCategory = (typeString: string | undefined | null, wheelCat: string): boolean => {
     const t = normalizeTypeString(typeString);
     if (!wheelCat) return true;
-    if (wheelCat === 'other') return t === '3';
+    if (wheelCat === 'other') return t === '3' || t === 'NULL' || t === '';
     if (wheelCat === '2') return t === '2';
     if (wheelCat === '4') return t === '4' || t === '1';
     return false;
@@ -477,7 +477,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
           .filter(item => {
             if (!wheelCategory) return true;
             const typeStr = normalizeTypeString((item as any).type);
-            if (wheelCategory === 'other') return typeStr === '3';
+            if (wheelCategory === 'other') return typeStr === '3' || typeStr === 'NULL' || typeStr === '';
             if (wheelCategory === '2') return typeStr === '2';
             if (wheelCategory === '4') return typeStr === '4' || typeStr === '1';
             return true;
@@ -515,7 +515,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       const allModelsForWheelCategory = vehicleData
         .filter(item => {
           const typeStr = normalizeTypeString((item as any).type);
-          if (wheelCategory === 'other') return typeStr === '3';
+          if (wheelCategory === 'other') return typeStr === '3' || typeStr === 'NULL' || typeStr === '';
           if (wheelCategory === '2') return typeStr === '2';
           if (wheelCategory === '4') return typeStr === '4' || typeStr === '1';
           return false;
@@ -2404,6 +2404,16 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                       if (!selected?.value) {
                         setSelectedVehicleBrand('');
                         setWheelCategory('');
+                      } else if (modelObj) {
+                        // Auto-set wheel category based on model type
+                        const modelType = normalizeTypeString(modelObj.type);
+                        if (modelType === '3' || modelType === 'NULL' || modelType === '') {
+                          setWheelCategory('other');
+                        } else if (modelType === '2') {
+                          setWheelCategory('2');
+                        } else if (modelType === '4' || modelType === '1') {
+                          setWheelCategory('4');
+                        }
                       }
                     }}
                     classNamePrefix="react-select"
@@ -2418,7 +2428,32 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                     placeholder={selectedModel ? "Brand will be auto-selected" : "Type to search vehicle brand..."}
                     options={availableVehicleBrands.map(brand => ({ value: brand, label: brand }))}
                     value={selectedVehicleBrand ? { value: selectedVehicleBrand, label: selectedVehicleBrand } : null}
-                    onChange={(selected) => setSelectedVehicleBrand(selected?.value || '')}
+                    onChange={(selected) => {
+                      setSelectedVehicleBrand(selected?.value || '');
+                      
+                      // Auto-set wheel category based on brand if no model is selected
+                      if (selected?.value && !selectedModel) {
+                        const brandModels = vehicleData.filter(item => 
+                          item['Vehicle Brands'] === selected.value
+                        );
+                        if (brandModels.length > 0) {
+                          // Check if all models for this brand have the same type
+                          const types = brandModels.map(item => normalizeTypeString(item.type));
+                          const uniqueTypes = [...new Set(types)];
+                          
+                          if (uniqueTypes.length === 1) {
+                            const brandType = uniqueTypes[0];
+                            if (brandType === '3' || brandType === 'NULL' || brandType === '') {
+                              setWheelCategory('other');
+                            } else if (brandType === '2') {
+                              setWheelCategory('2');
+                            } else if (brandType === '4' || brandType === '1') {
+                              setWheelCategory('4');
+                            }
+                          }
+                        }
+                      }
+                    }}
                     classNamePrefix="react-select"
                     noOptionsMessage={() => "No brands found"}
                     isDisabled={!!selectedModel}

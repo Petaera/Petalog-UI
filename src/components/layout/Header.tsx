@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from "react";
-import { MapPin, User, LogOut, ChevronDown, Settings } from "lucide-react";
+import { MapPin, User, LogOut, ChevronDown } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -111,15 +111,6 @@ export function Header({ locations, selectedLocation, onLocationChange }: Header
                     Profile Settings
                   </DropdownMenuItem>
                 )}
-                {user?.role === 'owner' && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => navigate('/manager-settings')}>
-                      <Settings className="mr-2 h-4 w-4" />
-                      Manager Settings
-                    </DropdownMenuItem>
-                  </>
-                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="text-destructive">
                   <LogOut className="mr-2 h-4 w-4" />
@@ -197,15 +188,6 @@ export function Header({ locations, selectedLocation, onLocationChange }: Header
                   <User className="mr-2 h-4 w-4" />
                   Profile Settings
                 </DropdownMenuItem>
-              )}
-              {user?.role === 'owner' && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => navigate('/manager-settings')}>
-                    <Settings className="mr-2 h-4 w-4" />
-                    Manager Settings
-                  </DropdownMenuItem>
-                </>
               )}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleLogout} className="text-destructive">
