@@ -247,32 +247,18 @@ const ReportsPage: React.FC = () => {
           return null;
         };
 
-        const staffRows = await selectWithFallback(
-          ['payroll_staff', 'payroll.staff'],
-          async (q: any) => {
-            let query = q.select('id, monthly_salary, branch_id, role_title, default_payment_mode, name')
-              .eq('branch_id', selectedLocationId);
-            const { data, error } = await query;
-            return { data, error };
-          }
-        );
+        const { data: staffRows } = await supabase
+          .rpc('get_staff_by_branch', { branch_id_param: selectedLocationId });
         const totalSalaries = (staffRows || []).reduce((s: number, r: any) => s + Number(r.monthly_salary || 0), 0);
 
-        // Load advances for month via public view fallback
-        const advRows = await selectWithFallback(
-          ['payroll_advances', 'payroll.advances'],
-          async (q: any) => {
-            let query = q.select('staff_id, amount, date');
-            query = query.gte('date', monthStart).lte('date', monthEnd);
-            if (selectedLocationId) {
-              // filter by staff in branch if staffRows available
-              const staffIds = (staffRows || []).map((s: any) => s.id);
-              if (staffIds.length > 0) query = query.in('staff_id', staffIds);
-            }
-            const { data, error } = await query;
-            return { data, error };
-          }
-        );
+        // Load advances for month using RPC function
+        const staffIds = (staffRows || []).map((s: any) => s.id);
+        const { data: advRows } = await supabase
+          .rpc('get_advances_by_staff', {
+            staff_ids: staffIds,
+            start_date: monthStart,
+            end_date: monthEnd
+          });
         const totalAdvances = (advRows || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
 
         // Build staff-wise advances map
@@ -304,29 +290,16 @@ const ReportsPage: React.FC = () => {
         setAvailableModes(Array.from(new Set((staffRows || []).map((s: any) => (s.default_payment_mode || '').trim()).filter(Boolean))));
 
         // Previous month salaries/advances
-        const prevStaffRows = await selectWithFallback(
-          ['payroll_staff', 'payroll.staff'],
-          async (q: any) => {
-            let query = q.select('id, monthly_salary, branch_id');
-            if (selectedLocationId) query = query.eq('branch_id', selectedLocationId);
-            const { data, error } = await query;
-            return { data, error };
-          }
-        );
+        const { data: prevStaffRows } = await supabase
+          .rpc('get_staff_by_branch', { branch_id_param: selectedLocationId });
         const prevSalaries = (prevStaffRows || []).reduce((s: number, r: any) => s + Number(r.monthly_salary || 0), 0);
-        const prevAdvRows = await selectWithFallback(
-          ['payroll_advances', 'payroll.advances'],
-          async (q: any) => {
-            let query = q.select('staff_id, amount, date');
-            query = query.gte('date', prevStart).lte('date', prevEnd);
-            if (selectedLocationId && prevStaffRows) {
-              const staffIds = (prevStaffRows || []).map((s: any) => s.id);
-              if (staffIds.length > 0) query = query.in('staff_id', staffIds);
-            }
-            const { data, error } = await query;
-            return { data, error };
-          }
-        );
+        const prevStaffIds = (prevStaffRows || []).map((s: any) => s.id);
+        const { data: prevAdvRows } = await supabase
+          .rpc('get_advances_by_staff', {
+            staff_ids: prevStaffIds,
+            start_date: prevStart,
+            end_date: prevEnd
+          });
         const prevAdvances = (prevAdvRows || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
         setPrevSalaryTotals({ salaries: prevSalaries, advances: prevAdvances });
 

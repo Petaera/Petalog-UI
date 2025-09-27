@@ -68,12 +68,9 @@ const Dashboard: React.FC = () => {
         setLoading(true);
         const { start: monthStart, end: monthEnd } = getMonthRange(selectedMonth);
 
-        // Load staff for branch via public view
-        let staffQuery: any = supabase
-          .from('payroll_staff')
-          .select('id, name, role_title, is_active, monthly_salary, branch_id');
-        if (selectedLocationId) staffQuery = staffQuery.eq('branch_id', selectedLocationId);
-        const { data: staffData, error: staffErr } = await staffQuery;
+        // Load staff for branch using RPC function
+        const { data: staffData, error: staffErr } = await supabase
+          .rpc('get_staff_by_branch', { branch_id_param: selectedLocationId });
         if (staffErr) throw staffErr;
 
         const staffMapped: Staff[] = (staffData || []).map((row: any) => ({
@@ -95,42 +92,27 @@ const Dashboard: React.FC = () => {
         let totalAdvances = 0;
         let advancesData: any[] = [];
         if (staffIds.length > 0) {
-          for (const t of ['payroll_advances', 'advances', 'payroll.advances']) {
-            try {
-              let q: any = supabase
-                .from(t)
-                .select('staff_id, amount, date')
-                .gte('date', monthStart)
-                .lte('date', monthEnd)
-                .in('staff_id', staffIds);
-              const { data, error } = await q;
-              if (error) throw error;
-              advancesData = data || [];
-              totalAdvances = advancesData.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
-              break;
-            } catch (_) {}
-          }
+          const { data: advancesDataResult } = await supabase
+            .rpc('get_advances_by_staff', {
+              staff_ids: staffIds,
+              start_date: monthStart,
+              end_date: monthEnd
+            });
+          advancesData = advancesDataResult || [];
+          totalAdvances = advancesData.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
         }
 
         // Salary payments (activity logs) in month for branch
         let totalSalaryPaid = 0;
         let salaryPaymentsData: any[] = [];
-        for (const t of ['payroll_activity_logs', 'activity_logs', 'payroll.activity_logs']) {
-          try {
-            let q: any = supabase
-              .from(t)
-              .select('kind, amount, date, branch_id, ref_id')
-              .eq('kind', 'SalaryPayment')
-              .gte('date', monthStart)
-              .lte('date', monthEnd);
-            if (selectedLocationId) q = q.eq('branch_id', selectedLocationId);
-            const { data, error } = await q;
-            if (error) throw error;
-            salaryPaymentsData = data || [];
-            totalSalaryPaid = salaryPaymentsData.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
-            break;
-          } catch (_) {}
-        }
+        const { data: salaryPaymentsDataResult } = await supabase
+          .rpc('get_activity_logs_by_branch', {
+            branch_id_param: selectedLocationId,
+            start_date: monthStart,
+            end_date: monthEnd
+          });
+        salaryPaymentsData = (salaryPaymentsDataResult || []).filter((r: any) => r.kind === 'SalaryPayment');
+        totalSalaryPaid = salaryPaymentsData.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
 
         // Expenses in month for branch + category breakdown + recent expense activities
         let totalExpenses = 0;
@@ -215,50 +197,30 @@ const Dashboard: React.FC = () => {
           note: r.notes || undefined,
         }));
         // Load last 20 payroll activities in month for branch
-        let payActs: any[] = [];
-        for (const t of ['payroll_activity_logs', 'activity_logs', 'payroll.activity_logs']) {
-          try {
-            let q: any = supabase
-              .from(t)
-              .select('id, kind, amount, date, description, ref_id, branch_id')
-              .in('kind', ['Advance', 'SalaryPayment'] as any)
-              .gte('date', monthStart)
-              .lte('date', monthEnd)
-              .order('date', { ascending: false } as any)
-              .limit(20);
-            if (selectedLocationId) q = q.eq('branch_id', selectedLocationId);
-            const { data, error } = await q;
-            if (error) throw error;
-            payActs = data || [];
-            break;
-          } catch (_) {}
-        }
+        const { data: payActs } = await supabase
+          .rpc('get_activity_logs_filtered', {
+            branch_id_param: selectedLocationId,
+            start_date: monthStart,
+            end_date: monthEnd,
+            limit_param: 20,
+            offset_param: 0
+          });
         // Resolve staff IDs for advances (ref_id points to advance id)
         const advanceIds = (payActs || []).filter(r => r.kind === 'Advance' && r.ref_id).map(r => r.ref_id);
         const advanceIdToStaff: Record<string, string> = {};
         if (advanceIds.length > 0) {
-          for (const t of ['payroll_advances', 'advances', 'payroll.advances']) {
-            try {
-              const { data, error } = await supabase.from(t).select('id, staff_id').in('id', advanceIds);
-              if (error) throw error;
-              (data || []).forEach((row: any) => { advanceIdToStaff[row.id] = row.staff_id; });
-              if (Object.keys(advanceIdToStaff).length === advanceIds.length) break;
-            } catch (_) {}
-          }
+          const { data: advanceData } = await supabase
+            .rpc('get_advances_by_ids', { advance_ids: advanceIds });
+          (advanceData || []).forEach((row: any) => { advanceIdToStaff[row.id] = row.staff_id; });
         }
         // Build staff id -> name map; fetch missing names if needed
         const staffIdToName: Record<string, string> = {};
         staffMapped.forEach(s => { staffIdToName[s.id] = s.name; });
         const missingStaffIds = Array.from(new Set((payActs || []).map((r: any) => r.kind === 'SalaryPayment' ? r.ref_id : advanceIdToStaff[r.ref_id || '']).filter((id: any) => id && !staffIdToName[id])));
         if (missingStaffIds.length > 0) {
-          for (const t of ['payroll_staff', 'payroll.staff']) {
-            try {
-              const { data, error } = await supabase.from(t).select('id, name').in('id', missingStaffIds);
-              if (error) throw error;
-              (data || []).forEach((row: any) => { staffIdToName[row.id] = row.name; });
-              break;
-            } catch (_) {}
-          }
+          const { data: staffData } = await supabase
+            .rpc('get_staff_by_ids', { staff_ids: missingStaffIds });
+          (staffData || []).forEach((row: any) => { staffIdToName[row.id] = row.name; });
         }
         const payrollActs = (payActs || []).map((r: any) => {
           const staffId = r.kind === 'SalaryPayment' ? r.ref_id : advanceIdToStaff[r.ref_id || ''];
@@ -305,7 +267,7 @@ const Dashboard: React.FC = () => {
 
           // Load long leaves (staff_leave_periods)
           try {
-            for (const t of ['staff_leave_periods', 'payroll.staff_leave_periods']) {
+            for (const t of ['staff_leave_periods', 'payroll_staff_leave_periods']) {
               try {
                 let q: any = supabase
                   .from(t)
@@ -325,13 +287,9 @@ const Dashboard: React.FC = () => {
                   // Fetch missing staff names if needed
                   const missingLeaveStaffIds = leaveStaffIds.filter((id: string) => !leaveStaffMap[id]);
                   if (missingLeaveStaffIds.length > 0) {
-                    for (const staffTable of ['payroll_staff', 'payroll.staff']) {
-                      try {
-                        const { data: staffData } = await supabase.from(staffTable).select('id, name').in('id', missingLeaveStaffIds);
-                        (staffData || []).forEach((s: any) => { leaveStaffMap[s.id] = s.name; });
-                        break;
-                      } catch (_) {}
-                    }
+                    const { data: staffData } = await supabase
+                      .rpc('get_staff_by_ids', { staff_ids: missingLeaveStaffIds });
+                    (staffData || []).forEach((s: any) => { leaveStaffMap[s.id] = s.name; });
                   }
                   
                   leaveRows.forEach((leave: any) => {
@@ -371,13 +329,9 @@ const Dashboard: React.FC = () => {
                   // Fetch missing staff names if needed
                   const missingAbsentStaffIds = absentStaffIds.filter((id: string) => !absentStaffMap[id]);
                   if (missingAbsentStaffIds.length > 0) {
-                    for (const staffTable of ['payroll_staff', 'payroll.staff']) {
-                      try {
-                        const { data: staffData } = await supabase.from(staffTable).select('id, name').in('id', missingAbsentStaffIds);
-                        (staffData || []).forEach((s: any) => { absentStaffMap[s.id] = s.name; });
-                        break;
-                      } catch (_) {}
-                    }
+                    const { data: staffData } = await supabase
+                      .rpc('get_staff_by_ids', { staff_ids: missingAbsentStaffIds });
+                    (staffData || []).forEach((s: any) => { absentStaffMap[s.id] = s.name; });
                   }
                   
                   absentRows.forEach((absent: any) => {
@@ -416,25 +370,20 @@ const Dashboard: React.FC = () => {
         // Prev salaries
         let prevSalaries = 0;
         try {
-          let q: any = supabase.from('payroll_staff').select('monthly_salary, branch_id');
-          if (selectedLocationId) q = q.eq('branch_id', selectedLocationId);
-          const { data } = await q;
+          const { data } = await supabase
+            .rpc('get_staff_by_branch', { branch_id_param: selectedLocationId });
           prevSalaries = (data || []).reduce((s: number, r: any) => s + Number(r.monthly_salary || 0), 0);
         } catch (_) {}
         // Prev advances
         let prevAdvances = 0;
         try {
-          for (const t of ['payroll_advances', 'advances', 'payroll.advances']) {
-            try {
-              let q: any = supabase.from(t).select('amount, date');
-              q = q.gte('date', prevStart).lte('date', prevEnd);
-              if (staffIds.length > 0) q = q.in('staff_id', staffIds);
-              const { data, error } = await q;
-              if (error) throw error;
-              prevAdvances = (data || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
-              break;
-            } catch (_) {}
-          }
+          const { data: advanceData } = await supabase
+            .rpc('get_advances_by_staff', {
+              staff_ids: staffIds,
+              start_date: prevStart,
+              end_date: prevEnd
+            });
+          prevAdvances = (advanceData || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
         } catch (_) {}
         const prevPayable = Math.max(0, prevSalaries - prevAdvances); // ignoring prev paid here for comparable figure
         const prevNet = prevSalaries + prevExpenses;

@@ -14,7 +14,10 @@ import {
   CheckCircle,
   XCircle,
   CreditCard,
-  CalendarDays
+  CalendarDays,
+  Upload,
+  Camera,
+  X
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,6 +45,7 @@ interface Staff {
   contact: string;
   dateOfJoining: string;
   paymentMode: string;
+  dp_url: string | null;
 }
 
 interface PayrollLine {
@@ -82,6 +86,9 @@ const StaffPage: React.FC = () => {
   const [monthlySalary, setMonthlySalary] = useState<string>('');
   const [paymentMode, setPaymentMode] = useState<'Cash' | 'UPI' | ''>('');
   const [selectedUpiAccountId, setSelectedUpiAccountId] = useState<string>('');
+  const [profileImage, setProfileImage] = useState<File | null>(null);
+  const [profileImagePreview, setProfileImagePreview] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
   // Payments state
   const [showPaymentPanel, setShowPaymentPanel] = useState(false);
   const [paymentStaffId, setPaymentStaffId] = useState<string>('');
@@ -113,7 +120,7 @@ const StaffPage: React.FC = () => {
     return `${yyyyMm}-${String(lastDay).padStart(2, '0')}`;
   };
 
-  const mergeMonthlyAggregates = async (baseStaff: Staff[]) => {
+  const mergeMonthlyAggregates = async (baseStaff: Staff[]): Promise<Staff[]> => {
     if (!baseStaff.length) return baseStaff;
     const month = getCurrentMonth();
     const staffIds = baseStaff.map(s => s.id);
@@ -138,13 +145,12 @@ const StaffPage: React.FC = () => {
       );
 
       // Advances aggregates (include current month window)
-      const advData = await selectWithFallback(
-        ['payroll_advances', 'advances', 'payroll.advances'],
-        async (q) => await q.select('staff_id, amount, date')
-          .in('staff_id', staffIds)
-          .gte('date', month + '-01')
-          .lte('date', getMonthEndDate(month))
-      );
+      const { data: advData } = await supabase
+        .rpc('get_advances_by_staff', {
+          staff_ids: staffIds,
+          start_date: month + '-01',
+          end_date: getMonthEndDate(month)
+        });
 
       const attendanceByStaff: Record<string, { present_days: number; paid_leaves: number; unpaid_leaves: number; absent_days: number; }> = {};
       (attData || []).forEach((row: any) => {
@@ -164,13 +170,12 @@ const StaffPage: React.FC = () => {
 
       // Salary paid aggregates via activity logs
       const salaryPaidByStaff: Record<string, number> = {};
-      const salLogs = await selectWithFallback(
-        ['payroll_activity_logs', 'activity_logs', 'payroll.activity_logs'],
-        async (q) => await q.select('ref_id, amount, date, kind')
-          .eq('kind', 'SalaryPayment')
-          .gte('date', month + '-01')
-          .lte('date', getMonthEndDate(month))
-      );
+      const { data: salLogs } = await supabase
+        .rpc('get_activity_logs_by_branch', {
+          branch_id_param: selectedLocationId,
+          start_date: month + '-01',
+          end_date: getMonthEndDate(month)
+        });
       (salLogs || []).forEach((row: any) => {
         const sid = row.ref_id;
         if (!sid) return;
@@ -191,6 +196,7 @@ const StaffPage: React.FC = () => {
           totalAdvances: advances,
           salaryPaid: paid,
           payableSalary: payable,
+          dp_url: s.dp_url,
         } as Staff;
       });
 
@@ -207,7 +213,7 @@ const StaffPage: React.FC = () => {
     }
     try {
       setLeavesLoading(true);
-      const candidates = ['staff_leave_periods', 'payroll.staff_leave_periods'];
+      const candidates = ['staff_leave_periods', 'payroll_staff_leave_periods'];
       let rows: any[] | null = null;
       for (const t of candidates) {
         try {
@@ -264,33 +270,22 @@ const StaffPage: React.FC = () => {
         return;
       }
 
-      // Try public-friendly names first
-      const candidates = ['payroll_activity_logs', 'activity_logs', 'payroll.activity_logs'];
-      let rows: any[] | null = null;
-      
-      for (const t of candidates) {
-        try {
-          const q = supabase
-            .from(t)
-            .select('id, date, kind, description, amount, ref_id, branch_id')
-            .eq('branch_id', selectedLocationId) // Ensure location filtering
-            .in('kind', ['Advance', 'SalaryPayment'] as any)
-            .order('date', { ascending: false } as any)
-            .range(page * activitiesPageSize, page * activitiesPageSize + activitiesPageSize);
-          
-          const { data, error } = await q;
-          if (error) throw error;
-          rows = data || [];
-          break;
-        } catch (_) {}
-      }
+      // Use RPC function to get activity logs
+      const { data: rows } = await supabase
+        .rpc('get_activity_logs_filtered', {
+          branch_id_param: selectedLocationId,
+          start_date: new Date(0).toISOString(), // Start from beginning
+          end_date: new Date().toISOString(), // End now
+          limit_param: activitiesPageSize + 1, // +1 for hasNext check
+          offset_param: page * activitiesPageSize
+        });
 
       // If we fetched pageSize+1 for hasNext check, trim to pageSize for render
-      if ((rows || []).length > activitiesPageSize) {
-        rows = rows!.slice(0, activitiesPageSize);
-      }
+      const trimmedRows = (rows || []).length > activitiesPageSize
+        ? (rows || []).slice(0, activitiesPageSize)
+        : (rows || []);
 
-      const baseActs = (rows || []).map((r: any) => ({
+      const baseActs = trimmedRows.map((r: any) => ({
         id: r.id,
         date: r.date,
         kind: r.kind as 'Advance' | 'SalaryPayment',
@@ -304,24 +299,14 @@ const StaffPage: React.FC = () => {
       const advanceIds = baseActs.filter(a => a.kind === 'Advance' && a.ref_id).map(a => a.ref_id as string);
       let advanceMap: Record<string, string> = {};
       if (advanceIds.length > 0) {
-        const advSources = ['payroll_advances', 'advances', 'payroll.advances'];
-        for (const t of advSources) {
-          try {
-            const { data, error } = await supabase
-              .from(t)
-              .select('id, staff_id, branch_id')
-              .in('id', advanceIds)
-              .eq('branch_id', selectedLocationId); // Ensure advance is from current location
-            if (error) throw error;
-            (data || []).forEach((row: any) => { 
-              // Double-check that the advance is from the current location
-              if (row.branch_id === selectedLocationId) {
-                advanceMap[row.id] = row.staff_id; 
-              }
-            });
-            if (Object.keys(advanceMap).length === advanceIds.length) break;
-          } catch (_) {}
-        }
+        const { data: advanceData } = await supabase
+          .rpc('get_advances_by_ids', { advance_ids: advanceIds });
+        (advanceData || []).forEach((row: any) => { 
+          // Double-check that the advance is from the current location
+          if (row.branch_id === selectedLocationId) {
+            advanceMap[row.id] = row.staff_id; 
+          }
+        });
       }
 
       // Determine staff IDs per activity
@@ -336,19 +321,14 @@ const StaffPage: React.FC = () => {
       const missingIds = withStaffIds.map(a => a.staffId).filter((id): id is string => !!id && !staffIdToName[id]);
       const uniqueMissing = Array.from(new Set(missingIds));
       if (uniqueMissing.length > 0) {
-        const staffSources = ['payroll_staff', 'payroll.staff'];
-        for (const t of staffSources) {
-          try {
-            const { data, error } = await supabase
-              .from(t)
-              .select('id, name')
-              .in('id', uniqueMissing)
-              .eq('branch_id', selectedLocationId); // Ensure staff is from current location
-            if (error) throw error;
-            (data || []).forEach((row: any) => { staffIdToName[row.id] = row.name; });
-            if (uniqueMissing.every(id => staffIdToName[id])) break;
-          } catch (_) {}
-        }
+        const { data: staffData } = await supabase
+          .rpc('get_staff_by_ids', { staff_ids: uniqueMissing });
+        (staffData || []).forEach((row: any) => { 
+          // Double-check that the staff is from the current location
+          if (row.branch_id === selectedLocationId) {
+            staffIdToName[row.id] = row.name; 
+          }
+        });
       }
 
       // Filter activities to only include those from current location staff
@@ -418,9 +398,10 @@ const StaffPage: React.FC = () => {
   const toggleActive = async (memberId: string, current: boolean) => {
     try {
       const { error } = await supabase
-        .from('payroll_staff')
-        .update({ is_active: !current })
-        .eq('id', memberId);
+        .rpc('update_staff', {
+          staff_id_param: memberId,
+          is_active_param: !current
+        });
       if (error) throw error;
       toast({ title: current ? 'Staff deactivated' : 'Staff activated' });
       await refreshStaff();
@@ -431,13 +412,9 @@ const StaffPage: React.FC = () => {
 
   const deleteStaff = async (memberId: string) => {
     try {
-      // Try deleting via public view first
-      let { error } = await supabase.from('payroll_staff').delete().eq('id', memberId);
-      if (error) {
-        // Fallback to underlying table
-        const resp = await supabase.from('payroll.staff').delete().eq('id', memberId);
-        if (resp.error) throw resp.error;
-      }
+      // Delete staff using RPC function
+      const { error } = await supabase.rpc('delete_staff', { staff_id_param: memberId });
+      if (error) throw error;
       toast({ title: 'Staff deleted' });
       await refreshStaff();
     } catch (e: any) {
@@ -460,29 +437,36 @@ const StaffPage: React.FC = () => {
           return;
         }
 
-        // Use a public updatable view to expose payroll.staff: public.payroll_staff
-        const tableName = 'payroll_staff';
-        const baseQuery = supabase.from(tableName).select('*').eq('branch_id', selectedLocationId);
-        const { data: staffData, error: staffError } = await baseQuery;
+        // Use RPC function to get staff by branch
+        const { data: staffData, error: staffError } = await supabase
+          .rpc('get_staff_by_branch', { branch_id_param: selectedLocationId });
         if (staffError) throw staffError;
+        
+        // Debug log to check raw data
+        console.log('Raw staff data from RPC (loadStaff):', staffData);
+        console.log('dp_url values:', staffData?.map(s => ({ name: s.name, dp_url: s.dp_url })));
+        staffData?.forEach((s, index) => {
+          console.log(`Staff ${index + 1}:`, { name: s.name, dp_url: s.dp_url, hasDpUrl: !!s.dp_url });
+        });
 
-        let mapped = (staffData || []).map((row: any) => ({
-          id: row.id,
-          name: row.name,
-          role: row.role_title || row.role || '',
-          isActive: typeof row.is_active === 'boolean' ? row.is_active : row.isActive,
-          monthlySalary: Number((row.monthly_salary ?? row.monthlySalary) || 0),
-          payableSalary: Number((row.monthly_salary ?? row.monthlySalary) || 0),
-          totalAdvances: 0,
-          presentDays: 0,
-          absences: 0,
-          paidLeaves: 0,
-          unpaidLeaves: 0,
-          contact: row.contact || '',
-          dateOfJoining: row.date_of_joining || row.dateOfJoining,
-          paymentMode: row.default_payment_mode || row.payment_mode || row.paymentMode || ''
-        }));
-        mapped = await mergeMonthlyAggregates(mapped);
+      let mapped: Staff[] = (staffData || []).map((row: any): Staff => ({
+        id: row.id,
+        name: row.name,
+        role: row.role_title || row.role || '',
+        isActive: typeof row.is_active === 'boolean' ? row.is_active : row.isActive,
+        monthlySalary: Number((row.monthly_salary ?? row.monthlySalary) || 0),
+        payableSalary: Number((row.monthly_salary ?? row.monthlySalary) || 0),
+        totalAdvances: 0,
+        presentDays: 0,
+        absences: 0,
+        paidLeaves: 0,
+        unpaidLeaves: 0,
+        contact: row.contact || '',
+        dateOfJoining: row.date_of_joining || row.dateOfJoining,
+        paymentMode: row.default_payment_mode || row.payment_mode || row.paymentMode || '',
+        dp_url: row.dp_url || null
+      }));
+        mapped = await mergeMonthlyAggregates(mapped) as Staff[];
         setStaff(mapped);
       } catch (error) {
         console.error('Error loading staff:', error);
@@ -505,10 +489,15 @@ const StaffPage: React.FC = () => {
     if (!user?.id || !selectedLocationId) return;
     setLoading(true);
     try {
-      const tableName = 'payroll_staff';
-      const baseQuery = supabase.from(tableName).select('*').eq('branch_id', selectedLocationId);
-      const { data: staffData } = await baseQuery;
-      let mapped = (staffData || []).map((row: any) => ({
+      // Use RPC function to get staff by branch
+      const { data: staffData, error: staffError } = await supabase
+        .rpc('get_staff_by_branch', { branch_id_param: selectedLocationId });
+      if (staffError) throw staffError;
+      
+      // Debug log to check raw data
+      console.log('Raw staff data from RPC:', staffData);
+
+      let mapped: Staff[] = (staffData || []).map((row: any): Staff => ({
         id: row.id,
         name: row.name,
         role: row.role_title || row.role || '',
@@ -522,9 +511,10 @@ const StaffPage: React.FC = () => {
         unpaidLeaves: 0,
         contact: row.contact || '',
         dateOfJoining: row.date_of_joining || row.dateOfJoining,
-        paymentMode: row.default_payment_mode || row.payment_mode || row.paymentMode || ''
+        paymentMode: row.default_payment_mode || row.payment_mode || row.paymentMode || '',
+        dp_url: row.dp_url || null
       }));
-      mapped = await mergeMonthlyAggregates(mapped);
+      mapped = await mergeMonthlyAggregates(mapped) as Staff[];
       setStaff(mapped);
       // Also reload activities when staff is refreshed
       await loadActivities(0);
@@ -542,6 +532,74 @@ const StaffPage: React.FC = () => {
     const ids = staff.map(s => s.id);
     loadLeavesForStaff(ids);
   }, [staff.map(s => s.id).join(',')]);
+
+  // Image upload functions
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        toast({ title: 'Invalid file type', description: 'Please select an image file', variant: 'destructive' });
+        return;
+      }
+      
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        toast({ title: 'File too large', description: 'Please select an image smaller than 5MB', variant: 'destructive' });
+        return;
+      }
+      
+      setProfileImage(file);
+      
+      // Create preview URL
+      const previewUrl = URL.createObjectURL(file);
+      setProfileImagePreview(previewUrl);
+    }
+  };
+
+  const removeImage = () => {
+    setProfileImage(null);
+    if (profileImagePreview) {
+      URL.revokeObjectURL(profileImagePreview);
+    }
+    setProfileImagePreview(null);
+  };
+
+  const uploadImageToSupabase = async (file: File, staffId: string): Promise<string | null> => {
+    try {
+      setUploadingImage(true);
+      
+      // Create a unique filename
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${staffId}_${Date.now()}.${fileExt}`;
+      
+      // Upload to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('profile')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (error) {
+        console.error('Error uploading image:', error);
+        throw error;
+      }
+
+      // Get public URL
+      const { data: publicUrlData } = supabase.storage
+        .from('profile')
+        .getPublicUrl(fileName);
+
+      return publicUrlData.publicUrl;
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      toast({ title: 'Upload failed', description: 'Failed to upload profile image', variant: 'destructive' });
+      return null;
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   const handleAddStaff = async () => {
     if (!user?.id) return;
@@ -570,8 +628,41 @@ const StaffPage: React.FC = () => {
         default_payment_mode: paymentMode,
         is_active: true
       } as any;
-      const { error: insertError } = await supabase.from('payroll_staff').insert(payloadSnake);
+      
+      // Insert staff record using RPC function
+      const { data: insertedStaffId, error: insertError } = await supabase
+        .rpc('insert_staff', {
+          branch_id_param: selectedLocationId,
+          name_param: name,
+          role_title_param: roleTitle,
+          contact_param: contact,
+          date_of_joining_param: dateOfJoining,
+          monthly_salary_param: Number(monthlySalary),
+          default_payment_mode_param: paymentMode,
+          dp_url_param: null
+        });
+        
       if (insertError) throw insertError;
+      
+      // Upload profile image if provided
+      let imageUrl = null;
+      if (profileImage && insertedStaffId) {
+        imageUrl = await uploadImageToSupabase(profileImage, insertedStaffId);
+        
+        // Update staff record with image URL
+        if (imageUrl) {
+          const { error: updateError } = await supabase
+            .rpc('update_staff', {
+              staff_id_param: insertedStaffId,
+              dp_url_param: imageUrl
+            });
+            
+          if (updateError) {
+            console.warn('Failed to update image URL:', updateError);
+          }
+        }
+      }
+      
       toast({ title: 'Staff added', description: 'New staff member has been created' });
       setShowAddForm(false);
       setName('');
@@ -581,6 +672,8 @@ const StaffPage: React.FC = () => {
       setMonthlySalary('');
       setPaymentMode('');
       setSelectedUpiAccountId('');
+      setProfileImage(null);
+      setProfileImagePreview(null);
       await refreshStaff();
     } catch (e: any) {
       console.error(e);
@@ -767,6 +860,66 @@ const StaffPage: React.FC = () => {
                 <p className="text-xs text-muted-foreground">Will be saved as upi:account in contact</p>
               </div>
             )}
+            
+            {/* Profile Image Upload */}
+            <div className="grid gap-2 sm:col-span-2">
+              <Label>Profile Picture (Optional)</Label>
+              <div className="flex items-center gap-4">
+                <div className="flex-shrink-0">
+                  {profileImagePreview ? (
+                    <div className="relative">
+                      <img
+                        src={profileImagePreview}
+                        alt="Profile preview"
+                        className="w-20 h-20 rounded-full object-cover border-2 border-gray-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={removeImage}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-20 h-20 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center">
+                      <User className="h-8 w-8 text-gray-400" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <input
+                    type="file"
+                    id="profileImage"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => document.getElementById('profileImage')?.click()}
+                    disabled={uploadingImage}
+                    className="w-full"
+                  >
+                    {uploadingImage ? (
+                      <div className="flex items-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                        Uploading...
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Camera className="h-4 w-4" />
+                        {profileImagePreview ? 'Change Photo' : 'Upload Photo'}
+                      </div>
+                    )}
+                  </Button>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    JPG, PNG or GIF. Max size 5MB.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
           <div className="mt-4 flex justify-end gap-2">
             <Button variant="outline" onClick={() => setShowAddForm(false)} disabled={saving}>Cancel</Button>
@@ -867,30 +1020,37 @@ const StaffPage: React.FC = () => {
                     payment_mode: paymentModeSel,
                     notes: paymentNotes || null
                   };
-                  const { data: advRows, error: advErr } = await insertWithFallback([
-                    'payroll_advances',
-                    'advances',
-                    'payroll.advances'
-                  ] as string[], advancePayload, 'id');
+                  const { data: advanceId, error: advErr } = await supabase
+                    .rpc('insert_advance', {
+                      staff_id_param: paymentStaffId,
+                      date_param: new Date().toISOString().split('T')[0],
+                      amount_param: amtNum,
+                      payment_mode_param: paymentMode,
+                      notes_param: paymentNotes || null
+                    });
                   if (advErr) throw advErr;
-                  const advanceId = advRows && advRows[0] ? advRows[0].id : null;
                   // Also log to activity_logs
                   let selectedLocation = '';
                   try { const stored = localStorage.getItem(`selectedLocation_${user?.id}` || ''); selectedLocation = stored || ''; } catch (_) {}
                   const actPayload = {
                     branch_id: selectedLocation || null,
                     kind: 'Advance',
-                    ref_table: 'payroll.advances',
+                    ref_table: 'payroll_advances',
                     ref_id: advanceId,
                     date: new Date().toISOString(),
                     description: paymentNotes || null,
                     amount: amtNum
                   };
-                  const { error: actErr } = await insertWithFallback([
-                    'payroll_activity_logs',
-                    'activity_logs',
-                    'payroll.activity_logs'
-                  ] as string[], actPayload);
+                  const { error: actErr } = await supabase
+                    .rpc('insert_activity_log', {
+                      branch_id_param: selectedLocation || null,
+                      kind_param: 'Advance',
+                      ref_table_param: 'payroll_advances',
+                      ref_id_param: advanceId,
+                      date_param: new Date().toISOString(),
+                      description_param: paymentNotes || null,
+                      amount_param: amtNum
+                    });
                   if (actErr) throw actErr;
                 } else {
                   // Salary payment: log to activity_logs with ref_id = staff_id
@@ -902,17 +1062,22 @@ const StaffPage: React.FC = () => {
                   const actPayload = {
                     branch_id: selectedLocation || null,
                     kind: 'SalaryPayment',
-                    ref_table: 'payroll.staff',
+                    ref_table: 'payroll_staff',
                     ref_id: paymentStaffId,
                     date: new Date().toISOString(),
                     description: withUpi,
                     amount: amtNum
                   };
-                  const { error: salErr } = await insertWithFallback([
-                    'payroll_activity_logs',
-                    'activity_logs',
-                    'payroll.activity_logs'
-                  ] as string[], actPayload);
+                  const { error: salErr } = await supabase
+                    .rpc('insert_activity_log', {
+                      branch_id_param: selectedLocation || null,
+                      kind_param: 'SalaryPayment',
+                      ref_table_param: 'payroll_staff',
+                      ref_id_param: paymentStaffId,
+                      date_param: new Date().toISOString(),
+                      description_param: withUpi,
+                      amount_param: amtNum
+                    });
                   if (salErr) throw salErr;
                 }
                 toast({ title: 'Payment recorded' });
@@ -1015,6 +1180,66 @@ const StaffPage: React.FC = () => {
                 </Select>
               </div>
             )}
+            
+            {/* Profile Image Upload */}
+            <div className="grid gap-2 sm:col-span-2">
+              <Label>Profile Picture</Label>
+              <div className="flex items-center gap-4">
+                <div className="flex-shrink-0">
+                  {profileImagePreview ? (
+                    <div className="relative">
+                      <img
+                        src={profileImagePreview}
+                        alt="Profile preview"
+                        className="w-20 h-20 rounded-full object-cover border-2 border-gray-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={removeImage}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-20 h-20 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center">
+                      <User className="h-8 w-8 text-gray-400" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <input
+                    type="file"
+                    id="editProfileImage"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => document.getElementById('editProfileImage')?.click()}
+                    disabled={uploadingImage}
+                    className="w-full"
+                  >
+                    {uploadingImage ? (
+                      <div className="flex items-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                        Uploading...
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Camera className="h-4 w-4" />
+                        {profileImagePreview ? 'Change Photo' : 'Upload Photo'}
+                      </div>
+                    )}
+                  </Button>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    JPG, PNG or GIF. Max size 5MB.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
           <div className="mt-4 flex justify-end gap-2">
             <Button variant="outline" onClick={() => { setEditMemberId(null); }}>Cancel</Button>
@@ -1031,10 +1256,30 @@ const StaffPage: React.FC = () => {
                   monthly_salary: Number(monthlySalary),
                   default_payment_mode: paymentMode,
                 };
-                const { error } = await supabase.from('payroll_staff').update(updates).eq('id', editMemberId);
+                
+                // Upload new profile image if provided
+                if (profileImage) {
+                  const imageUrl = await uploadImageToSupabase(profileImage, editMemberId);
+                  if (imageUrl) {
+                    updates.dp_url = imageUrl;
+                  }
+                }
+                
+                const { error } = await supabase.rpc('update_staff', {
+                  staff_id_param: editMemberId,
+                  name_param: updates.name,
+                  role_title_param: updates.role_title,
+                  contact_param: updates.contact,
+                  date_of_joining_param: updates.date_of_joining,
+                  monthly_salary_param: updates.monthly_salary,
+                  default_payment_mode_param: updates.default_payment_mode,
+                  dp_url_param: updates.dp_url
+                });
                 if (error) throw error;
                 toast({ title: 'Staff updated' });
                 setEditMemberId(null);
+                setProfileImage(null);
+                setProfileImagePreview(null);
                 await refreshStaff();
               } catch (e: any) {
                 toast({ title: 'Failed to update staff', description: e?.message, variant: 'destructive' });
@@ -1164,10 +1409,20 @@ const StaffPage: React.FC = () => {
                 <tr key={member.id} className="border-b border-border hover:bg-muted/30">
                   <td className="p-4">
                     <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
-                        <span className="text-primary-foreground text-sm font-medium">
-                          {member.name.charAt(0)}
-                        </span>
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center overflow-hidden">
+                        {member.dp_url ? (
+                          <img
+                            src={member.dp_url}
+                            alt={member.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-primary rounded-full flex items-center justify-center">
+                            <span className="text-primary-foreground text-sm font-medium">
+                              {member.name.charAt(0)}
+                            </span>
+                          </div>
+                        )}
                       </div>
                       <div>
                         <p className="font-medium text-foreground">{member.name}</p>
@@ -1251,6 +1506,9 @@ const StaffPage: React.FC = () => {
                           setMonthlySalary(String(member.monthlySalary || ''));
                           setPaymentMode((member.paymentMode as any) || '');
                           setSelectedUpiAccountId('');
+                          // Load existing profile image
+                          setProfileImage(null);
+                          setProfileImagePreview(member.dp_url || null);
                         }}
                       >
                         <Edit className="h-4 w-4" />
