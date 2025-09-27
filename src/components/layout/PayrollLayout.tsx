@@ -270,6 +270,30 @@ const PayrollLayout: React.FC = () => {
 
         </div>
 
+        {/* Back to Main Menu Button */}
+        <div className="px-6 pb-4">
+          <button
+            onClick={handleBackToMainApp}
+            className={cn(
+              "w-full p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors text-left group",
+              collapsed && "flex items-center justify-center"
+            )}
+          >
+            <div className="flex items-center gap-3">
+              <ArrowLeft className={cn(
+                "w-4 h-4 text-muted-foreground group-hover:text-foreground",
+                collapsed && "mr-0"
+              )} />
+              {!collapsed && (
+                <div>
+                  <div className="text-sm font-medium text-foreground">Back to Main Menu</div>
+                  <div className="text-xs text-muted-foreground">Return to main dashboard</div>
+                </div>
+              )}
+            </div>
+          </button>
+        </div>
+
         {/* Navigation */}
         <nav className="flex-1 p-4 space-y-2">
           {sidebarItems

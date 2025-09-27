@@ -209,6 +209,7 @@ const Sidebar: React.FC<PayrollSidebarProps> = ({
             </button>
           )}
         </div>
+        
         {/* Back to Main App Button */}
         <button
           onClick={handleBackToMainApp}
@@ -224,8 +225,8 @@ const Sidebar: React.FC<PayrollSidebarProps> = ({
             )} />
             {!collapsed && (
               <div>
-                <div className="text-sm font-medium text-foreground">Back to Main Dashboard</div>
-                <div className="text-xs text-muted-foreground">Return to dashboard</div>
+                <div className="text-sm font-medium text-foreground">Back to Main Menu</div>
+                <div className="text-xs text-muted-foreground">Return to main dashboard</div>
               </div>
             )}
           </div>
