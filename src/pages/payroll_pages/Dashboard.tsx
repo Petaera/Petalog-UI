@@ -273,7 +273,12 @@ const Dashboard: React.FC = () => {
             note: r.description || undefined,
           });
         });
-        const combined = [...expenseActs, ...payrollActs]
+        // Filter activities based on user role - managers don't see salary payments
+        const filteredPayrollActs = user?.role === 'manager' 
+          ? payrollActs.filter(act => act.kind !== 'SalaryPayment')
+          : payrollActs;
+        
+        const combined = [...expenseActs, ...filteredPayrollActs]
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
           .slice(0, 5);
         
@@ -281,9 +286,11 @@ const Dashboard: React.FC = () => {
         console.log('Recent Activities Debug:', {
           expenseActs: expenseActs.length,
           payrollActs: payrollActs.length,
+          filteredPayrollActs: filteredPayrollActs.length,
           combined: combined.length,
           selectedLocationId,
           selectedMonth,
+          userRole: user?.role,
           expenseRowsCount: expenseRows.length,
           expenseActsDetails: expenseActs.map(e => ({ title: e.title, amount: e.amount, date: e.date })),
           combinedDetails: combined.map(c => ({ kind: c.kind, title: c.title, amount: c.amount, date: c.date }))

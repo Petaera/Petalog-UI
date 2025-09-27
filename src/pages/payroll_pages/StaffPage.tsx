@@ -256,26 +256,35 @@ const StaffPage: React.FC = () => {
   const loadActivities = async (page: number) => {
     try {
       setActivitiesLoading(true);
+      
+      // Only load activities if we have a selected location
+      if (!selectedLocationId) {
+        setActivities([]);
+        setActivitiesHasNext(false);
+        return;
+      }
+
       // Try public-friendly names first
       const candidates = ['payroll_activity_logs', 'activity_logs', 'payroll.activity_logs'];
       let rows: any[] | null = null;
+      
       for (const t of candidates) {
         try {
           const q = supabase
             .from(t)
             .select('id, date, kind, description, amount, ref_id, branch_id')
+            .eq('branch_id', selectedLocationId) // Ensure location filtering
             .in('kind', ['Advance', 'SalaryPayment'] as any)
             .order('date', { ascending: false } as any)
             .range(page * activitiesPageSize, page * activitiesPageSize + activitiesPageSize);
-          if (selectedLocationId) {
-            (q as any).eq('branch_id', selectedLocationId);
-          }
+          
           const { data, error } = await q;
           if (error) throw error;
           rows = data || [];
           break;
         } catch (_) {}
       }
+
       // If we fetched pageSize+1 for hasNext check, trim to pageSize for render
       if ((rows || []).length > activitiesPageSize) {
         rows = rows!.slice(0, activitiesPageSize);
@@ -298,9 +307,18 @@ const StaffPage: React.FC = () => {
         const advSources = ['payroll_advances', 'advances', 'payroll.advances'];
         for (const t of advSources) {
           try {
-            const { data, error } = await supabase.from(t).select('id, staff_id').in('id', advanceIds);
+            const { data, error } = await supabase
+              .from(t)
+              .select('id, staff_id, branch_id')
+              .in('id', advanceIds)
+              .eq('branch_id', selectedLocationId); // Ensure advance is from current location
             if (error) throw error;
-            (data || []).forEach((row: any) => { advanceMap[row.id] = row.staff_id; });
+            (data || []).forEach((row: any) => { 
+              // Double-check that the advance is from the current location
+              if (row.branch_id === selectedLocationId) {
+                advanceMap[row.id] = row.staff_id; 
+              }
+            });
             if (Object.keys(advanceMap).length === advanceIds.length) break;
           } catch (_) {}
         }
@@ -321,7 +339,11 @@ const StaffPage: React.FC = () => {
         const staffSources = ['payroll_staff', 'payroll.staff'];
         for (const t of staffSources) {
           try {
-            const { data, error } = await supabase.from(t).select('id, name').in('id', uniqueMissing);
+            const { data, error } = await supabase
+              .from(t)
+              .select('id, name')
+              .in('id', uniqueMissing)
+              .eq('branch_id', selectedLocationId); // Ensure staff is from current location
             if (error) throw error;
             (data || []).forEach((row: any) => { staffIdToName[row.id] = row.name; });
             if (uniqueMissing.every(id => staffIdToName[id])) break;
@@ -329,7 +351,21 @@ const StaffPage: React.FC = () => {
         }
       }
 
-      let finalActs = withStaffIds.map(a => ({
+      // Filter activities to only include those from current location staff
+      const currentStaffIds = new Set(staff.map(s => s.id));
+      let filteredActs = withStaffIds
+        .filter(a => {
+          // Only include activities that have a staff ID and that staff is from current location
+          if (!a.staffId) return false;
+          return currentStaffIds.has(a.staffId);
+        });
+      
+      // For managers, filter out salary payments
+      if (user?.role === 'manager') {
+        filteredActs = filteredActs.filter(a => a.kind !== 'SalaryPayment');
+      }
+      
+      const finalActs = filteredActs.map(a => ({
         id: a.id,
         date: a.date,
         kind: a.kind,
@@ -338,15 +374,30 @@ const StaffPage: React.FC = () => {
         staffId: a.staffId,
         staffName: a.staffId ? (staffIdToName[a.staffId] || undefined) : undefined
       }));
-      if (selectedLocationId) {
-        const currentStaffIds = new Set(staff.map(s => s.id));
-        finalActs = finalActs.filter(a => !a.staffId || currentStaffIds.has(a.staffId));
-      }
+
+      // Debug logging for payment activities
+      console.log('StaffPage Payment Activities Debug:', {
+        selectedLocationId,
+        userRole: user?.role,
+        totalActivities: withStaffIds.length,
+        currentStaffIds: Array.from(currentStaffIds),
+        filteredActivities: filteredActs.length,
+        finalActivities: finalActs.length,
+        activityTypes: finalActs.map(a => a.kind),
+        activitiesDetails: finalActs.map(a => ({ 
+          kind: a.kind, 
+          amount: a.amount, 
+          staffName: a.staffName, 
+          date: a.date 
+        }))
+      });
+
       setActivities(finalActs);
       // Determine if next page exists by probing one extra row
       setActivitiesHasNext((rows || []).length > activitiesPageSize);
       setActivitiesPage(page);
-    } catch (_) {
+    } catch (error) {
+      console.error('Error loading activities:', error);
       setActivities([]);
       setActivitiesHasNext(false);
     } finally {
@@ -356,7 +407,11 @@ const StaffPage: React.FC = () => {
 
   // Also react to location id changes directly
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || !selectedLocationId) {
+      setActivities([]);
+      setActivitiesHasNext(false);
+      return;
+    }
     loadActivities(0);
   }, [selectedLocationId]);
 
@@ -471,6 +526,8 @@ const StaffPage: React.FC = () => {
       }));
       mapped = await mergeMonthlyAggregates(mapped);
       setStaff(mapped);
+      // Also reload activities when staff is refreshed
+      await loadActivities(0);
     } finally {
       setLoading(false);
     }
@@ -1267,7 +1324,8 @@ const StaffPage: React.FC = () => {
         )}
       </Card>
 
-      {/* Activities pagination (Payments only) */}
+      {/* Activities pagination (Payments only) - COMMENTED OUT */}
+      {/* 
       <Card className="mt-6">
         <div className="p-6 border-b border-border flex items-center justify-between">
           <div>
@@ -1312,6 +1370,7 @@ const StaffPage: React.FC = () => {
           )}
         </div>
       </Card>
+      */}
 
       {/* Long Leaves */}
       <Card className="mt-6">

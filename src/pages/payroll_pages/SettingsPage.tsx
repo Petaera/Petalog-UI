@@ -316,7 +316,7 @@ const SettingsPage: React.FC = () => {
         </div>
       )}
 
-      {/* System Information */}
+      {/* System Information
       <div className="business-card">
         <div className="p-6 border-b border-border">
           <div className="flex items-center space-x-3">
@@ -329,8 +329,8 @@ const SettingsPage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
               <h4 className="font-medium text-foreground mb-2">Application</h4>
-              <p className="text-sm text-muted-foreground">Business Manager v1.0</p>
-              <p className="text-xs text-muted-foreground">React + TypeScript</p>
+              <p className="text-sm text-muted-foreground">Peta-Log v1.0</p>
+              <p className="text-xs text-muted-foreground">by PETAERA TECHNOLOGIES LLP</p>
             </div>
             
             <div>
@@ -346,7 +346,7 @@ const SettingsPage: React.FC = () => {
             </div>
           </div>
         </div>
-      </div>
+      </div> */}
 
       {/* Save Button */}
       {isOwner && (
