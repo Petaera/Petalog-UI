@@ -66,6 +66,7 @@ export function AppSidebar() {
         { title: "Dashboard", url: "/dashboard", icon: Home },
         { title: "Automatic Logs", url: "/automatic-logs", icon: Database },
         { title: "Manual Logs", url: "/manual-logs", icon: PenTool },
+        { title: "Pay Later", url: "/pay-later", icon: CreditCard },
         { title: "Comparison", url: "/comparison", icon: FileText },
         { title: "Reports & Statistics", url: "/reports", icon: BarChart3 },
         { title: "Payment Details", url: "/payment-details", icon: CreditCard },

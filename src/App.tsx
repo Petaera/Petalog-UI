@@ -18,6 +18,7 @@ import Index from "./pages/Index.tsx";
 import Dashboard from "./pages/Dashboard";
 import AutomaticLogs from "./pages/AutomaticLogs";
 import ManualLogs from "./pages/ManualLogs";
+import PayLater from "./pages/PayLater";
 import Comparison from "./pages/Comparison";
 import Reports from "./pages/Reports";
 import PaymentDetails from "./pages/paymentdetails";
@@ -216,6 +217,16 @@ const App = () => (
                   <ProtectedRoute requiredRole="owner">
                     <Layout>
                       <ManualLogs />
+                    </Layout>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/pay-later" 
+                element={
+                  <ProtectedRoute requiredRole="owner">
+                    <Layout>
+                      <PayLater />
                     </Layout>
                   </ProtectedRoute>
                 } 
