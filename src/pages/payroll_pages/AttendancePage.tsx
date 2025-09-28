@@ -22,6 +22,7 @@ interface Staff {
   name: string;
   role: string;
   isActive: boolean;
+  dp_url: string | null; // Added profile picture URL
 }
 
 interface DailyAttendance {
@@ -87,41 +88,29 @@ const AttendancePage: React.FC = () => {
     }
   };
 
-
   useEffect(() => {
     const loadData = async () => {
       try {
         setLoading(true);
-        
         if (!selectedLocationId) {
           setStaff([]);
           setDailyAttendance({});
           setLoading(false);
           return;
         }
-        
-        // Fetch staff with schema fallback (payroll -> public)
-        const fetchStaff = async () => {
-          let q = supabase
-            .from('staff')
-            .select('id, name, role_title, is_active, branch_id')
-            .eq('is_active', true)
-            .eq('branch_id', selectedLocationId);
-          const { data, error } = await q;
-          if (error) throw error;
-          return data || [];
-        };
 
-        const rawStaff = await fetchStaff();
-        
-        // Map DB -> UI model
-        const mappedStaff: Staff[] = (rawStaff || []).map((s: any) => ({
-          id: s.id,
-          name: s.name,
-          role: (s.role_title || s.role || ''),
-          isActive: !!(s.is_active ?? s.isActive),
+        // Fetch staff using RPC (matches StaffPage.tsx)
+        const { data: staffData, error: staffError } = await supabase
+          .rpc('get_staff_by_branch', { branch_id_param: selectedLocationId });
+        if (staffError) throw staffError;
+
+        const mappedStaff: Staff[] = (staffData || []).map((row: any) => ({
+          id: row.id,
+          name: row.name,
+          role: row.role_title || row.role || '',
+          isActive: typeof row.is_active === 'boolean' ? row.is_active : row.isActive,
+          dp_url: row.dp_url || null
         }));
-
         setStaff(mappedStaff);
 
         // Initialize attendance map with defaults first
@@ -136,31 +125,27 @@ const AttendancePage: React.FC = () => {
 
         // Load any existing attendance for the selected date and overlay (with fallback)
         const staffIdsForFilter = mappedStaff.map(s => s.id);
-
         const fetchAttendance = async () => {
           const { data, error } = await supabase
             .from('attendance')
             .select('staff_id, status, notes')
             .eq('date', selectedDate);
           if (error) throw error;
-          // We store only non-Present rows; treat missing rows as Present
           return data || [];
         };
-
         const existingAttendance = await fetchAttendance();
-
         const attendanceMap: Record<string, DailyAttendance> = { ...defaultAttendanceMap };
         (existingAttendance || [])
           .filter((rec: any) => staffIdsForFilter.includes(rec.staff_id))
           .forEach((rec: any) => {
-          if (attendanceMap[rec.staff_id]) {
-            attendanceMap[rec.staff_id] = {
-              staffId: rec.staff_id,
-              status: rec.status,
-              notes: rec.notes || ''
-            };
-          }
-        });
+            if (attendanceMap[rec.staff_id]) {
+              attendanceMap[rec.staff_id] = {
+                staffId: rec.staff_id,
+                status: rec.status,
+                notes: rec.notes || ''
+              };
+            }
+          });
         setDailyAttendance(attendanceMap);
       } catch (error) {
         console.error('Error loading data:', error);
@@ -173,7 +158,6 @@ const AttendancePage: React.FC = () => {
         setLoading(false);
       }
     };
-
     loadData();
   }, [selectedLocationId]);
 
@@ -463,12 +447,22 @@ const AttendancePage: React.FC = () => {
           return (
             <Card key={member.id} className="p-4">
               <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-                {/* Staff Info */}
+                {/* Staff Info with Profile Picture */}
                 <div className="flex items-center space-x-3 flex-1">
-                  <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center">
-                    <span className="text-primary-foreground font-medium">
-                      {member.name.charAt(0)}
-                    </span>
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center overflow-hidden">
+                    {member.dp_url ? (
+                      <img
+                        src={member.dp_url}
+                        alt={member.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-primary rounded-full flex items-center justify-center">
+                        <span className="text-primary-foreground font-medium">
+                          {member.name.charAt(0)}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <p className="font-medium text-foreground">{member.name}</p>
