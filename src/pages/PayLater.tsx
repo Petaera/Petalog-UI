@@ -44,7 +44,8 @@ import {
   Clock, 
   Calendar, 
   Edit, 
-  Check 
+  Check,
+  Download
 } from 'lucide-react';
 
 interface PayLaterProps {
@@ -56,9 +57,12 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
   const contextSelectedLocation = useSelectedLocation();
   const selectedLocation = propSelectedLocation || contextSelectedLocation;
   
-  const [payLaterLogs, setPayLaterLogs] = useState([]);
+  const [allPayLaterLogs, setAllPayLaterLogs] = useState<any[]>([]); // base list for options
+  const [payLaterLogs, setPayLaterLogs] = useState<any[]>([]); // filtered for display/export
   const [loading, setLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState('');
+  const [selectedWorkshop, setSelectedWorkshop] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState<string>('');
 
   // Settle Pay Later modal state
   const [settleOpen, setSettleOpen] = useState(false);
@@ -102,6 +106,24 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
     }
   };
 
+  // Apply client-side filters for workshop and search
+  const applyFilters = (list: any[]) => {
+    let filtered = [...list];
+    if (selectedWorkshop && selectedWorkshop !== 'all') {
+      filtered = filtered.filter((l) => String(l.workshop ?? '') === selectedWorkshop);
+    }
+    if (searchTerm.trim()) {
+      const term = searchTerm.trim().toLowerCase();
+      filtered = filtered.filter((log) => {
+        const name = String(log?.Name || '').toLowerCase();
+        const phone = String(log?.Phone_no || '').toLowerCase();
+        const vehicle = String(log?.vehicle_number || log?.vehicles?.number_plate || '').toLowerCase();
+        return name.includes(term) || phone.includes(term) || vehicle.includes(term);
+      });
+    }
+    return filtered;
+  };
+
   const fetchPayLaterLogs = async () => {
     if (!selectedLocation) {
       console.log('No location selected');
@@ -113,7 +135,7 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
       console.log('🔍 Fetching pay later logs for location:', selectedLocation);
       console.log('📅 Selected date:', selectedDate);
 
-      // Fetch Pay Later logs with date filter
+      // Fetch Pay Later logs with base filters only (no workshop/search here)
       let payLaterQuery = supabase
         .from("logs-man")
         .select("*, vehicles(number_plate)")
@@ -124,7 +146,6 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
 
       // Add date filter only if a date is selected
       if (selectedDate && selectedDate.trim() !== '') {
-        // Create proper date objects with timezone handling
         const selectedDateObj = new Date(selectedDate);
         const payLaterStartOfDay = selectedDateObj.toISOString().split('T')[0] + 'T00:00:00.000Z';
         const payLaterEndOfDay = selectedDateObj.toISOString().split('T')[0] + 'T23:59:59.999Z';
@@ -138,7 +159,7 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
 
       let finalPayLater: any[] = [];
       // If no results with entry_time filter, try created_at (only when date filter is applied)
-      if (selectedDate && selectedDate.trim() !== '' && payLaterData?.length === 0) {
+      if (selectedDate && selectedDate.trim() !== '' && (payLaterData?.length || 0) === 0) {
         let payLaterFallbackQuery = supabase
           .from("logs-man")
           .select("*, vehicles(number_plate)")
@@ -151,7 +172,7 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
         const payLaterFallbackStartOfDay = selectedDateObj.toISOString().split('T')[0] + 'T00:00:00.000Z';
         const payLaterFallbackEndOfDay = selectedDateObj.toISOString().split('T')[0] + 'T23:59:59.999Z';
         
-        const { data: payLaterFallbackData, error: payLaterFallbackError } = await payLaterFallbackQuery
+        const { data: payLaterFallbackData } = await payLaterFallbackQuery
           .gte("created_at", payLaterFallbackStartOfDay)
           .lte("created_at", payLaterFallbackEndOfDay);
         
@@ -169,10 +190,13 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
         toast({ title: 'Error', description: 'Error fetching pay later logs: ' + payLaterError.message, variant: 'destructive' });
       }
 
-      console.log('✅ Pay Later logs fetched:', finalPayLater.length, 'records');
-      setPayLaterLogs(finalPayLater);
+      // Store base and filtered lists
+      setAllPayLaterLogs(finalPayLater);
+      setPayLaterLogs(applyFilters(finalPayLater));
 
-    } catch (error) {
+      console.log('✅ Pay Later logs fetched:', finalPayLater.length, 'base records');
+
+    } catch (error: any) {
       console.error('Error fetching pay later logs:', error);
       toast({ title: 'Error', description: 'Error fetching pay later logs: ' + error.message, variant: 'destructive' });
     } finally {
@@ -182,23 +206,20 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
 
   const openSettle = (log: any) => {
     setSettleLog(log);
-    // default to cash when settling
     setSettlePaymentMode('cash');
-    setSelectedUpiAccount(''); // Reset UPI account selection
+    setSelectedUpiAccount('');
     setSettleOpen(true);
   };
 
   const confirmSettle = async () => {
     if (!settleLog) return;
     
-    // Validate UPI account selection if UPI is selected
     if (settlePaymentMode === 'upi' && !selectedUpiAccount) {
       toast({ title: 'Error', description: 'Please select a UPI account', variant: 'destructive' });
       return;
     }
     
     try {
-      // Find the selected UPI account details
       const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
       
       const updateData: any = {
@@ -206,7 +227,6 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
         payment_date: new Date().toISOString(),
       };
       
-      // Add UPI account information if UPI is selected
       if (settlePaymentMode === 'upi' && selectedAccount) {
         updateData.upi_account_id = selectedUpiAccount;
         updateData.upi_account_name = selectedAccount.account_name;
@@ -222,7 +242,7 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
       toast({ title: 'Success', description: 'Payment settled' });
       setSettleOpen(false);
       setSettleLog(null);
-      setSelectedUpiAccount(''); // Reset UPI account selection
+      setSelectedUpiAccount('');
       fetchPayLaterLogs();
     } catch (err: any) {
       toast({ title: 'Error', description: `Settle failed: ${err?.message || err}`, variant: 'destructive' });
@@ -230,18 +250,67 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
   };
 
   const handleEdit = (log: any) => {
-    // Navigate to edit page or open edit modal
     console.log('Edit log:', log);
-    // For now, just show a toast
     toast({ title: 'Info', description: 'Edit functionality will be implemented' });
   };
 
-  // Fetch logs when component mounts or selectedLocation/selectedDate changes
+  // CSV export (UTF-8 CSV for Excel)
+  const exportCsv = () => {
+    const escapeCSV = (value: any) => {
+      if (value === null || value === undefined) return '';
+      const stringValue = String(value).trim();
+      if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n') || stringValue.includes('\r')) {
+        const cleanValue = stringValue.replace(/[\r\n]/g, ' ').replace(/"/g, '""');
+        return `"${cleanValue}"`;
+      }
+      return stringValue;
+    };
+
+    const rows = payLaterLogs.map((log: any) => ({
+      'Vehicle Number': escapeCSV(log.vehicle_number || log.vehicles?.number_plate),
+      'Customer Name': escapeCSV(log.workshop ? String(log.workshop) : (log.Name || '')),
+      'Phone': escapeCSV(log.Phone_no),
+      'Service': escapeCSV(log.service),
+      'Workshop': escapeCSV(log.workshop),
+      'Amount': escapeCSV(log.Amount),
+      'Discount': escapeCSV(log.discount),
+      'Net Amount': escapeCSV((Number(log.Amount)||0) - (Number(log.discount)||0)),
+      'Entry Time': escapeCSV(log.entry_time ? new Date(log.entry_time).toLocaleString() : ''),
+      'Created At': escapeCSV(log.created_at ? new Date(log.created_at).toLocaleString() : ''),
+    }));
+
+    const headers = Object.keys(rows[0] || {});
+    const csvString = [
+      headers.join(','),
+      ...rows.map(row => headers.map(h => row[h as keyof typeof row]).join(','))
+    ].join('\n');
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const workshopPart = selectedWorkshop && selectedWorkshop !== 'all' ? selectedWorkshop : 'all-workshops';
+    const datePart = selectedDate && selectedDate.trim() !== '' ? selectedDate : todayStr;
+    const fileName = `${workshopPart.replace(/[^a-zA-Z0-9-_]/g, '-')}_pending_payments_${datePart}.csv`;
+
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName.toLowerCase();
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  // Refetch when base filters change; re-apply when UI filters change
   useEffect(() => {
     if (selectedLocation) {
       fetchPayLaterLogs();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLocation, selectedDate]);
+
+  useEffect(() => {
+    setPayLaterLogs(applyFilters(allPayLaterLogs));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedWorkshop, searchTerm, allPayLaterLogs]);
 
   if (!selectedLocation) {
     return (
@@ -256,7 +325,7 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
 
   return (
     <div className="space-y-6">
-      {/* Header with Date Filter */}
+      {/* Header with Date & Workshop Filter */}
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
@@ -266,7 +335,7 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
                 Filter by Date:
               </Label>
             </div>
-            <div className="flex flex-col sm:flex-row gap-2">
+            <div className="flex flex-col sm:flex-row gap-2 w-full">
               <Input
                 id="date-filter"
                 type="date"
@@ -274,12 +343,44 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
                 onChange={(e) => setSelectedDate(e.target.value)}
                 className="w-full sm:w-48"
               />
+              {/* Workshop Filter */}
+              <div className="flex items-center gap-2 w-full sm:w-56">
+                <Label htmlFor="workshop-filter" className="text-sm font-medium whitespace-nowrap">Workshop:</Label>
+                <Select value={selectedWorkshop} onValueChange={setSelectedWorkshop}>
+                  <SelectTrigger id="workshop-filter" className="w-full">
+                    <SelectValue placeholder="All Workshops" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Workshops</SelectItem>
+                    {/* Dynamic workshops from base logs for switching */}
+                    {Array.from(new Set(allPayLaterLogs.map((l: any) => String(l.workshop ?? '').trim()).filter((s) => !!s && s !== 'null' && s !== 'undefined')))
+                      .sort()
+                      .map((wk: string) => (
+                        <SelectItem key={wk} value={wk}>{wk}</SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {/* Search */}
+              <Input
+                placeholder="Search name, phone, vehicle..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full sm:w-64"
+              />
               <Button
                 variant="outline"
                 onClick={() => setSelectedDate('')}
                 className="w-full sm:w-auto"
               >
-                Clear Filter
+                Clear Date
+              </Button>
+              <Button
+                onClick={exportCsv}
+                className="w-full sm:w-auto"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export CSV
               </Button>
             </div>
           </div>
@@ -304,6 +405,9 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
                 All Records
               </Badge>
             )}
+            {selectedWorkshop && selectedWorkshop !== 'all' && (
+              <Badge variant="outline" className="sm:ml-2">{selectedWorkshop}</Badge>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -319,6 +423,7 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Service</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Workshop</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Entry Time</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Exit Time</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Date</th>
@@ -328,9 +433,9 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {loading ? (
-                      <tr><td colSpan={11} className="text-center py-4">Loading...</td></tr>
+                      <tr><td colSpan={12} className="text-center py-4">Loading...</td></tr>
                     ) : payLaterLogs.length === 0 ? (
-                      <tr><td colSpan={11} className="text-center py-4 text-muted-foreground">
+                      <tr><td colSpan={12} className="text-center py-4 text-muted-foreground">
                         {selectedDate && selectedDate.trim() !== '' ? `No pay later tickets for ${new Date(selectedDate).toLocaleDateString()}` : 'No pay later tickets found'}
                       </td></tr>
                     ) : (
@@ -340,7 +445,7 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
                           <td className="p-2">
                             <Badge variant="outline">{log.vehicle_model || 'N/A'}</Badge>
                           </td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.Name || "-"}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.workshop ? String(log.workshop) : (log.Name || "-")}</td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
                             {log.Phone_no ? (
                               <a
@@ -363,16 +468,14 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
                             })()}
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{String(log.workshop ?? '-') }</td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
                             {log.entry_time ? new Date(log.entry_time).toLocaleString() :
                               log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
                           </td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
                             {log.exit_time ? new Date(log.exit_time).toLocaleString() :
                               log.approved_at ? new Date(log.approved_at).toLocaleString() : "-"}
-                          </td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {log.payment_date ? new Date(log.payment_date).toLocaleString() : '-'}
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
                             <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100 text-xs">Pay Later</Badge>
