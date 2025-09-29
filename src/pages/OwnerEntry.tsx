@@ -1451,6 +1451,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
     setSelectedSubscription(null);
     setUsableSubscriptions([]);
     setShowSubscriptionModal(false);
+    setSelectedDateOption('today');
   };
 
   // Function to continue form submission after subscription selection
@@ -2124,6 +2125,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       setUseCustomDateTime(false);
       setCustomEntryDate(new Date().toISOString().split('T')[0]);
       setCustomEntryTime(new Date().toTimeString().slice(0, 5));
+      
 
     } catch (error) {
       console.error('Error checking out entry:', error);

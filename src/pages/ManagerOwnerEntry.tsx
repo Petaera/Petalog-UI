@@ -1626,6 +1626,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
     setSelectedSubscription(null);
     setUsableSubscriptions([]);
     setShowSubscriptionModal(false);
+    setSelectedDateOption('today');
   };
 
   // Function to continue form submission after subscription selection
