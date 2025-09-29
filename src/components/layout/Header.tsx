@@ -27,6 +27,8 @@ export function Header({ locations, selectedLocation, onLocationChange }: Header
   const navigate = useNavigate();
   const [managerLocation, setManagerLocation] = useState<{ name: string; address: string } | null>(null);
   const isManager = user?.role === 'manager';
+  const [payLaterDue, setPayLaterDue] = useState<number>(0);
+  const [isPayLaterLoading, setIsPayLaterLoading] = useState<boolean>(false);
 
   // Remove locations state and fetching logic
   // const [locations, setLocations] = useState<{ id: string; name: string; address: string }[]>([]);
@@ -51,6 +53,63 @@ export function Header({ locations, selectedLocation, onLocationChange }: Header
     };
     fetchLocation();
   }, [isManager, user?.assigned_location]);
+
+  // Fetch global Pay Later due (credit) across accessible locations; hidden on mobile via CSS
+  useEffect(() => {
+    const fetchPayLaterDue = async () => {
+      if (!user) return;
+      try {
+        setIsPayLaterLoading(true);
+        let query = supabase
+          .from('logs-man')
+          .select('Amount, discount, payment_mode, approval_status, location_id');
+
+        // Filter by role and location selection
+        if (user.role === 'owner') {
+          if (selectedLocation && selectedLocation.trim() !== '') {
+            query = query.eq('location_id', selectedLocation);
+          } else {
+            const locationIds = locations.map(l => l.id);
+            if (locationIds.length > 0) {
+              query = query.in('location_id', locationIds);
+            } else {
+              setPayLaterDue(0);
+              setIsPayLaterLoading(false);
+              return;
+            }
+          }
+        } else if ((user.role === 'manager' || user.role === 'worker') && user.assigned_location) {
+          query = query.eq('location_id', user.assigned_location);
+        } else {
+          setPayLaterDue(0);
+          setIsPayLaterLoading(false);
+          return;
+        }
+
+        // Only approved credit tickets
+        query = query.eq('approval_status', 'approved').eq('payment_mode', 'credit');
+
+        const { data, error } = await query;
+        if (error) {
+          setPayLaterDue(0);
+          setIsPayLaterLoading(false);
+          return;
+        }
+
+        const total = (data || []).reduce((sum: number, row: any) => {
+          const amount = Number(row?.Amount) || 0;
+          const discount = Number(row?.discount) || 0;
+          const net = amount - discount;
+          return sum + (net > 0 ? net : 0);
+        }, 0);
+        setPayLaterDue(total);
+      } finally {
+        setIsPayLaterLoading(false);
+      }
+    };
+
+    fetchPayLaterDue();
+  }, [user?.id, user?.role, user?.assigned_location, selectedLocation, locations.map(l => l.id).join(',')]);
 
   const handleLogout = async () => {
     await logout();
@@ -77,13 +136,22 @@ export function Header({ locations, selectedLocation, onLocationChange }: Header
     
     return (
       <header className="h-16 border-b bg-card/50 backdrop-blur-sm">
-        <div className="flex h-full items-center justify-between px-4 lg:px-6">
-          <div className="flex items-center gap-2 lg:gap-4 min-w-0 flex-1">
+      <div className="flex h-full items-center justify-between px-4 lg:px-6">
+        <div className="flex items-center gap-2 lg:gap-4 min-w-0 flex-1">
             <SidebarTrigger className="h-8 w-8 flex-shrink-0" />
             <div className="flex flex-col items-start min-w-0 flex-1 border rounded px-3 lg:px-4 py-2 bg-yellow-50 border-yellow-200">
               <span className="font-medium text-sm text-yellow-800">{message}</span>
               <span className="text-xs text-yellow-600">{subMessage}</span>
             </div>
+          {/* Global Pay Later badge (desktop only) */}
+          <button
+            type="button"
+            onClick={() => navigate('/pay-later')}
+            className="hidden md:inline-flex items-center whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold text-white bg-gradient-to-r from-red-500 via-red-600 to-red-500 shadow-sm animate-pulse hover:animate-none hover:brightness-110 focus:outline-none"
+            title="View Pay Later details"
+          >
+            {isPayLaterLoading ? 'Pay Later: …' : `Pay Later: ₹${payLaterDue.toLocaleString()}`}
+          </button>
           </div>
 
           {/* User Profile */}
@@ -162,6 +230,15 @@ export function Header({ locations, selectedLocation, onLocationChange }: Header
               </DropdownMenuContent>
             </DropdownMenu>
           )}
+          {/* Global Pay Later badge (desktop only) */}
+          <button
+            type="button"
+            onClick={() => navigate('/pay-later')}
+            className="hidden md:inline-flex items-center whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold text-white bg-gradient-to-r from-red-500 via-red-600 to-red-500 shadow-sm animate-pulse hover:animate-none hover:brightness-110 focus:outline-none"
+            title="View Pay Later details"
+          >
+            {isPayLaterLoading ? 'Pay Later: …' : `Pay Later: ₹${payLaterDue.toLocaleString()}`}
+          </button>
         </div>
 
         {/* User Profile */}
