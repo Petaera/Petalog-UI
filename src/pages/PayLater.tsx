@@ -53,16 +53,12 @@ interface PayLaterProps {
 
 export default function PayLater({ selectedLocation: propSelectedLocation }: PayLaterProps) {
   const { user } = useAuth();
-  const { selectedLocation: contextSelectedLocation } = useSelectedLocation();
+  const contextSelectedLocation = useSelectedLocation();
   const selectedLocation = propSelectedLocation || contextSelectedLocation;
   
   const [payLaterLogs, setPayLaterLogs] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(() => {
-    // Set default date to today
-    const today = new Date();
-    return today.toISOString().split('T')[0];
-  });
+  const [selectedDate, setSelectedDate] = useState('');
 
   // Settle Pay Later modal state
   const [settleOpen, setSettleOpen] = useState(false);
@@ -126,8 +122,8 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
         .eq("payment_mode", "credit")
         .order("created_at", { ascending: false });
 
-      // Add date filter if selected
-      if (selectedDate) {
+      // Add date filter only if a date is selected
+      if (selectedDate && selectedDate.trim() !== '') {
         // Create proper date objects with timezone handling
         const selectedDateObj = new Date(selectedDate);
         const payLaterStartOfDay = selectedDateObj.toISOString().split('T')[0] + 'T00:00:00.000Z';
@@ -141,8 +137,8 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
       const { data: payLaterData, error: payLaterError } = await payLaterQuery;
 
       let finalPayLater: any[] = [];
-      // If no results with entry_time filter, try created_at
-      if (selectedDate && payLaterData?.length === 0) {
+      // If no results with entry_time filter, try created_at (only when date filter is applied)
+      if (selectedDate && selectedDate.trim() !== '' && payLaterData?.length === 0) {
         let payLaterFallbackQuery = supabase
           .from("logs-man")
           .select("*, vehicles(number_plate)")
@@ -170,7 +166,7 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
 
       if (payLaterError) {
         console.error('Error fetching pay later logs:', payLaterError);
-        toast.error('Error fetching pay later logs: ' + payLaterError.message);
+        toast({ title: 'Error', description: 'Error fetching pay later logs: ' + payLaterError.message, variant: 'destructive' });
       }
 
       console.log('✅ Pay Later logs fetched:', finalPayLater.length, 'records');
@@ -178,7 +174,7 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
 
     } catch (error) {
       console.error('Error fetching pay later logs:', error);
-      toast.error('Error fetching pay later logs: ' + error.message);
+      toast({ title: 'Error', description: 'Error fetching pay later logs: ' + error.message, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -197,7 +193,7 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
     
     // Validate UPI account selection if UPI is selected
     if (settlePaymentMode === 'upi' && !selectedUpiAccount) {
-      toast.error('Please select a UPI account');
+      toast({ title: 'Error', description: 'Please select a UPI account', variant: 'destructive' });
       return;
     }
     
@@ -223,13 +219,13 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
         .eq('id', settleLog.id);
       if (error) throw error;
       
-      toast.success('Payment settled');
+      toast({ title: 'Success', description: 'Payment settled' });
       setSettleOpen(false);
       setSettleLog(null);
       setSelectedUpiAccount(''); // Reset UPI account selection
       fetchPayLaterLogs();
     } catch (err: any) {
-      toast.error(`Settle failed: ${err?.message || err}`);
+      toast({ title: 'Error', description: `Settle failed: ${err?.message || err}`, variant: 'destructive' });
     }
   };
 
@@ -237,7 +233,7 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
     // Navigate to edit page or open edit modal
     console.log('Edit log:', log);
     // For now, just show a toast
-    toast.info('Edit functionality will be implemented');
+    toast({ title: 'Info', description: 'Edit functionality will be implemented' });
   };
 
   // Fetch logs when component mounts or selectedLocation/selectedDate changes
@@ -299,9 +295,13 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
               <span>Pay Later</span>
               <Badge variant="secondary">{payLaterLogs.length}</Badge>
             </div>
-            {selectedDate && (
+            {selectedDate && selectedDate.trim() !== '' ? (
               <Badge variant="outline" className="sm:ml-2">
                 {new Date(selectedDate).toLocaleDateString()}
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="sm:ml-2">
+                All Records
               </Badge>
             )}
           </CardTitle>
@@ -331,7 +331,7 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
                       <tr><td colSpan={11} className="text-center py-4">Loading...</td></tr>
                     ) : payLaterLogs.length === 0 ? (
                       <tr><td colSpan={11} className="text-center py-4 text-muted-foreground">
-                        {selectedDate ? `No pay later tickets for ${new Date(selectedDate).toLocaleDateString()}` : 'No pay later tickets'}
+                        {selectedDate && selectedDate.trim() !== '' ? `No pay later tickets for ${new Date(selectedDate).toLocaleDateString()}` : 'No pay later tickets found'}
                       </td></tr>
                     ) : (
                       payLaterLogs.map((log: any, idx: number) => (
