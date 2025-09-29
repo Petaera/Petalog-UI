@@ -264,6 +264,7 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
   const [serviceBreakdownView, setServiceBreakdownView] = useState<"list" | "pie">("list");
 
   const [pendingLogs, setPendingLogs] = useState([]);
+  const [showSingleDayCalendar, setShowSingleDayCalendar] = useState(false);
 
   // Debounce search term to avoid too many API calls
   useEffect(() => {
@@ -744,7 +745,17 @@ useEffect(() => {
               </Label>
 
               {/* Date Range Selector */}
-              <Select value={dateRange} onValueChange={setDateRange}>
+              <Select
+                value={dateRange}
+                onValueChange={(value) => {
+                  setDateRange(value);
+                  if (value === "singleday") {
+                    setShowSingleDayCalendar(true);
+                  } else {
+                    setShowSingleDayCalendar(false);
+                  }
+                }}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select date range" />
                 </SelectTrigger>
@@ -760,36 +771,25 @@ useEffect(() => {
 
               {/* Single Day Selection */}
               {dateRange === "singleday" && (
-                <div className="space-y-2 pt-2 p-3 bg-muted/30 rounded-lg border">
+                <div className="space-y-2 pt-2 p-3 bg-muted/30 rounded-lg border min-w-[320px] overflow-visible">
                   <Label className="text-xs font-medium text-muted-foreground">Select a specific date</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" size="sm" className="w-full justify-start">
-                        {customFromDate ? (
-                          <span className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4" />
-                            {format(customFromDate, "PPP")}
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4" />
-                            Pick a Date
-                          </span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
+                  {showSingleDayCalendar && (
+                    <div className="overflow-visible">
                       <CalendarComponent
                         mode="single"
                         selected={customFromDate}
                         onSelect={(date) => {
-                          setCustomFromDate(date);
-                          setCustomToDate(date); // ✅ treat as single-day (from = to)
+                          setCustomFromDate(date as Date | undefined);
+                          setCustomToDate(date as Date | undefined); // treat as single-day (from = to)
+                          if (date) {
+                            setShowSingleDayCalendar(false);
+                          }
                         }}
+                        className="bg-background rounded-md border shadow-sm"
                         initialFocus
                       />
-                    </PopoverContent>
-                  </Popover>
+                    </div>
+                  )}
                   {customFromDate && (
                     <div className="text-xs text-muted-foreground">
                       Showing data for: <span className="font-medium">{format(customFromDate, "PPP")}</span>
