@@ -12,7 +12,8 @@ import {
   Calendar,
   Edit,
   Trash2,
-  Settings
+  Settings,
+  AlertTriangle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +25,7 @@ import { useSelectedLocation } from '@/hooks/useSelectedLocation';
 interface ExpenseCategory {
   id: string;
   name: string;
+  monthlyBudget?: number | null;
 }
 
 interface ExpenseRecord {
@@ -61,15 +63,18 @@ const ExpensesPage: React.FC = () => {
   const [formMonthlyDays, setFormMonthlyDays] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [selectedUpiAccountId, setSelectedUpiAccountId] = useState<string>('');
+  const [formRepeatDaily, setFormRepeatDaily] = useState<boolean>(false);
   // Manage Categories state
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [manageCategories, setManageCategories] = useState(false);
   const [catName, setCatName] = useState('');
   const [catDesc, setCatDesc] = useState('');
+  const [catBudget, setCatBudget] = useState<string>('');
   const [savingCategory, setSavingCategory] = useState(false);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [editingCategoryName, setEditingCategoryName] = useState('');
   const [editingCategoryDesc, setEditingCategoryDesc] = useState('');
+  const [editingCategoryBudget, setEditingCategoryBudget] = useState<string>('');
 
   // UPI accounts for selected branch (used when Payment Mode is UPI)
   const { accounts: upiAccounts } = useUpiAccounts(selectedLocationId);
@@ -145,14 +150,14 @@ const ExpensesPage: React.FC = () => {
         // Categories for selected branch
         try {
           let catQuery = supabase
-            .from('expense_categories')
-            .select('id,name,branch_id')
+        .from('expense_categories')
+        .select('id,name,branch_id,monthly_budget')
             .eq('branch_id', selectedLocationId)
             .order('name');
           const { data: catData, error: catErr } = await catQuery as any;
 
           if (!catErr && catData) {
-            setExpenseCategories((catData as any[]).map(r => ({ id: r.id, name: r.name })));
+        setExpenseCategories((catData as any[]).map(r => ({ id: r.id, name: r.name, monthlyBudget: r.monthly_budget })));
           } else {
             setExpenseCategories([]);
           }
@@ -174,12 +179,12 @@ const ExpensesPage: React.FC = () => {
     try {
       let catQuery = supabase
         .from('expense_categories')
-        .select('id,name,branch_id')
+        .select('id,name,branch_id,monthly_budget')
         .eq('branch_id', selectedLocationId)
         .order('name');
       const { data: catData, error: catErr } = await catQuery as any;
       if (catErr) throw catErr;
-      setExpenseCategories((catData as any[]).map(r => ({ id: r.id, name: r.name })));
+      setExpenseCategories((catData as any[]).map(r => ({ id: r.id, name: r.name, monthlyBudget: r.monthly_budget })));
     } catch (_) {}
   };
 
@@ -220,6 +225,7 @@ const ExpensesPage: React.FC = () => {
     setFormNotes('');
     setFormIsMonthly(false);
     setFormMonthlyDays('');
+    setFormRepeatDaily(false);
   };
 
   const saveExpense = async () => {
@@ -228,29 +234,55 @@ const ExpensesPage: React.FC = () => {
     if (formMode === 'UPI' && !selectedUpiAccountId) { toast({ title: 'Select UPI account', description: 'Choose a UPI account for UPI payments.', variant: 'destructive' }); return; }
     try {
       setSaving(true);
-      const payload: any = {
-        branch_id: selectedLocationId,
-        date: formDate,
-        amount: Number(formAmount),
-        payment_mode: formMode,
-        category_id: formCategory,
-        notes: (() => {
-          if (formMode === 'UPI' && selectedUpiAccountId) {
-            const acc = upiAccounts.find(a => a.id === selectedUpiAccountId);
-            const tag = acc ? `UPI:${acc.account_name}` : '';
-            return `${formNotes ? formNotes + ' | ' : ''}${tag}`.trim() || null;
-          }
-          return formNotes || null;
-        })(),
-        is_monthly: formIsMonthly || false,
-        monthly_allocation_days: formIsMonthly && formMonthlyDays ? Number(formMonthlyDays) : null,
-        created_by: user?.id || null,
+      const buildNotes = () => {
+        if (formMode === 'UPI' && selectedUpiAccountId) {
+          const acc = upiAccounts.find(a => a.id === selectedUpiAccountId);
+          const tag = acc ? `UPI:${acc.account_name}` : '';
+          return `${formNotes ? formNotes + ' | ' : ''}${tag}`.trim() || null;
+        }
+        return formNotes || null;
       };
-      const { error } = await supabase.from('expenses').insert(payload);
-      if (error) throw error;
+
+      if (formRepeatDaily) {
+        const month = selectedMonth || formDate.slice(0, 7);
+        const monthStart = `${month}-01`;
+        const endDate = new Date(new Date(monthStart).getFullYear(), new Date(monthStart).getMonth() + 1, 0);
+        const days = endDate.getDate();
+        const payloads: any[] = [];
+        for (let d = 1; d <= days; d++) {
+          const dayStr = `${month}-${String(d).padStart(2, '0')}`;
+          payloads.push({
+            branch_id: selectedLocationId,
+            date: dayStr,
+            amount: Number(formAmount),
+            payment_mode: formMode,
+            category_id: formCategory,
+            notes: buildNotes(),
+            is_monthly: formIsMonthly || false,
+            monthly_allocation_days: formIsMonthly && formMonthlyDays ? Number(formMonthlyDays) : null,
+            created_by: user?.id || null,
+          });
+        }
+        const { error: batchInsertError } = await supabase.from('expenses').insert(payloads);
+        if (batchInsertError) throw batchInsertError;
+      } else {
+        const payload: any = {
+          branch_id: selectedLocationId,
+          date: formDate,
+          amount: Number(formAmount),
+          payment_mode: formMode,
+          category_id: formCategory,
+          notes: buildNotes(),
+          is_monthly: formIsMonthly || false,
+          monthly_allocation_days: formIsMonthly && formMonthlyDays ? Number(formMonthlyDays) : null,
+          created_by: user?.id || null,
+        };
+        const { error: singleInsertError } = await supabase.from('expenses').insert(payload);
+        if (singleInsertError) throw singleInsertError;
+      }
       toast({ 
         title: 'Expense added', 
-        description: 'Your expense has been recorded successfully.',
+        description: formRepeatDaily ? 'Daily expenses created for the month.' : 'Your expense has been recorded successfully.',
         duration: 3000 // Auto-dismiss after 3 seconds
       });
       resetForm();
@@ -266,6 +298,7 @@ const ExpensesPage: React.FC = () => {
   const resetCategoryForm = () => {
     setCatName('');
     setCatDesc('');
+    setCatBudget('');
   };
 
   const saveCategory = async () => {
@@ -283,6 +316,7 @@ const ExpensesPage: React.FC = () => {
         branch_id: selectedLocationId,
         name: catName.trim(),
         description: catDesc.trim() || null,
+        monthly_budget: catBudget ? Number(catBudget) : null,
       };
       const { error } = await supabase.from('expense_categories').insert(payload);
       if (error) throw error;
@@ -305,12 +339,16 @@ const ExpensesPage: React.FC = () => {
     setEditingCategoryId(cat.id);
     setEditingCategoryName(cat.name);
     setEditingCategoryDesc(cat.description || '');
+    setEditingCategoryBudget(
+      cat.monthlyBudget !== undefined && cat.monthlyBudget !== null ? String(cat.monthlyBudget) : ''
+    );
   };
 
   const cancelEditCategory = () => {
     setEditingCategoryId(null);
     setEditingCategoryName('');
     setEditingCategoryDesc('');
+    setEditingCategoryBudget('');
   };
 
   const updateCategory = async () => {
@@ -321,6 +359,7 @@ const ExpensesPage: React.FC = () => {
       const updates: any = {
         name: editingCategoryName.trim(),
         description: editingCategoryDesc.trim() || null,
+        monthly_budget: editingCategoryBudget ? Number(editingCategoryBudget) : null,
       };
       const { error } = await supabase.from('expense_categories').update(updates).eq('id', editingCategoryId);
       if (error) throw error;
@@ -467,6 +506,17 @@ const ExpensesPage: React.FC = () => {
   const totalExpenses = filteredExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
   const cashExpenses = filteredExpenses.filter(e => e.paymentMode === 'Cash').reduce((sum, e) => sum + (e.amount || 0), 0);
   const upiExpenses = filteredExpenses.filter(e => e.paymentMode === 'UPI').reduce((sum, e) => sum + (e.amount || 0), 0);
+  // Budget checks per category for current filtered set
+  const categorySpendMap = React.useMemo(() => {
+    const map: Record<string, number> = {};
+    filteredExpenses.forEach(e => {
+      map[e.categoryId] = (map[e.categoryId] || 0) + (e.amount || 0);
+    });
+    return map;
+  }, [filteredExpenses]);
+  const overBudgetCategories = expenseCategories
+    .filter(c => typeof c.monthlyBudget === 'number' && c.monthlyBudget! > 0)
+    .filter(c => (categorySpendMap[c.id] || 0) > (c.monthlyBudget || 0));
 
   const formatCurrency = (amount: number) => 
     `₹${(amount || 0).toLocaleString('en-IN')}`;
@@ -529,6 +579,10 @@ const ExpensesPage: React.FC = () => {
                   <label className="form-label">Description (optional)</label>
                   <Input value={catDesc} onChange={(e) => setCatDesc(e.target.value)} className="form-input" placeholder="Notes about this category" />
                 </div>
+                <div className="md:col-span-1">
+                  <label className="form-label">Monthly Budget (₹)</label>
+                  <Input type="number" min="0" step="1" value={catBudget} onChange={(e) => setCatBudget(e.target.value)} className="form-input" placeholder="Optional" />
+                </div>
               </div>
               <div className="mt-4 flex justify-end gap-2">
                 <Button variant="outline" onClick={() => { setShowAddCategory(false); }}>Cancel</Button>
@@ -544,6 +598,7 @@ const ExpensesPage: React.FC = () => {
               <thead className="bg-muted/50">
                 <tr>
                   <th className="text-left p-3 text-foreground">Name</th>
+                  <th className="text-left p-3 text-foreground">Monthly Budget</th>
                   <th className="text-left p-3 text-foreground">Actions</th>
                 </tr>
               </thead>
@@ -558,6 +613,13 @@ const ExpensesPage: React.FC = () => {
                         </div>
                       ) : (
                         <span>{cat.name}</span>
+                      )}
+                    </td>
+                    <td className="p-3 text-foreground">
+                      {editingCategoryId === cat.id ? (
+                        <Input type="number" min="0" step="1" value={editingCategoryBudget} onChange={(e) => setEditingCategoryBudget(e.target.value)} className="form-input" placeholder="₹" />
+                      ) : (
+                        <span>{typeof cat.monthlyBudget === 'number' ? `₹${(cat.monthlyBudget||0).toLocaleString('en-IN')}` : '—'}</span>
                       )}
                     </td>
                     <td className="p-3">
@@ -639,6 +701,10 @@ const ExpensesPage: React.FC = () => {
                 <Input type="number" min="1" max="31" value={formMonthlyDays} onChange={e => setFormMonthlyDays(e.target.value)} className="form-input" />
               </div>
             )}
+            <div className="md:col-span-3 flex items-center gap-2">
+              <input id="repeatDaily" type="checkbox" checked={formRepeatDaily} onChange={e => setFormRepeatDaily(e.target.checked)} />
+              <label htmlFor="repeatDaily" className="text-sm text-foreground">Repeat daily for selected month</label>
+            </div>
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setAddExpenseOpen(false)}>Cancel</AlertDialogCancel>
@@ -658,6 +724,28 @@ const ExpensesPage: React.FC = () => {
 
       {/* Expense Statistics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Budget Warnings */}
+        {overBudgetCategories.length > 0 && (
+          <div className="md:col-span-2 lg:col-span-4">
+            <div className="p-3 rounded-md border border-destructive/40 bg-destructive/10 flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-destructive mt-0.5" />
+              <div className="text-sm">
+                <div className="font-semibold text-destructive">Budget exceeded</div>
+                <div className="text-foreground">
+                  {overBudgetCategories.map((c, idx) => {
+                    const spent = categorySpendMap[c.id] || 0;
+                    const over = spent - (c.monthlyBudget || 0);
+                    return (
+                      <span key={c.id}>
+                        {idx > 0 ? ', ' : ''}{c.name}: over by {formatCurrency(over)}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="metric-card">
           <div className="flex items-center justify-between">
             <div>
@@ -972,23 +1060,38 @@ const ExpensesPage: React.FC = () => {
             const categoryTotal = filteredExpenses
               .filter(e => e.categoryId === category.id)
               .reduce((sum, e) => sum + (e.amount || 0), 0);
-            
-            const percentage = totalExpenses > 0 ? (categoryTotal / totalExpenses) * 100 : 0;
+            const hasBudget = typeof category.monthlyBudget === 'number' && (category.monthlyBudget || 0) > 0;
+            const upper = hasBudget ? (category.monthlyBudget || 0) : Math.max(totalExpenses, 1);
+            const percentage = upper > 0 ? Math.min((categoryTotal / upper) * 100, 100) : 0;
             
             return (
               <div key={category.id} className="p-4 border border-border rounded-lg">
                 <h4 className="font-medium text-foreground">{category.name}</h4>
-                <p className="text-2xl font-bold text-destructive mt-2">
-                  {formatCurrency(categoryTotal)}
-                </p>
+                <div className="mt-1 text-sm text-muted-foreground flex items-center gap-2">
+                  <span className="text-foreground font-semibold">{formatCurrency(categoryTotal)}</span>
+                  {hasBudget && (
+                    <span>
+                      of <span className="text-foreground">{formatCurrency(category.monthlyBudget || 0)}</span>
+                    </span>
+                  )}
+                </div>
                 <div className="w-full bg-muted rounded-full h-2 mt-3">
                   <div 
-                    className="bg-destructive h-2 rounded-full transition-all duration-300"
+                    className={`h-2 rounded-full transition-all duration-300 ${hasBudget ? 'bg-primary' : 'bg-destructive'}`}
                     style={{ width: `${Math.min(percentage, 100)}%` }}
                   />
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {percentage.toFixed(1)}% of total
+                  {hasBudget ? (
+                    <>
+                      {percentage.toFixed(1)}% of budget
+                      {categoryTotal > (category.monthlyBudget || 0) && (
+                        <span className="ml-2 text-destructive font-medium">Over by {formatCurrency(categoryTotal - (category.monthlyBudget || 0))}</span>
+                      )}
+                    </>
+                  ) : (
+                    <>{percentage.toFixed(1)}% of total</>
+                  )}
                 </p>
               </div>
             );
