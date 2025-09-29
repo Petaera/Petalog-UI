@@ -388,13 +388,26 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
     const uniqueBrands = [...new Set(allBrands)] as string[];
     setAvailableVehicleBrands(uniqueBrands);
 
-    // Reset selections when wheel category changes (only if not editing and not applying edit data)
-    if (!isEditing && !isApplyingEditData) {
+    // Do not reset brand/model here; handled by wheelCategory effect
+  }, [vehicleData, isEditing, isApplyingEditData]);
+
+  // Reset brand and model when wheelCategory is set to 'other'
+  useEffect(() => {
+    if (wheelCategory === 'other') {
       setSelectedVehicleBrand('');
       setSelectedModel('');
       setSelectedModelId('');
+    } else {
+      // If switching from 'other' to a valid category, reset model if not available
+      if (selectedModel && availableModels.length > 0) {
+        const found = availableModels.some(m => m.name === selectedModel);
+        if (!found) {
+          setSelectedModel('');
+          setSelectedModelId('');
+        }
+      }
     }
-  }, [vehicleData, isEditing, isApplyingEditData]);
+  }, [wheelCategory, availableModels, selectedModel]);
 
   // Update available models - show all models regardless of category
   useEffect(() => {
@@ -425,12 +438,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
     console.log('All available models:', uniqueModels);
     setAvailableModels(uniqueModels);
 
-    // Reset selections when wheel category changes (only if not editing and not applying edit data)
-    if (!isEditing && !isApplyingEditData) {
-      setSelectedVehicleBrand('');
-      setSelectedModel('');
-      setSelectedModelId('');
-    }
+    // Do not reset brand/model here; handled by wheelCategory effect
   }, [vehicleData, isEditing, isApplyingEditData]);
 
   // Auto-select category and brand when model is selected
@@ -467,52 +475,33 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
 
   // Update available models when vehicle brand changes (filtering by brand)
   useEffect(() => {
-    if (selectedVehicleBrand && vehicleData.length > 0) {
-      console.log('Filtering models for vehicle brand:', selectedVehicleBrand);
-
-      // Use the correct field names from Vehicles_in_india table
-      if (vehicleData[0]?.hasOwnProperty('Vehicle Brands') && vehicleData[0]?.hasOwnProperty('Models')) {
-        const modelsForBrand = vehicleData
-          .filter(item => item['Vehicle Brands'] === selectedVehicleBrand)
-          .filter(item => {
-            if (!wheelCategory) return true;
-            const typeStr = normalizeTypeString((item as any).type);
-            if (wheelCategory === 'other') return typeStr === '3' || typeStr === 'NULL' || typeStr === '';
-            if (wheelCategory === '2') return typeStr === '2';
-            if (wheelCategory === '4') return typeStr === '4' || typeStr === '1';
-            return true;
-          })
-          .map(item => ({
-            name: item['Models'],
-            id: item.id,
-            brand: item['Vehicle Brands']
-          }))
-          .filter(item => item.name); // Filter out empty models
-
-        // Remove duplicates based on model name but keep the id and brand
-        const uniqueModels = modelsForBrand.filter((model, index, arr) =>
-          arr.findIndex(m => m.name === model.name) === index
-        );
-
-        console.log('Models found for brand:', uniqueModels);
-        setAvailableModels(uniqueModels);
-
-        // Only reset model when not in edit mode AND when the current model is not valid for the new brand
-        if (!isEditing) {
-          const currentModelValid = uniqueModels.some(model => model.name === selectedModel);
-          if (!currentModelValid) {
-            setSelectedModel(''); // Reset model when brand changes and current model is not valid
-            setSelectedModelId(''); // Reset model ID when brand changes
-          }
-        }
-      } else {
-        console.warn('Vehicle Brands or Models field not found in data');
-        setAvailableModels([]);
-      }
-    } else if (!selectedVehicleBrand && vehicleData.length > 0 && wheelCategory) {
-      // When no brand is selected, show all models for the wheel category
-      console.log('No brand selected, showing all models for wheel category');
-      const allModelsForWheelCategory = vehicleData
+    if (vehicleData.length === 0) {
+      setAvailableModels([]);
+      return;
+    }
+    let uniqueModels = [];
+    if (selectedVehicleBrand) {
+      // Filter by brand and wheel category
+      uniqueModels = vehicleData
+        .filter(item => item['Vehicle Brands'] === selectedVehicleBrand)
+        .filter(item => {
+          if (!wheelCategory) return true;
+          const typeStr = normalizeTypeString((item as any).type);
+          if (wheelCategory === 'other') return typeStr === '3' || typeStr === 'NULL' || typeStr === '';
+          if (wheelCategory === '2') return typeStr === '2';
+          if (wheelCategory === '4') return typeStr === '4' || typeStr === '1';
+          return true;
+        })
+        .map(item => ({
+          name: item['Models'],
+          id: item.id,
+          brand: item['Vehicle Brands'],
+          type: item.type
+        }))
+        .filter(item => item.name);
+    } else if (wheelCategory) {
+      // Filter by wheel category only
+      uniqueModels = vehicleData
         .filter(item => {
           const typeStr = normalizeTypeString((item as any).type);
           if (wheelCategory === 'other') return typeStr === '3' || typeStr === 'NULL' || typeStr === '';
@@ -523,17 +512,33 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         .map(item => ({
           name: item['Models'],
           id: item.id,
-          brand: item['Vehicle Brands']
+          brand: item['Vehicle Brands'],
+          type: item.type
         }))
-        .filter(item => item.name); // Filter out empty models
-
-      // Remove duplicates based on model name but keep the id and brand
-      const uniqueModels = allModelsForWheelCategory.filter((model, index, arr) =>
-        arr.findIndex(m => m.name === model.name) === index
-      );
-
-      console.log('All models for wheel category (no brand filter):', uniqueModels);
-      setAvailableModels(uniqueModels);
+        .filter(item => item.name);
+    } else {
+      // Show all models
+      uniqueModels = vehicleData
+        .map(item => ({
+          name: item['Models'],
+          id: item.id,
+          brand: item['Vehicle Brands'],
+          type: item.type
+        }))
+        .filter(item => item.name);
+    }
+    // Remove duplicates based on model name
+    uniqueModels = uniqueModels.filter((model, index, arr) =>
+      arr.findIndex(m => m.name === model.name) === index
+    );
+    setAvailableModels(uniqueModels);
+    // Only reset model if not valid for new options and not editing
+    if (!isEditing && selectedModel) {
+      const currentModelValid = uniqueModels.some(model => model.name === selectedModel);
+      if (!currentModelValid) {
+        setSelectedModel('');
+        setSelectedModelId('');
+      }
     }
   }, [selectedVehicleBrand, vehicleData, isEditing, wheelCategory, selectedModel]);
 
