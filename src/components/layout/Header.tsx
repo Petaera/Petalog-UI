@@ -139,7 +139,7 @@ export function Header({ locations, selectedLocation, onLocationChange }: Header
       <div className="flex h-full items-center justify-between px-4 lg:px-6">
         <div className="flex items-center gap-2 lg:gap-4 min-w-0 flex-1">
             <SidebarTrigger className="h-8 w-8 flex-shrink-0" />
-            <div className="flex flex-col items-start min-w-0 flex-1 border rounded px-3 lg:px-4 py-2 bg-yellow-50 border-yellow-200">
+          <div className="flex flex-col items-start min-w-0 flex-1 max-w-[65%] sm:max-w-none border rounded px-3 lg:px-4 py-2 bg-yellow-50 border-yellow-200 overflow-hidden">
               <span className="font-medium text-sm text-yellow-800">{message}</span>
               <span className="text-xs text-yellow-600">{subMessage}</span>
             </div>
@@ -151,6 +151,15 @@ export function Header({ locations, selectedLocation, onLocationChange }: Header
             title="View Pay Later details"
           >
             {isPayLaterLoading ? 'Pay Later: …' : `Pay Later: ₹${payLaterDue.toLocaleString()}`}
+          </button>
+          {/* Global Pay Later badge (mobile only, compact) */}
+          <button
+            type="button"
+            onClick={() => navigate('/pay-later')}
+            className="inline-flex md:hidden ml-2 items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold text-white bg-gradient-to-r from-red-500 via-red-600 to-red-500 shadow-sm focus:outline-none"
+            title="View Pay Later details"
+          >
+            {isPayLaterLoading ? 'Due: …' : `Due: ₹${payLaterDue.toLocaleString()}`}
           </button>
           </div>
 
@@ -198,20 +207,22 @@ export function Header({ locations, selectedLocation, onLocationChange }: Header
         <div className="flex items-center gap-2 lg:gap-4 min-w-0 flex-1">
           <SidebarTrigger className="h-8 w-8 flex-shrink-0" />
           {isManager ? (
-            <div className="flex flex-col items-start min-w-0 flex-1 border rounded px-3 lg:px-4 py-2 bg-white">
+            <div className="flex flex-col items-start min-w-0 flex-1 max-w-[65%] sm:max-w-none border rounded px-3 lg:px-4 py-2 bg-white overflow-hidden">
               <span className="font-medium text-sm truncate">{managerLocation ? managerLocation.name : 'Loading...'}</span>
               <span className="text-xs text-muted-foreground truncate">{managerLocation ? managerLocation.address : ''}</span>
             </div>
           ) : (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="flex items-center gap-2 min-w-0 flex-1 max-w-xs lg:max-w-sm">
+                <Button variant="outline" className="relative flex items-center gap-2 min-w-0 flex-1 max-w-[65%] sm:max-w-xs lg:max-w-sm overflow-hidden pr-6">
                   <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
-                  <div className="flex flex-col items-start min-w-0 flex-1">
+                  <div className="flex flex-col items-start min-w-0 flex-1 w-full pr-2">
                     <span className="font-medium text-sm truncate">{currentLocation ? currentLocation.name : 'Select Location'}</span>
                     <span className="text-xs text-muted-foreground truncate">{currentLocation ? currentLocation.address : ''}</span>
                   </div>
-                  <ChevronDown className="h-4 w-4 ml-auto flex-shrink-0" />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center h-6 w-6 rounded-full bg-white/95 ring-1 ring-gray-200 shadow-sm">
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  </span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-64 lg:w-80">
@@ -238,6 +249,15 @@ export function Header({ locations, selectedLocation, onLocationChange }: Header
             title="View Pay Later details"
           >
             {isPayLaterLoading ? 'Pay Later: …' : `Pay Later: ₹${payLaterDue.toLocaleString()}`}
+          </button>
+          {/* Global Pay Later badge (mobile only, compact) */}
+          <button
+            type="button"
+            onClick={() => navigate('/pay-later')}
+            className="inline-flex md:hidden ml-2 items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold text-white bg-gradient-to-r from-red-500 via-red-600 to-red-500 shadow-sm focus:outline-none"
+            title="View Pay Later details"
+          >
+            {isPayLaterLoading ? 'Due: …' : `Due: ₹${payLaterDue.toLocaleString()}`}
           </button>
         </div>
 
