@@ -1243,7 +1243,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
   };
 
   // Function to process the actual form submission
-  const processFormSubmission = async (customerId: string, vehicleId: string) => {
+  const processFormSubmission = async (customerId: string | null, vehicleId: string) => {
     try {
       console.log('🔄 Processing form submission for customer:', customerId, 'vehicle:', vehicleId);
       
@@ -1303,7 +1303,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
           .from('logs-man')
           .update({
             vehicle_id: vehicleId,
-            customer_id: customerId,
+            customer_id: customerId || null,
             vehicle_number: vehicleNumber,
             location_id: selectedLocation,
             entry_type: entryType,
@@ -1346,18 +1346,20 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         setEditLogId(null);
       } else {
         // Check for package redemption before creating log
-        const redemptionResult = await checkAndProcessPackageRedemption(
-          customerId, 
-          vehicleId, 
-          service, 
-          selectedLocation as string,
-          useSubscriptionForRedemption ? selectedSubscription?.id : undefined
-        );
+        const redemptionResult = customerId
+          ? await checkAndProcessPackageRedemption(
+              customerId, 
+              vehicleId, 
+              service, 
+              selectedLocation as string,
+              useSubscriptionForRedemption ? selectedSubscription?.id : undefined
+            )
+          : { isRedemption: false } as any;
 
         // Insert new log
         const logData: any = {
           vehicle_id: vehicleId,
-          customer_id: customerId,
+          customer_id: customerId || null,
           vehicle_number: vehicleNumber,
           location_id: selectedLocation,
           entry_type: entryType,
@@ -1700,7 +1702,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         }
       };
 
-      const findOrCreateCustomer = async () => {
+      const findOrCreateCustomer = async (): Promise<string | null> => {
         const ownerId = (user as any)?.own_id || null;
         // Prefer phone + owner + location match
         if (phoneNumber && phoneNumber.trim() !== '') {
@@ -1744,14 +1746,18 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
             return existing.id as string;
           }
         }
+        // If neither phone nor name provided, skip customer creation
+        if (!phoneNumber && !customerName) {
+          return null;
+        }
         const insertPayload: any = {
           name: customerName || null,
           phone: phoneNumber || null,
           date_of_birth: dateOfBirth || null,
           location_id: selectedLocation,
           owner_id: (user as any)?.own_id || null,
-          vehicles: [], // Initialize empty vehicles array
-          default_vehicle_id: null, // Initialize as null
+          vehicles: [],
+          default_vehicle_id: null,
         };
         const { data: created, error: custErr } = await supabase
           .from('customers')
@@ -1762,14 +1768,14 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         return created!.id as string;
       };
 
-      const findOrCreateVehicle = async (customerId: string) => {
+      const findOrCreateVehicle = async (customerId: string | '') => {
         const { data: existing } = await supabase
           .from('vehicles')
           .select('id, Brand, model, location_id')
           .eq('number_plate', plate)
           .maybeSingle();
         if (existing && existing.id) {
-          const updates: any = { owner_id: customerId };
+          const updates: any = { owner_id: customerId || null };
           if (selectedVehicleBrand && selectedVehicleBrand !== (existing as any).Brand) updates.Brand = selectedVehicleBrand;
           if (selectedModelId && selectedModelId !== (existing as any).model) updates.model = selectedModelId; // Update with ID
           const locs: string[] = Array.isArray((existing as any).location_id) ? (existing as any).location_id : [];
@@ -1785,7 +1791,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
           id: generateUUID(),
           number_plate: plate,
           type: vehicleType || null,
-          owner_id: customerId,
+          owner_id: customerId || null,
           Brand: selectedVehicleBrand || null,
           model: selectedModelId || null, // Store the ID from Vehicles_in_india
           location_id: selectedLocation ? [selectedLocation] : [],
@@ -1800,30 +1806,33 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       };
 
       const customerId = await findOrCreateCustomer();
-      const vehicleId = await findOrCreateVehicle(customerId);
+      const vehicleId = await findOrCreateVehicle(customerId || '');
       
       // Update customer's vehicles array and default_vehicle_id
-      await updateCustomerVehicles(customerId, vehicleId);
+      if (customerId) {
+        await updateCustomerVehicles(customerId, vehicleId);
+      }
 
       console.log('🎯 About to check subscriptions for customer:', customerId);
       // Check for usable subscriptions and show selection modal if available
-      const subscriptions = await fetchUsableSubscriptions(customerId);
-      console.log('📦 Found subscriptions:', subscriptions);
-      setUsableSubscriptions(subscriptions);
-      
-      if (subscriptions.length > 0) {
-        console.log('✅ Showing subscription modal - pausing form submission');
-        setShowSubscriptionModal(true);
-        // Don't continue with form submission - wait for user selection
-        return;
-      } else {
-        console.log('❌ No subscriptions found, proceeding with normal payment');
-        setUseSubscriptionForRedemption(false);
-        setSelectedSubscription(null);
-        // Continue with form submission immediately
-        await processFormSubmission(customerId, vehicleId);
-        return;
+      if (customerId) {
+        const subscriptions = await fetchUsableSubscriptions(customerId);
+        console.log('📦 Found subscriptions:', subscriptions);
+        setUsableSubscriptions(subscriptions);
+        
+        if (subscriptions.length > 0) {
+          console.log('✅ Showing subscription modal - pausing form submission');
+          setShowSubscriptionModal(true);
+          // Don't continue with form submission - wait for user selection
+          return;
+        }
       }
+      console.log('❌ No subscriptions or no customer, proceeding with normal payment');
+      setUseSubscriptionForRedemption(false);
+      setSelectedSubscription(null);
+      // Continue with form submission immediately
+      await processFormSubmission(customerId, vehicleId);
+      return;
 
       // Reset form only if not in edit mode
       if (!isEditing) {
@@ -1922,7 +1931,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
             .from('customers')
             .select('id, name, phone, date_of_birth, location_id')
             .eq('name', customerName)
-            .eq('owner_id', ownerId)
+            .eq('owner_id', (user as any)?.own_id || null)
             .eq('location_id', selectedLocation as string);
           if (data && data[0]) {
             const existing = data[0];
@@ -1953,14 +1962,14 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         return created!.id as string;
       };
 
-      const findOrCreateVehicle = async (customerId: string) => {
+      const findOrCreateVehicle = async (customerId: string | '') => {
         const { data: existing } = await supabase
           .from('vehicles')
           .select('id, Brand, model, location_id')
           .eq('number_plate', plate)
           .maybeSingle();
         if (existing && existing.id) {
-          const updates: any = { owner_id: customerId };
+          const updates: any = { owner_id: customerId || null };
           if (selectedVehicleBrand && selectedVehicleBrand !== (existing as any).Brand) updates.Brand = selectedVehicleBrand;
           if (selectedModelId && selectedModelId !== (existing as any).model) updates.model = selectedModelId; // Update with ID
           const locs: string[] = Array.isArray((existing as any).location_id) ? (existing as any).location_id : [];
@@ -1976,7 +1985,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
           id: generateUUID(),
           number_plate: plate,
           type: vehicleType || null,
-          owner_id: customerId,
+          owner_id: customerId || null,
           Brand: selectedVehicleBrand || null,
           model: selectedModelId || null, // Store the ID from Vehicles_in_india
           location_id: selectedLocation ? [selectedLocation] : null,
@@ -2027,13 +2036,17 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       };
 
       const customerId = await findOrCreateCustomer();
-      const vehicleId = await findOrCreateVehicle(customerId);
+      const vehicleId = await findOrCreateVehicle(customerId || '');
       
       // Update customer's vehicles array and default_vehicle_id
-      await updateCustomerVehicles(customerId, vehicleId);
+      if (customerId) {
+        await updateCustomerVehicles(customerId, vehicleId);
+      }
 
       // Check for usable subscriptions and show selection modal if available
-      await handleSubscriptionSelection(customerId);
+      if (customerId) {
+        await handleSubscriptionSelection(customerId);
+      }
 
       const imageUrl = null; // Temporarily set to null since scratch marking is disabled
 
@@ -2043,20 +2056,22 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       const finalAmount = priceNum - discountNum;
 
       // Check for package redemption before creating log
-      const redemptionResult = await checkAndProcessPackageRedemption(
-        customerId, 
-        vehicleId, 
-        service, 
-        selectedLocation as string,
-        useSubscriptionForRedemption ? selectedSubscription?.id : undefined
-      );
+      const redemptionResult = customerId
+        ? await checkAndProcessPackageRedemption(
+            customerId, 
+            vehicleId, 
+            service, 
+            selectedLocation as string,
+            useSubscriptionForRedemption ? selectedSubscription?.id : undefined
+          )
+        : { isRedemption: false } as any;
 
       // For checkout, we directly set the ticket as approved and closed
       const currentTime = new Date().toISOString();
 
       const logData: any = {
         vehicle_id: vehicleId,
-        customer_id: customerId,
+        customer_id: customerId || null,
         vehicle_number: vehicleNumber,
         location_id: selectedLocation,
         entry_type: entryType,
