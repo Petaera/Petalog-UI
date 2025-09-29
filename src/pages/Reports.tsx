@@ -11,6 +11,7 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { format } from "date-fns";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 import { useAuth } from '@/contexts/AuthContext';
@@ -83,6 +84,7 @@ interface User {
 
 export default function Reports({ selectedLocation }: { selectedLocation?: string }) {
   const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
   const [dateRange, setDateRange] = useState("today");
   const [vehicleType, setVehicleType] = useState("all");
   const [service, setService] = useState("all");
@@ -264,6 +266,7 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
   const [serviceBreakdownView, setServiceBreakdownView] = useState<"list" | "pie">("list");
 
   const [pendingLogs, setPendingLogs] = useState([]);
+  const [showSingleDayCalendar, setShowSingleDayCalendar] = useState(false);
 
   // Debounce search term to avoid too many API calls
   useEffect(() => {
@@ -744,7 +747,17 @@ useEffect(() => {
               </Label>
 
               {/* Date Range Selector */}
-              <Select value={dateRange} onValueChange={setDateRange}>
+              <Select
+                value={dateRange}
+                onValueChange={(value) => {
+                  setDateRange(value);
+                  if (value === "singleday") {
+                    setShowSingleDayCalendar(true);
+                  } else {
+                    setShowSingleDayCalendar(false);
+                  }
+                }}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select date range" />
                 </SelectTrigger>
@@ -760,36 +773,25 @@ useEffect(() => {
 
               {/* Single Day Selection */}
               {dateRange === "singleday" && (
-                <div className="space-y-2 pt-2 p-3 bg-muted/30 rounded-lg border">
+                <div className="space-y-2 pt-2 p-3 bg-muted/30 rounded-lg border min-w-[320px] overflow-visible">
                   <Label className="text-xs font-medium text-muted-foreground">Select a specific date</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" size="sm" className="w-full justify-start">
-                        {customFromDate ? (
-                          <span className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4" />
-                            {format(customFromDate, "PPP")}
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4" />
-                            Pick a Date
-                          </span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
+                  {showSingleDayCalendar && (
+                    <div className="overflow-visible">
                       <CalendarComponent
                         mode="single"
                         selected={customFromDate}
                         onSelect={(date) => {
-                          setCustomFromDate(date);
-                          setCustomToDate(date); // ✅ treat as single-day (from = to)
+                          setCustomFromDate(date as Date | undefined);
+                          setCustomToDate(date as Date | undefined); // treat as single-day (from = to)
+                          if (date) {
+                            setShowSingleDayCalendar(false);
+                          }
                         }}
+                        className="bg-background rounded-md border shadow-sm"
                         initialFocus
                       />
-                    </PopoverContent>
-                  </Popover>
+                    </div>
+                  )}
                   {customFromDate && (
                     <div className="text-xs text-muted-foreground">
                       Showing data for: <span className="font-medium">{format(customFromDate, "PPP")}</span>
@@ -1728,6 +1730,55 @@ useEffect(() => {
 
               // Default: nothing
               return null;
+            })()}
+          </CardContent>
+        </Card>
+
+        {/* Pay Later Due - Unsettled credit amount in current filtered range */}
+        <Card
+          className="metric-card bg-red-50 border-red-100 shadow-none cursor-pointer hover:bg-red-100/60 transition-colors"
+          onClick={() => navigate('/pay-later')}
+          role="button"
+          aria-label="View Pay Later details"
+        >
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-red-900">Pay Later Due</CardTitle>
+            <Badge variant="outline" className="bg-red-100 text-red-800 border-red-200">
+              {dateRange === "today"
+                ? "Today"
+                : dateRange === "yesterday"
+                  ? "Yesterday"
+                  : dateRange === "singleday"
+                    ? customFromDate
+                      ? format(customFromDate, "PPP")
+                      : "Single Day"
+                    : dateRange === "last7days"
+                      ? "Last 7 Days"
+                      : dateRange === "last30days"
+                        ? "Last 30 Days"
+                        : dateRange === "custom" && customFromDate && customToDate
+                          ? `${format(customFromDate, "dd MMM yyyy")} - ${format(customToDate, "dd MMM yyyy")}`
+                          : "Filtered Period"}
+            </Badge>
+          </CardHeader>
+          <CardContent>
+            {(() => {
+              // Logs are already filtered server-side by the current filters
+              const payLaterLogs = logs.filter((log) => (log.payment_mode || '').toString().trim().toLowerCase() === 'credit');
+              const payLaterCount = payLaterLogs.length;
+              const payLaterDue = payLaterLogs.reduce((sum, log) => {
+                const amount = Number(log.Amount) || 0;
+                const discount = Number(log.discount) || 0;
+                const net = amount - discount;
+                return sum + (net > 0 ? net : 0);
+              }, 0);
+
+              return (
+                <div>
+                  <div className="text-2xl font-bold text-red-900">₹{payLaterDue.toLocaleString()}</div>
+                  <p className="text-xs text-red-800">{payLaterCount} unsettled pay later tickets</p>
+                </div>
+              );
             })()}
           </CardContent>
         </Card>
