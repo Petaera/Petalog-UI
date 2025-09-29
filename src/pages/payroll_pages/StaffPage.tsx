@@ -46,6 +46,7 @@ interface Staff {
   dateOfJoining: string;
   paymentMode: string;
   dp_url: string | null;
+  doc_url: string[] | null;
 }
 
 interface PayrollLine {
@@ -89,6 +90,9 @@ const StaffPage: React.FC = () => {
   const [profileImage, setProfileImage] = useState<File | null>(null);
   const [profileImagePreview, setProfileImagePreview] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [documents, setDocuments] = useState<File[]>([]);
+  const [documentPreviews, setDocumentPreviews] = useState<string[]>([]);
+  const [uploadingDocuments, setUploadingDocuments] = useState(false);
   // Payments state
   const [showPaymentPanel, setShowPaymentPanel] = useState(false);
   const [paymentStaffId, setPaymentStaffId] = useState<string>('');
@@ -197,6 +201,7 @@ const StaffPage: React.FC = () => {
           salaryPaid: paid,
           payableSalary: payable,
           dp_url: s.dp_url,
+        doc_url: s.doc_url || null,
         } as Staff;
       });
 
@@ -464,7 +469,8 @@ const StaffPage: React.FC = () => {
         contact: row.contact || '',
         dateOfJoining: row.date_of_joining || row.dateOfJoining,
         paymentMode: row.default_payment_mode || row.payment_mode || row.paymentMode || '',
-        dp_url: row.dp_url || null
+        dp_url: row.dp_url || null,
+        doc_url: row.doc_url || null
       }));
         mapped = await mergeMonthlyAggregates(mapped) as Staff[];
         setStaff(mapped);
@@ -512,7 +518,8 @@ const StaffPage: React.FC = () => {
         contact: row.contact || '',
         dateOfJoining: row.date_of_joining || row.dateOfJoining,
         paymentMode: row.default_payment_mode || row.payment_mode || row.paymentMode || '',
-        dp_url: row.dp_url || null
+        dp_url: row.dp_url || null,
+        doc_url: row.doc_url || null
       }));
       mapped = await mergeMonthlyAggregates(mapped) as Staff[];
       setStaff(mapped);
@@ -565,6 +572,54 @@ const StaffPage: React.FC = () => {
     setProfileImagePreview(null);
   };
 
+  const handleDocumentUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const newFiles = Array.from(files);
+    const validFiles = newFiles.filter(file => {
+      // Allow common document types
+      const allowedTypes = [
+        'application/pdf',
+        'image/jpeg',
+        'image/jpg', 
+        'image/png',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      ];
+      
+      if (!allowedTypes.includes(file.type)) {
+        toast({ title: 'Invalid file type', description: `${file.name} is not a supported document type`, variant: 'destructive' });
+        return false;
+      }
+      
+      if (file.size > 10 * 1024 * 1024) { // 10MB limit
+        toast({ title: 'File too large', description: `${file.name} is larger than 10MB`, variant: 'destructive' });
+        return false;
+      }
+      
+      return true;
+    });
+
+    if (validFiles.length > 0) {
+      setDocuments(prev => [...prev, ...validFiles]);
+      
+      // Create preview URLs
+      const newPreviews = validFiles.map(file => URL.createObjectURL(file));
+      setDocumentPreviews(prev => [...prev, ...newPreviews]);
+    }
+  };
+
+  const removeDocument = (index: number) => {
+    setDocuments(prev => prev.filter((_, i) => i !== index));
+    if (documentPreviews[index]) {
+      URL.revokeObjectURL(documentPreviews[index]);
+    }
+    setDocumentPreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
   const uploadImageToSupabase = async (file: File, staffId: string): Promise<string | null> => {
     try {
       setUploadingImage(true);
@@ -598,6 +653,44 @@ const StaffPage: React.FC = () => {
       return null;
     } finally {
       setUploadingImage(false);
+    }
+  };
+
+  const uploadDocumentsToSupabase = async (files: File[], staffId: string): Promise<string[]> => {
+    try {
+      setUploadingDocuments(true);
+      const uploadedUrls: string[] = [];
+      
+      for (const file of files) {
+        // Create a unique filename
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${staffId}_doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
+        
+        // Upload to Supabase Storage documents bucket
+        const { data, error } = await supabase.storage
+          .from('documents')
+          .upload(fileName, file, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (error) throw error;
+
+        // Get public URL
+        const { data: publicUrlData } = supabase.storage
+          .from('documents')
+          .getPublicUrl(fileName);
+
+        uploadedUrls.push(publicUrlData.publicUrl);
+      }
+
+      return uploadedUrls;
+    } catch (error) {
+      console.error('Error uploading documents:', error);
+      toast({ title: 'Upload failed', description: 'Failed to upload documents', variant: 'destructive' });
+      return [];
+    } finally {
+      setUploadingDocuments(false);
     }
   };
 
@@ -662,6 +755,25 @@ const StaffPage: React.FC = () => {
           }
         }
       }
+
+      // Upload documents if provided
+      let documentUrls: string[] = [];
+      if (documents.length > 0 && insertedStaffId) {
+        documentUrls = await uploadDocumentsToSupabase(documents, insertedStaffId);
+        
+        // Update staff record with document URLs
+        if (documentUrls.length > 0) {
+          const { error: updateError } = await supabase
+            .rpc('update_staff_doc_url', {
+              staff_id_param: insertedStaffId,
+              doc_url_param: documentUrls
+            });
+            
+          if (updateError) {
+            console.warn('Failed to update document URLs:', updateError);
+          }
+        }
+      }
       
       toast({ title: 'Staff added', description: 'New staff member has been created' });
       setShowAddForm(false);
@@ -674,6 +786,8 @@ const StaffPage: React.FC = () => {
       setSelectedUpiAccountId('');
       setProfileImage(null);
       setProfileImagePreview(null);
+      setDocuments([]);
+      setDocumentPreviews([]);
       await refreshStaff();
     } catch (e: any) {
       console.error(e);
@@ -916,6 +1030,79 @@ const StaffPage: React.FC = () => {
                   </Button>
                   <p className="text-xs text-muted-foreground mt-1">
                     JPG, PNG or GIF. Max size 5MB.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Document Upload */}
+            <div className="grid gap-2 sm:col-span-2">
+              <Label>Documents (Optional)</Label>
+              <div className="space-y-4">
+                {/* Document Preview Grid */}
+                {documentPreviews.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {documentPreviews.map((preview, index) => (
+                      <div key={index} className="relative group">
+                        <div className="aspect-square bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center overflow-hidden">
+                          {preview.startsWith('blob:') ? (
+                            <img
+                              src={preview}
+                              alt={`Document ${index + 1}`}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="text-center p-2">
+                              <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                              <p className="text-xs text-gray-500 truncate">
+                                {documents[index]?.name || `Document ${index + 1}`}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeDocument(index)}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Upload Button */}
+                <div>
+                  <input
+                    type="file"
+                    id="documents"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                    multiple
+                    onChange={handleDocumentUpload}
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => document.getElementById('documents')?.click()}
+                    disabled={uploadingDocuments}
+                    className="w-full"
+                  >
+                    {uploadingDocuments ? (
+                      <div className="flex items-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                        Uploading...
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Upload className="h-4 w-4" />
+                        {documentPreviews.length > 0 ? 'Add More Documents' : 'Upload Documents'}
+                      </div>
+                    )}
+                  </Button>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    PDF, DOC, DOCX, XLS, XLSX, JPG, PNG. Max size 10MB per file.
                   </p>
                 </div>
               </div>
@@ -1240,6 +1427,79 @@ const StaffPage: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* Document Upload */}
+            <div className="grid gap-2 sm:col-span-2">
+              <Label>Documents</Label>
+              <div className="space-y-4">
+                {/* Document Preview Grid */}
+                {documentPreviews.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {documentPreviews.map((preview, index) => (
+                      <div key={index} className="relative group">
+                        <div className="aspect-square bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center overflow-hidden">
+                          {preview.startsWith('blob:') ? (
+                            <img
+                              src={preview}
+                              alt={`Document ${index + 1}`}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="text-center p-2">
+                              <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                              <p className="text-xs text-gray-500 truncate">
+                                {documents[index]?.name || `Document ${index + 1}`}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeDocument(index)}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Upload Button */}
+                <div>
+                  <input
+                    type="file"
+                    id="editDocuments"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                    multiple
+                    onChange={handleDocumentUpload}
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => document.getElementById('editDocuments')?.click()}
+                    disabled={uploadingDocuments}
+                    className="w-full"
+                  >
+                    {uploadingDocuments ? (
+                      <div className="flex items-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                        Uploading...
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Upload className="h-4 w-4" />
+                        {documentPreviews.length > 0 ? 'Add More Documents' : 'Upload Documents'}
+                      </div>
+                    )}
+                  </Button>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    PDF, DOC, DOCX, XLS, XLSX, JPG, PNG. Max size 10MB per file.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
           <div className="mt-4 flex justify-end gap-2">
             <Button variant="outline" onClick={() => { setEditMemberId(null); }}>Cancel</Button>
@@ -1264,6 +1524,26 @@ const StaffPage: React.FC = () => {
                     updates.dp_url = imageUrl;
                   }
                 }
+
+                // Upload new documents if provided
+                if (documents.length > 0) {
+                  const documentUrls = await uploadDocumentsToSupabase(documents, editMemberId);
+                  if (documentUrls.length > 0) {
+                    // Get existing documents and append new ones
+                    const existingDocs = documentPreviews.filter(url => !url.startsWith('blob:'));
+                    const allDocUrls = [...existingDocs, ...documentUrls];
+                    
+                    // Update document URLs separately
+                    const { error: docError } = await supabase.rpc('update_staff_doc_url', {
+                      staff_id_param: editMemberId,
+                      doc_url_param: allDocUrls
+                    });
+                    
+                    if (docError) {
+                      console.warn('Failed to update document URLs:', docError);
+                    }
+                  }
+                }
                 
                 const { error } = await supabase.rpc('update_staff', {
                   staff_id_param: editMemberId,
@@ -1280,6 +1560,8 @@ const StaffPage: React.FC = () => {
                 setEditMemberId(null);
                 setProfileImage(null);
                 setProfileImagePreview(null);
+                setDocuments([]);
+                setDocumentPreviews([]);
                 await refreshStaff();
               } catch (e: any) {
                 toast({ title: 'Failed to update staff', description: e?.message, variant: 'destructive' });
@@ -1409,18 +1691,26 @@ const StaffPage: React.FC = () => {
                 <tr key={member.id} className="border-b border-border hover:bg-muted/30">
                   <td className="p-4">
                     <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center overflow-hidden">
-                        {member.dp_url ? (
-                          <img
-                            src={member.dp_url}
-                            alt={member.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full bg-primary rounded-full flex items-center justify-center">
-                            <span className="text-primary-foreground text-sm font-medium">
-                              {member.name.charAt(0)}
-                            </span>
+                      <div className="relative">
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center overflow-hidden">
+                          {member.dp_url ? (
+                            <img
+                              src={member.dp_url}
+                              alt={member.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full bg-primary rounded-full flex items-center justify-center">
+                              <span className="text-primary-foreground text-sm font-medium">
+                                {member.name.charAt(0)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        {/* Document indicator */}
+                        {member.doc_url && member.doc_url.length > 0 && (
+                          <div className="absolute -bottom-1 -right-1 bg-blue-500 text-white rounded-full p-1">
+                            <Upload className="h-3 w-3" />
                           </div>
                         )}
                       </div>
@@ -1509,6 +1799,9 @@ const StaffPage: React.FC = () => {
                           // Load existing profile image
                           setProfileImage(null);
                           setProfileImagePreview(member.dp_url || null);
+                          // Load existing documents
+                          setDocuments([]);
+                          setDocumentPreviews(member.doc_url || []);
                         }}
                       >
                         <Edit className="h-4 w-4" />
