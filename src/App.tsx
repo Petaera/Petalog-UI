@@ -1,3 +1,5 @@
+
+
 import { Toaster } from "@/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -6,6 +8,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import NetworkErrorBoundary from "@/components/NetworkErrorBoundary";
+import { useState } from "react";
 
 // Auth pages
 import Login from "./pages/Login";
@@ -74,7 +77,9 @@ const queryClient = new QueryClient({
   },
 });
 
-const App = () => (
+const App = () => {
+  const [selectedLocation,setSelectedLocation] = useState("");
+  return (
   <NetworkErrorBoundary>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
@@ -119,7 +124,7 @@ const App = () => (
                 path="/manager-manual-logs" 
                 element={
                   <ProtectedRoute requiredRole="manager">
-                    <Layout>
+                    <Layout selectedLocation={selectedLocation} onLocationChange={setSelectedLocation}>
                       <ManagerManualLogs />
                     </Layout>
                   </ProtectedRoute>
@@ -161,7 +166,7 @@ const App = () => (
                 path="/manager-owner-entry" 
                 element={
                   <ProtectedRoute requiredRole="manager">
-                    <Layout>
+                    <Layout selectedLocation={selectedLocation} onLocationChange={setSelectedLocation}>
                       <ManagerOwnerEntry />
                     </Layout>
                   </ProtectedRoute>
@@ -173,7 +178,7 @@ const App = () => (
                 path="/worker-portal" 
                 element={
                   <ProtectedRoute requiredRole="worker">
-                    <Layout>
+                    <Layout selectedLocation={selectedLocation} onLocationChange={setSelectedLocation}>
                       <WorkerManualEntry />
                     </Layout>
                   </ProtectedRoute>
@@ -183,7 +188,7 @@ const App = () => (
                 path="/worker-manual-entry" 
                 element={
                   <ProtectedRoute requiredRole="worker">
-                    <Layout>
+                    <Layout selectedLocation={selectedLocation} onLocationChange={setSelectedLocation}>
                       <WorkerManualEntry />
                     </Layout>
                   </ProtectedRoute>
@@ -193,7 +198,7 @@ const App = () => (
                  path="/automatic-logs" 
                  element={
                    <ProtectedRoute requiredRole="owner">
-                     <Layout>
+                     <Layout selectedLocation={selectedLocation} onLocationChange={setSelectedLocation}>
                        <AutomaticLogs />
                      </Layout>
                    </ProtectedRoute>
@@ -205,7 +210,7 @@ const App = () => (
                 path="/dashboard" 
                 element={
                   <ProtectedRoute requiredRole="owner">
-                    <Layout>
+                    <Layout selectedLocation={selectedLocation} onLocationChange={setSelectedLocation}>
                       <Dashboard />
                     </Layout>
                   </ProtectedRoute>
@@ -215,7 +220,7 @@ const App = () => (
                 path="/manual-logs" 
                 element={
                   <ProtectedRoute requiredRole="owner">
-                    <Layout>
+                    <Layout selectedLocation={selectedLocation} onLocationChange={setSelectedLocation}>
                       <ManualLogs />
                     </Layout>
                   </ProtectedRoute>
@@ -225,7 +230,7 @@ const App = () => (
                 path="/pay-later" 
                 element={
                   <ProtectedRoute requiredRole="owner">
-                    <Layout>
+                    <Layout selectedLocation={selectedLocation} onLocationChange={setSelectedLocation}>
                       <PayLater />
                     </Layout>
                   </ProtectedRoute>
@@ -235,7 +240,7 @@ const App = () => (
                 path="/comparison" 
                 element={
                   <ProtectedRoute requiredRole="owner">
-                    <Layout>
+                    <Layout selectedLocation={selectedLocation} onLocationChange={setSelectedLocation}>
                       <Comparison />
                     </Layout>
                   </ProtectedRoute>
@@ -245,7 +250,7 @@ const App = () => (
                 path="/reports" 
                 element={
                   <ProtectedRoute requiredRole="owner">
-                    <Layout>
+                    <Layout selectedLocation={selectedLocation} onLocationChange={setSelectedLocation}>
                       <Reports />
                     </Layout>
                   </ProtectedRoute>
@@ -255,7 +260,7 @@ const App = () => (
                 path="/payment-details" 
                 element={
                   <ProtectedRoute requiredRole="owner">
-                    <Layout>
+                    <Layout selectedLocation={selectedLocation} onLocationChange={setSelectedLocation}>
                       <PaymentDetails />
                     </Layout>
                   </ProtectedRoute>
@@ -265,7 +270,7 @@ const App = () => (
                 path="/manager-access" 
                 element={
                   <ProtectedRoute requiredRole="owner">
-                    <Layout>
+                    <Layout selectedLocation={selectedLocation} onLocationChange={setSelectedLocation}>
                       <ManagerAccess />
                     </Layout>
                   </ProtectedRoute>
@@ -275,8 +280,8 @@ const App = () => (
                 path="/price-settings" 
                 element={
                   <ProtectedRoute requiredRole="owner">
-                    <Layout>
-                      <PriceSettings />
+                    <Layout selectedLocation={selectedLocation} onLocationChange={setSelectedLocation}>
+                      <PriceSettings locationId={selectedLocation}/>
                     </Layout>
                   </ProtectedRoute>
                 }
@@ -285,7 +290,7 @@ const App = () => (
                 path="/vehicle-history" 
                 element={
                   <ProtectedRoute requiredRole="owner">
-                    <Layout>
+                    <Layout selectedLocation={selectedLocation} onLocationChange={setSelectedLocation}>
                       <VehicleHistory />
                     </Layout>
                   </ProtectedRoute>
@@ -295,7 +300,7 @@ const App = () => (
                  path="/owner-entry" 
                  element={
                    <ProtectedRoute requiredRole="owner">
-                     <Layout>
+                     <Layout selectedLocation={selectedLocation} onLocationChange={setSelectedLocation}>
                        <OwnerEntry />
                      </Layout>
                    </ProtectedRoute>
@@ -342,7 +347,7 @@ const App = () => (
                  path="/profileSettings" 
                  element={
                    <ProtectedRoute requiredRole="owner">
-                     <Layout>
+                     <Layout selectedLocation={selectedLocation} onLocationChange={setSelectedLocation}>
                        <ProfileSettings />
                      </Layout>
                    </ProtectedRoute>
@@ -416,6 +421,6 @@ const App = () => (
       </TooltipProvider>
     </QueryClientProvider>
   </NetworkErrorBoundary>
-);
+)};
 
 export default App;

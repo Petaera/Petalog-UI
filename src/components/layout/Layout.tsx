@@ -15,12 +15,13 @@ import { getLocationFilterDescription } from "@/lib/utils";
 
 interface LayoutProps {
   children: React.ReactNode;
+  selectedLocation: string;
+  onLocationChange: (locationId: string) => void;
 }
 
-export function Layout({ children }: LayoutProps) {
+export function Layout({ children, selectedLocation, onLocationChange }: LayoutProps) {
   const { user } = useAuth();
   const [locations, setLocations] = useState<{ id: string; name: string; address: string }[]>([]);
-  const [selectedLocation, setSelectedLocation] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
   const hasFetchedLocations = useRef(false);
 
@@ -47,7 +48,7 @@ export function Layout({ children }: LayoutProps) {
 
   // Handle location change
   const handleLocationChange = (locationId: string) => {
-    setSelectedLocation(locationId);
+    onLocationChange(locationId);
     if (user?.id) {
       storeLocation(user.id, locationId);
     }
@@ -159,17 +160,17 @@ export function Layout({ children }: LayoutProps) {
             const storedLocation = getStoredLocation(user.id);
             
             if (storedLocation && data.some(loc => loc.id === storedLocation)) {
-              setSelectedLocation(storedLocation);
+              onLocationChange(storedLocation);
             } else {
-              setSelectedLocation(data[0].id);
+              onLocationChange(data[0].id);
               storeLocation(user.id, data[0].id);
             }
           } else {
-            setSelectedLocation(data[0].id);
+            onLocationChange(data[0].id);
           }
         } else {
           setLocations([]);
-          setSelectedLocation("");
+          onLocationChange("");
         }
       } catch (error) {
         console.error('Layout: Error in fetchLocations:', error);
@@ -217,3 +218,4 @@ export function Layout({ children }: LayoutProps) {
     </SidebarProvider>
   );
 }
+

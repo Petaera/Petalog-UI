@@ -1,6 +1,6 @@
+
 import { useState, useEffect } from "react";
-import { Layout } from "@/components/layout/Layout";
-import { ArrowLeft, Settings, Plus, Edit, IndianRupee, Loader2, RefreshCw, AlertCircle } from "lucide-react";
+import { ArrowLeft, Settings, Plus, Edit, IndianRupee, Loader2, RefreshCw, AlertCircle, Upload, Download, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,8 +12,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
+import * as XLSX from 'xlsx';
+
 
 // Types for our data - matching actual Supabase structure
 interface ServicePrice {
@@ -24,15 +34,26 @@ interface ServicePrice {
   created_at?: string;
 }
 
+interface ImportRow {
+  SERVICE: string;
+  VEHICLE: string;
+  PRICE: number;
+  type?: string;
+}
 
-
-export default function PriceSettings() {
+export default function PriceSettings({ locationId }: { locationId: string }) {
   // State for data
   const [servicePrices, setServicePrices] = useState<ServicePrice[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [usingFallbackData, setUsingFallbackData] = useState(false);
+  
+  // Import state
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importPreview, setImportPreview] = useState<ImportRow[]>([]);
 
   // Matrix data
   const [serviceList, setServiceList] = useState<string[]>([]);
@@ -40,6 +61,9 @@ export default function PriceSettings() {
   const [serviceMatrix, setServiceMatrix] = useState<Record<string, Record<string, number>>>({});
   const [originalVehicleNames, setOriginalVehicleNames] = useState<Record<string, string>>({});
   const [originalServiceNames, setOriginalServiceNames] = useState<Record<string, string>>({});
+
+  // Use locationId prop for current location
+  const currentLocationId = locationId;
 
   // Helper: Normalize service name for deduplication
   const normalizeService = (service: string) => {
@@ -88,8 +112,6 @@ export default function PriceSettings() {
     console.log('🔄 Processing service prices to matrix...');
     console.log('📊 Raw data count:', rawData.length);
     
-
-    
     // Deduplicate: for each (normalized service, normalized vehicle) pair, keep only the latest by created_at or the first found
     const pairMap = new Map<string, ServicePrice>();
     const originalNames: Record<string, string> = {};
@@ -99,8 +121,6 @@ export default function PriceSettings() {
       const normService = normalizeService(item.SERVICE);
       const normVehicle = normalizeVehicle(item.VEHICLE);
       const key = `${normService}|||${normVehicle}`;
-      
-
       
       // Store the original names for display
       originalNames[normVehicle] = item.VEHICLE;
@@ -148,9 +168,134 @@ export default function PriceSettings() {
     setOriginalVehicleNames(originalNames);
     setOriginalServiceNames(originalServiceNames);
     
-
-    
     console.log('✅ Matrix processing completed');
+  };
+
+  // Generate sample Excel file
+  const downloadSampleFile = () => {
+    const sampleData = [
+      { SERVICE: 'Basic Wash', VEHICLE: 'Car', PRICE: 200, type: 'standard' },
+      { SERVICE: 'Basic Wash', VEHICLE: 'Bike', PRICE: 100, type: 'standard' },
+      { SERVICE: 'Premium Wash', VEHICLE: 'Car', PRICE: 500, type: 'premium' },
+      { SERVICE: 'Premium Wash', VEHICLE: 'Bike', PRICE: 300, type: 'premium' },
+      { SERVICE: 'Full Service', VEHICLE: 'SUV', PRICE: 800, type: 'premium' },
+      { SERVICE: 'Under Body Coating', VEHICLE: 'Car', PRICE: 1500, type: 'special' },
+      { SERVICE: 'Silencer Coating', VEHICLE: 'Bike', PRICE: 800, type: 'special' }
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(sampleData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Service Prices");
+
+    // Add column widths
+    const colWidths = [
+      { wch: 20 }, // SERVICE
+      { wch: 15 }, // VEHICLE
+      { wch: 10 }, // PRICE
+      { wch: 12 }  // type
+    ];
+    worksheet['!cols'] = colWidths;
+
+    XLSX.writeFile(workbook, "service_prices_sample.xlsx");
+    toast.success("Sample file downloaded successfully!");
+  };
+
+  // Handle file selection
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setImportFile(file);
+      previewFile(file);
+    }
+  };
+
+  // Preview Excel file content
+  const previewFile = async (file: File) => {
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet) as ImportRow[];
+
+      // Validate required columns
+      if (jsonData.length === 0) {
+        toast.error("Excel file is empty");
+        return;
+      }
+
+      const firstRow = jsonData[0];
+      const requiredColumns = ['SERVICE', 'VEHICLE', 'PRICE'];
+      const missingColumns = requiredColumns.filter(col => !(col in firstRow));
+
+      if (missingColumns.length > 0) {
+        toast.error(`Missing required columns: ${missingColumns.join(', ')}`);
+        return;
+      }
+
+      // Validate data types and clean up
+      const validData: ImportRow[] = [];
+      jsonData.forEach((row, index) => {
+        if (row.SERVICE && row.VEHICLE && row.PRICE) {
+          const price = typeof row.PRICE === 'number' ? row.PRICE : parseFloat(String(row.PRICE));
+          if (!isNaN(price)) {
+            validData.push({
+              SERVICE: String(row.SERVICE).trim(),
+              VEHICLE: String(row.VEHICLE).trim(),
+              PRICE: price,
+              type: row.type ? String(row.type).trim() : undefined
+            });
+          }
+        }
+      });
+
+      setImportPreview(validData);
+      toast.success(`Found ${validData.length} valid rows for import`);
+    } catch (error) {
+      console.error('Error previewing file:', error);
+      toast.error("Error reading Excel file");
+    }
+  };
+
+  // Import data to database
+  const handleImport = async () => {
+    if (!importPreview.length || !currentLocationId) {
+      toast.error("No data to import or location not selected");
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const dataToInsert = importPreview.map(row => ({
+        SERVICE: row.SERVICE,
+        VEHICLE: row.VEHICLE,
+        PRICE: row.PRICE,
+        type: row.type || null,
+        locationid: currentLocationId,
+        created_at: new Date().toISOString()
+      }));
+
+      const { data, error } = await supabase
+        .from('Service_prices')
+        .insert(dataToInsert);
+
+      if (error) {
+        console.error('Import error:', error);
+        toast.error(`Import failed: ${error.message}`);
+        return;
+      }
+
+      toast.success(`Successfully imported ${dataToInsert.length} records`);
+      setImportDialogOpen(false);
+      setImportFile(null);
+      setImportPreview([]);
+      await refreshData(); // Refresh the data to show new imports
+    } catch (error) {
+      console.error('Import error:', error);
+      toast.error("Import failed");
+    } finally {
+      setImporting(false);
+    }
   };
 
   // Fetch all data from Supabase
@@ -219,7 +364,7 @@ export default function PriceSettings() {
   // Initial data fetch
   useEffect(() => {
     fetchAllData();
-  }, []);
+  }, [currentLocationId]);
 
   // Calculate statistics
   const totalServices = serviceList.length;
@@ -251,12 +396,131 @@ export default function PriceSettings() {
             )}
             Refresh
           </Button>
+          
+          <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="secondary" size="sm">
+                <Upload className="h-4 w-4 mr-2" />
+                Import Excel
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <FileSpreadsheet className="h-5 w-5" />
+                  Import Service Prices from Excel
+                </DialogTitle>
+              </DialogHeader>
+              
+              <div className="space-y-6">
+                {/* Download Sample */}
+                <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg border">
+                  <div>
+                    <p className="font-medium text-blue-900">Need a template?</p>
+                    <p className="text-sm text-blue-700">Download our sample Excel file with the correct format</p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={downloadSampleFile}>
+                    <Download className="h-4 w-4 mr-2" />
+                    Download Sample
+                  </Button>
+                </div>
+
+                {/* File Upload */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Select Excel File</label>
+                  <Input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={handleFileSelect}
+                    className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Required columns: SERVICE, VEHICLE, PRICE. Optional: type
+                  </p>
+                </div>
+
+                {/* Preview */}
+                {importPreview.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-medium">Preview ({importPreview.length} rows)</h3>
+                      <Badge variant="secondary">
+                        Ready to import
+                      </Badge>
+                    </div>
+                    
+                    <div className="border rounded-lg max-h-60 overflow-y-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Service</TableHead>
+                            <TableHead>Vehicle</TableHead>
+                            <TableHead>Price</TableHead>
+                            <TableHead>Type</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {importPreview.slice(0, 10).map((row, index) => (
+                            <TableRow key={index}>
+                              <TableCell>{row.SERVICE}</TableCell>
+                              <TableCell>{row.VEHICLE}</TableCell>
+                              <TableCell>₹{row.PRICE}</TableCell>
+                              <TableCell>{row.type || '-'}</TableCell>
+                            </TableRow>
+                          ))}
+                          {importPreview.length > 10 && (
+                            <TableRow>
+                              <TableCell colSpan={4} className="text-center text-muted-foreground">
+                                ... and {importPreview.length - 10} more rows
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {/* Import Button */}
+                    <div className="flex justify-end gap-2">
+                      <Button 
+                        variant="outline" 
+                        onClick={() => {
+                          setImportDialogOpen(false);
+                          setImportFile(null);
+                          setImportPreview([]);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button 
+                        onClick={handleImport} 
+                        disabled={importing || !currentLocationId}
+                      >
+                        {importing ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Importing...
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="h-4 w-4 mr-2" />
+                            Import {importPreview.length} Records
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+
           <Button variant="default" size="sm">
             <Plus className="h-4 w-4 mr-2" />
             Add Service
           </Button>
         </div>
       </div>
+      
       {/* Error Display */}
       {error && (
         <Card className="border-destructive">
@@ -268,6 +532,7 @@ export default function PriceSettings() {
           </CardContent>
         </Card>
       )}
+      
       {/* Fallback Data Notice */}
       {usingFallbackData && (
         <Card className="border-yellow-500 bg-yellow-50">
@@ -279,6 +544,7 @@ export default function PriceSettings() {
           </CardContent>
         </Card>
       )}
+      
       {/* Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
@@ -317,8 +583,8 @@ export default function PriceSettings() {
             </p>
           </CardContent>
         </Card>
-
       </div>
+      
       {/* Service Pricing Matrix Table */}
       <Card>
         <CardHeader>
