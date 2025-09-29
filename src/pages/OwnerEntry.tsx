@@ -921,7 +921,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       // setWheelCategory('');
       // setVehicleType('');
       // setService([]);
-      setAmount('500');
+      setAmount('0');
       setDiscount('');
       setRemarks('');
       setWorkshop('');
@@ -964,7 +964,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
             setSelectedVehicleBrand('');
             setSelectedModel('');
             setSelectedModelId('');
-            setAmount('500');
+            setAmount('');
             setDiscount('');
             setRemarks('');
             setWorkshop('');
@@ -1432,7 +1432,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
     setVehicleNumber('');
     setVehicleType('');
     setService([]); // Reset service to empty array
-    setAmount('500');
+    setAmount('0');
     setDiscount('');
     setRemarks('');
     // Reset payment mode and UPI account selection
@@ -1830,7 +1830,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         setVehicleNumber('');
         setVehicleType('');
         setService([]); // Reset service to empty array
-        setAmount('500');
+        setAmount('0');
         setDiscount('');
         setRemarks('');
         // Reset payment mode and UPI account selection
@@ -2112,7 +2112,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       setVehicleNumber('');
       setVehicleType('');
       setService([]); // Reset service to empty array
-      setAmount('500');
+      setAmount('0');
       setDiscount('');
       setRemarks('');
       // Reset payment mode and UPI account selection
