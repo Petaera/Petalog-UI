@@ -1705,7 +1705,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       const findOrCreateCustomer = async (): Promise<string | null> => {
         const ownerId = (user as any)?.own_id || null;
         // Prefer phone + owner + location match
-        if (phoneNumber && phoneNumber.trim() !== '') {
+        if (phoneNumber !== '') {
           const { data } = await supabase
             .from('customers')
             .select('id, name, phone, date_of_birth, location_id')
@@ -1906,7 +1906,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
 
       const findOrCreateCustomer = async () => {
         const ownerId = (user as any)?.own_id || null;
-        if (phoneNumber && phoneNumber.trim() !== '') {
+        if (phoneNumber !== '') {
           const { data } = await supabase
             .from('customers')
             .select('id, name, phone, date_of_birth, location_id')

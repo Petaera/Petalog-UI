@@ -1728,7 +1728,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
 
       const findOrCreateCustomer = async () => {
         const ownerId = (user as any)?.own_id || null;
-        if (phoneNumber && phoneNumber.trim() !== '') {
+        if (phoneNumber !== '') {
           const { data } = await supabase
             .from('customers')
             .select('id, name, phone, date_of_birth, location_id')
