@@ -46,6 +46,25 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
   const [settlePaymentMode, setSettlePaymentMode] = useState<'cash' | 'upi'>('cash');
 
 
+  // Edit modal state
+  const [editOpen, setEditOpen] = useState(false);
+  const [editLog, setEditLog] = useState<any | null>(null);
+  const [editVehicleNumber, setEditVehicleNumber] = useState<string>('');
+  const [editVehicleType, setEditVehicleType] = useState<string>('');
+  const [editServices, setEditServices] = useState<string>('');
+  const [editAmount, setEditAmount] = useState<string>('');
+  const [editDiscount, setEditDiscount] = useState<string>('');
+  const [editRemarks, setEditRemarks] = useState<string>('');
+  const [editPaymentMode, setEditPaymentMode] = useState<'cash' | 'upi' | 'credit'>('cash');
+  const [editCustomerName, setEditCustomerName] = useState<string>('');
+  const [editPhoneNumber, setEditPhoneNumber] = useState<string>('');
+  const [editVehicleBrand, setEditVehicleBrand] = useState<string>('');
+  const [editVehicleModel, setEditVehicleModel] = useState<string>('');
+  const [editWorkshop, setEditWorkshop] = useState<string>('');
+  const [editWheelType, setEditWheelType] = useState<string>('');
+  const [editSelectedUpiAccount, setEditSelectedUpiAccount] = useState<string>('');
+
+
 
   // State for tracking deleted logs
   const [isDeleting, setIsDeleting] = useState<Set<string>>(new Set());
@@ -84,7 +103,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
     setCheckoutServices(log?.service ? String(log.service).split(',').map((s:string)=>s.trim()).filter(Boolean) : []);
     
     // Calculate original amount by adding discount back to the current amount
-    const currentAmount = log?.Amount+log?.discount != null ? Number(log.Amount+log?.discount) : 0;
+    const currentAmount = (log?.Amount != null ? Number(log.Amount) : 0) + (log?.discount != null ? Number(log.discount) : 0);
     const discountAmount = log?.discount != null ? Number(log.discount) : 0;
     const originalAmount = currentAmount - discountAmount;
     setCheckoutAmount(currentAmount > 0 ? String(currentAmount) : '');
@@ -106,8 +125,9 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
     }
     
     try {
-      const discountNum = checkoutDiscount === '' ? null : Number(checkoutDiscount) || 0;
-      const amountNum = checkoutAmount === '' ? null : Number(checkoutAmount) || 0;
+      const discountNumRaw = checkoutDiscount === '' ? 0 : Number(checkoutDiscount) || 0;
+      const amountNumRaw = checkoutAmount === '' ? 0 : Number(checkoutAmount) || 0;
+      const finalAmt = Math.max(amountNumRaw - discountNumRaw, 0);
       
       // Find the selected UPI account details
       const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
@@ -117,9 +137,9 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
         approved_at: new Date().toISOString(),
         exit_time: new Date().toISOString(),
         payment_mode: checkoutPaymentMode,
-        discount: discountNum,
+        discount: checkoutDiscount === '' ? null : discountNumRaw,
         service: checkoutServices.join(','),
-        Amount: amountNum,
+        Amount: finalAmt,
         remarks: checkoutRemarks || null,
       };
       
@@ -207,33 +227,23 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
   };
 
   const handleEdit = (log: any) => {
-    // Navigate to owner entry with log data for editing
-    const logData = {
-      id: log.id,
-      vehicleNumber: log.vehicle_number || '',
-      vehicleType: log.vehicle_type || '',
-      service: log.service ? log.service.split(',') : [],
-      amount: log.Amount?.toString() || '',
-      entryType: log.entry_type || 'normal',
-      discount: log.discount?.toString() || '',
-      remarks: log.remarks || '',
-      paymentMode: log.payment_mode || 'cash',
-      customerName: log.Name || '',
-      phoneNumber: log.Phone_no || '',
-      dateOfBirth: log['D.O.B'] || '',
-      customerLocation: log.Location || '',
-      selectedVehicleBrand: log.vehicle_brand || '',
-      selectedModel: log.vehicle_model || '',
-      selectedModelId: log.Brand_id || '',
-      workshop: log.workshop || '',
-      wheel_type: log.wheel_type || '',
-      entry_time: log.entry_time || log.created_at || null,
-      isEditing: true
-    };
-    
-    // Store the log data in sessionStorage for the entry form to access
-    sessionStorage.setItem('editLogData', JSON.stringify(logData));
-    navigate('/owner-entry');
+    setEditLog(log);
+    setEditVehicleNumber(log.vehicle_number || '');
+    setEditVehicleType(log.vehicle_type || '');
+    setEditServices(log.service || '');
+    const originalAmount = (log?.Amount != null ? Number(log.Amount) : 0) + (log?.discount != null ? Number(log.discount) : 0);
+    setEditAmount(originalAmount > 0 ? String(originalAmount) : '');
+    setEditDiscount(log.discount != null ? String(log.discount) : '');
+    setEditRemarks(log.remarks || '');
+    setEditPaymentMode((log.payment_mode as any) || 'cash');
+    setEditCustomerName(log.Name || '');
+    setEditPhoneNumber(log.Phone_no || '');
+    setEditVehicleBrand(log.vehicle_brand || '');
+    setEditVehicleModel(log.vehicle_model || '');
+    setEditWorkshop(log.workshop || '');
+    setEditWheelType(log.wheel_type || '');
+    setEditSelectedUpiAccount('');
+    setEditOpen(true);
   };
 
 
@@ -873,12 +883,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                             )}
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 ">
-                            {(() => {
-                              const currentAmount = log.Amount || 0;
-                              const discountAmount = log.discount || 0;
-                              const originalAmount = currentAmount - discountAmount;
-                              return originalAmount > 0 ? formatCurrency(originalAmount) : "-";
-                            })()}
+                            {log.Amount ? formatCurrency(log.Amount) : "-"}
                             {/* Payment Method & UPI Account */}
                             <div className="mt-1 text-xs text-muted-foreground font-normal">
                               Payment: {log.payment_mode ? log.payment_mode.toUpperCase() : "-"}
@@ -964,7 +969,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
         </CardContent>
       </Card>
 
-        {/* Checkout Dialog */}
+      {/* Checkout Dialog */}
         <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
           <DialogContent className="max-h-[90vh] overflow-hidden flex flex-col">
             <DialogHeader>
@@ -1107,7 +1112,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
           </DialogContent>
         </Dialog>
 
-        {/* Settle Pay Later Dialog */}
+      {/* Settle Pay Later Dialog */}
         <Dialog open={settleOpen} onOpenChange={setSettleOpen}>
           <DialogContent className="max-h-[90vh] overflow-hidden flex flex-col">
             <DialogHeader>
@@ -1195,6 +1200,168 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+      {/* Edit Log Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Edit Log</DialogTitle>
+            <DialogDescription>Update the ticket details and save.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 overflow-y-auto flex-1 pr-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Vehicle No</Label>
+                <Input value={editVehicleNumber} onChange={(e) => setEditVehicleNumber(e.target.value)} />
+              </div>
+              <div>
+                <Label>Vehicle Type</Label>
+                <Input value={editVehicleType} onChange={(e) => setEditVehicleType(e.target.value)} />
+              </div>
+              <div>
+                <Label>Customer Name</Label>
+                <Input value={editCustomerName} onChange={(e) => setEditCustomerName(e.target.value)} />
+              </div>
+              <div>
+                <Label>Phone</Label>
+                <Input value={editPhoneNumber} onChange={(e) => setEditPhoneNumber(e.target.value)} />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <Label>Amount</Label>
+                <Input value={editAmount} onChange={(e) => setEditAmount(e.target.value)} />
+              </div>
+              <div>
+                <Label>Discount</Label>
+                <Input type="number" value={editDiscount} onChange={(e) => setEditDiscount(e.target.value)} />
+              </div>
+              <div>
+                <Label>Final</Label>
+                <div className="mt-1 text-sm font-semibold">
+                  {(() => {
+                    const amt = Number(editAmount || 0);
+                    const disc = editDiscount === '' ? 0 : Number(editDiscount) || 0;
+                    const finalAmt = Math.max(amt - disc, 0);
+                    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(finalAmt);
+                  })()}
+                </div>
+              </div>
+            </div>
+            <div>
+              <Label>Service</Label>
+              <Input placeholder="Comma separated" value={editServices} onChange={(e) => setEditServices(e.target.value)} />
+            </div>
+            <div>
+              <Label>Payment Mode</Label>
+              <Select value={editPaymentMode} onValueChange={(v: any) => setEditPaymentMode(v)}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select payment mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="upi">UPI</SelectItem>
+                  <SelectItem value="credit">Pay Later</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {editPaymentMode === 'upi' && (
+              <div>
+                <Label>Select UPI Account</Label>
+                <Select value={editSelectedUpiAccount} onValueChange={setEditSelectedUpiAccount}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder={upiAccountsLoading ? "Loading accounts..." : "Select UPI account"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {upiAccounts.map((account) => (
+                      <SelectItem key={account.id} value={account.id}>
+                        {account.account_name} - {account.upi_id} ({account.location_name || 'N/A'})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Vehicle Brand</Label>
+                <Input value={editVehicleBrand} onChange={(e) => setEditVehicleBrand(e.target.value)} />
+              </div>
+              <div>
+                <Label>Vehicle Model</Label>
+                <Input value={editVehicleModel} onChange={(e) => setEditVehicleModel(e.target.value)} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Workshop</Label>
+                <Input value={editWorkshop} onChange={(e) => setEditWorkshop(e.target.value)} />
+              </div>
+              <div>
+                <Label>Wheel Type</Label>
+                <Input value={editWheelType} onChange={(e) => setEditWheelType(e.target.value)} />
+              </div>
+            </div>
+            <div>
+              <Label>Remarks</Label>
+              <Textarea value={editRemarks} onChange={(e) => setEditRemarks(e.target.value)} rows={3} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button onClick={async () => {
+              if (!editLog) return;
+              try {
+                const amountNum = editAmount === '' ? 0 : Number(editAmount) || 0;
+                const discountNum = editDiscount === '' ? 0 : Number(editDiscount) || 0;
+                const finalAmt = Math.max(amountNum - discountNum, 0);
+
+                const updateData: any = {
+                  vehicle_number: editVehicleNumber || null,
+                  vehicle_type: editVehicleType || null,
+                  service: editServices ? editServices.split(',').map(s=>s.trim()).filter(Boolean).join(',') : null,
+                  Amount: finalAmt,
+                  discount: editDiscount === '' ? null : discountNum,
+                  remarks: editRemarks || null,
+                  payment_mode: editPaymentMode,
+                  Name: editCustomerName || null,
+                  Phone_no: editPhoneNumber || null,
+                  vehicle_brand: editVehicleBrand || null,
+                  vehicle_model: editVehicleModel || null,
+                  workshop: editWorkshop || null,
+                  wheel_type: editWheelType || null,
+                  updated_at: new Date().toISOString(),
+                };
+
+                if (editPaymentMode === 'upi' && editSelectedUpiAccount) {
+                  const selectedAccount = upiAccounts.find(acc => acc.id === editSelectedUpiAccount);
+                  if (selectedAccount) {
+                    updateData.upi_account_id = editSelectedUpiAccount;
+                    updateData.upi_account_name = selectedAccount.account_name;
+                    updateData.upi_id = selectedAccount.upi_id;
+                  }
+                } else if (editPaymentMode !== 'upi') {
+                  updateData.upi_account_id = null;
+                  updateData.upi_account_name = null;
+                  updateData.upi_id = null;
+                }
+
+                const { error } = await supabase
+                  .from('logs-man')
+                  .update(updateData)
+                  .eq('id', editLog.id);
+                if (error) throw error;
+                toast.success('Log updated successfully');
+                setEditOpen(false);
+                setEditLog(null);
+                fetchLogs();
+              } catch (err: any) {
+                toast.error(`Update failed: ${err?.message || err}`);
+              }
+            }}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       </div>
   );
 }
