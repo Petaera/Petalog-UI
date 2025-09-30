@@ -393,22 +393,16 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
   }, [vehicleData, isEditing, isApplyingEditData]);
 
   // Reset brand and model when wheelCategory is set to 'other'
-  useEffect(() => {
-    if (wheelCategory === 'other') {
+  const handleCategoryChange = (newCategory: string) => {
+    // Reset brand and model whenever category is changed by user
+    if (newCategory !== wheelCategory) {
       setSelectedVehicleBrand('');
       setSelectedModel('');
       setSelectedModelId('');
-    } else {
-      // If switching from 'other' to a valid category, reset model if not available
-      if (selectedModel && availableModels.length > 0) {
-        const found = availableModels.some(m => m.name === selectedModel);
-        if (!found) {
-          setSelectedModel('');
-          setSelectedModelId('');
-        }
-      }
     }
-  }, [wheelCategory, availableModels, selectedModel]);
+    setWheelCategory(newCategory);
+   };
+
 
   // Update available models - show all models regardless of category
   useEffect(() => {
@@ -2475,7 +2469,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
             {/* Category */}
             <div className="space-y-2">
               <Label htmlFor="wheelCategory">Category</Label>
-              <Select value={wheelCategory} onValueChange={setWheelCategory}>
+              <Select value={wheelCategory} onValueChange={handleCategoryChange}>
                 <SelectTrigger id="wheelCategory">
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
