@@ -809,7 +809,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
   useEffect(() => {
     if (entryType !== 'workshop') return;
     if (!workshop || !vehicleType) return;
-    if (workshop === 'OTHER WORKSHOPS') { setDiscount('0'); return; }
+    if (workshop === 'OTHER WORKSHOPS') { setDiscount('50'); return; }
     const targetWorkshop = workshop.trim().toUpperCase();
     const targetVehicle = vehicleType.trim().toUpperCase();
     const row = workshopPriceMatrix.find((r: any) => {
