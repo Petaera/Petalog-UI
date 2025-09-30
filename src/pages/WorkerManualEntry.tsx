@@ -788,21 +788,10 @@ export default function WorkerManualEntry({ selectedLocation }: WorkerManualEntr
     }
   }, [entryType, priceMatrix, isEditing, wheelCategory, isApplyingEditData]);
 
-  // When workshop changes, update vehicle types
+  // Workshop changes no longer change vehicle types; vehicle types come from customer priceMatrix
   useEffect(() => {
-    // Don't reset if we're in edit mode or applying edit data
-    if (isEditing || isApplyingEditData) return;
-
-    if (false) {
-      const filtered = workshopPriceMatrix.filter(row => row.WORKSHOP === workshop);
-      const uniqueVehicles = [...new Set(filtered.map(row => row.VEHICLE && row.VEHICLE.trim()).filter(Boolean))];
-      setVehicleTypes(uniqueVehicles);
-      setVehicleType('');
-      setService([]); // Reset service to empty array for workshop
-      setAmount('');
-      setServiceOptions([]);
-    }
-  }, [workshop, entryType, workshopPriceMatrix, isEditing, isApplyingEditData]);
+    // Intentionally no-op
+  }, [workshop]);
 
   // Calculate amount based on entry type and selections
   useEffect(() => {
@@ -840,6 +829,23 @@ export default function WorkerManualEntry({ selectedLocation }: WorkerManualEntr
       setAmount('');
     }
   }, [vehicleType, service, workshop, priceMatrix, workshopPriceMatrix, wheelCategory]);
+
+  // Auto-assign discount for workshop based on workshop and vehicle type from workshop_prices
+  useEffect(() => {
+    if (entryType !== 'workshop') return;
+    if (!workshop || !vehicleType) return;
+    if (workshop === 'OTHER WORKSHOPS') { setDiscount('0'); return; }
+    const targetWorkshop = workshop.trim().toUpperCase();
+    const targetVehicle = vehicleType.trim().toUpperCase();
+    const row = workshopPriceMatrix.find((r: any) => {
+      const w = String((r && (r.WORKSHOP ?? r.workshop)) ?? '').trim().toUpperCase();
+      const v = String((r && (r.VEHICLE ?? r.vehicle ?? r.vehicle_type)) ?? '').trim().toUpperCase();
+      return w === targetWorkshop && v === targetVehicle;
+    });
+    const raw = row ? ((row as any).DISCOUNT ?? (row as any).discount) : null;
+    const d = raw != null && !isNaN(Number(raw)) ? Number(raw) : 0;
+    setDiscount(String(d));
+  }, [entryType, workshop, vehicleType, workshopPriceMatrix]);
 
   // Fetch number of manual visits from logs-man for the typed vehicle number
   useEffect(() => {
@@ -1829,7 +1835,7 @@ export default function WorkerManualEntry({ selectedLocation }: WorkerManualEntr
                 {/* Service Selection (same logic as customer) */}
                 <div className="space-y-2">
                   <Label htmlFor="service">Service Selection</Label>
-                  <SelectReact
+                  <ReactSelect
                     isMulti
                     name="service"
                     options={

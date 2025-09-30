@@ -805,6 +805,23 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
     }
   }, [vehicleType, service, priceMatrix, wheelCategory, isApplyingEditData, isEditing]);
 
+  // Auto-assign discount for workshop based on workshop and vehicle type from workshop_prices
+  useEffect(() => {
+    if (entryType !== 'workshop') return;
+    if (!workshop || !vehicleType) return;
+    if (workshop === 'OTHER WORKSHOPS') { setDiscount('0'); return; }
+    const targetWorkshop = workshop.trim().toUpperCase();
+    const targetVehicle = vehicleType.trim().toUpperCase();
+    const row = workshopPriceMatrix.find((r: any) => {
+      const w = String((r && (r.WORKSHOP ?? r.workshop)) ?? '').trim().toUpperCase();
+      const v = String((r && (r.VEHICLE ?? r.vehicle ?? r.vehicle_type)) ?? '').trim().toUpperCase();
+      return w === targetWorkshop && v === targetVehicle;
+    });
+    const raw = row ? ((row as any).DISCOUNT ?? (row as any).discount) : null;
+    const d = raw != null && !isNaN(Number(raw)) ? Number(raw) : 0;
+    setDiscount(String(d));
+  }, [entryType, workshop, vehicleType, workshopPriceMatrix]);
+
   // Timer effect to re-enable submit button after 5 seconds
   useEffect(() => {
     if (isSubmitDisabled) {
