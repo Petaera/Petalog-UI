@@ -767,66 +767,40 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
     }
   }, [isSubmitDisabled]);
 
-  // Reset and repopulate dropdowns when entryType changes
+  // Populate dropdowns from customer price matrix; entry type does not affect options
   useEffect(() => {
     // Don't reset if we're in edit mode or applying edit data
     if (isEditing || isApplyingEditData) return;
 
-    setWorkshop('');
-    setVehicleType('');
-    setService([]); // Reset service to empty array
-    setAmount('');
-
-    if (entryType === 'customer') {
-      // Wait for wheeler selection to populate lists
-      if (wheelCategory) {
-        const filteredRows = priceMatrix.filter(row => {
-          // If no wheel category is selected, show all rows
-          if (!wheelCategory) return true;
-
-          // If the row doesn't have a type field, show it (fallback)
-          if (!(row as any).type) return true;
-
-          // Otherwise, apply the type filtering
-          return doesTypeMatchWheelCategory((row as any).type, wheelCategory);
-        });
-        const uniqueVehicles = [...new Set(filteredRows.map(row => row.VEHICLE && row.VEHICLE.trim()).filter(Boolean))];
-        const uniqueServices = [...new Set(filteredRows.map(row => row.SERVICE && row.SERVICE.trim()).filter(Boolean))];
-        setVehicleTypes(uniqueVehicles);
-        setServiceOptions(uniqueServices);
-      } else {
-        setVehicleTypes([]);
-        setServiceOptions([]);
-      }
-    } else {
+    if (!wheelCategory) {
       setVehicleTypes([]);
       setServiceOptions([]);
+      return;
     }
-  }, [entryType, priceMatrix, isEditing, wheelCategory, isApplyingEditData]);
 
-  // When workshop changes, update vehicle types
+    const filteredRows = priceMatrix.filter(row => {
+      if (!wheelCategory) return true;
+      if (!(row as any).type) return true;
+      return doesTypeMatchWheelCategory((row as any).type, wheelCategory);
+    });
+    const uniqueVehicles = [...new Set(filteredRows.map(row => row.VEHICLE && row.VEHICLE.trim()).filter(Boolean))];
+    const uniqueServices = [...new Set(filteredRows.map(row => row.SERVICE && row.SERVICE.trim()).filter(Boolean))];
+    setVehicleTypes(uniqueVehicles);
+    setServiceOptions(uniqueServices);
+  }, [priceMatrix, isEditing, wheelCategory, isApplyingEditData]);
+
+  // Workshop changes no longer drive pricing/options; keep UI only
   useEffect(() => {
-    // Don't reset if we're in edit mode or applying edit data
-    if (isEditing || isApplyingEditData) return;
+    // Intentionally no-op: workshop selection retained for UI, logic uses customer pricing
+  }, [workshop]);
 
-    if (entryType === 'workshop' && workshop) {
-      const filtered = workshopPriceMatrix.filter(row => row.WORKSHOP === workshop);
-      const uniqueVehicles = [...new Set(filtered.map(row => row.VEHICLE && row.VEHICLE.trim()).filter(Boolean))];
-      setVehicleTypes(uniqueVehicles);
-      setVehicleType('');
-      setService([]); // Reset service to empty array for workshop
-      setAmount('');
-      setServiceOptions([]);
-    }
-  }, [workshop, entryType, workshopPriceMatrix, isEditing, isApplyingEditData]);
-
-  // Calculate amount based on entry type and selections
+  // Calculate amount based on selected services (customer pricing) for all entry types
   useEffect(() => {
     // If category is Other, allow manual amount entry and skip auto-calculation
     if (wheelCategory === 'other') {
       return;
     }
-    if (entryType === 'customer' && vehicleType && service.length > 0) {
+    if (vehicleType && service.length > 0) {
       // Try to use priceMatrix if available, else fallback
       let total = 0;
       for (const s of service) {
@@ -842,20 +816,10 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         }
       }
       setAmount(total.toString());
-    } else if (entryType === 'workshop' && workshop && vehicleType) {
-      const row = workshopPriceMatrix.find(
-        row => (row.WORKSHOP && row.WORKSHOP.trim()) === workshop.trim() &&
-          (row.VEHICLE && row.VEHICLE.trim()) === vehicleType.trim()
-      );
-      if (row && row.PRICE !== undefined) {
-        setAmount(row.PRICE);
-      } else {
-        setAmount('');
-      }
     } else {
       setAmount('');
     }
-  }, [entryType, vehicleType, service, workshop, priceMatrix, workshopPriceMatrix, wheelCategory]);
+  }, [vehicleType, service, priceMatrix, wheelCategory]);
 
   // Fetch number of manual visits from logs-man for the typed vehicle number
   useEffect(() => {
@@ -2631,6 +2595,43 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                {/* Service Selection (same logic as customer) */}
+                <div className="space-y-2">
+                  <Label htmlFor="service">Service Selection</Label>
+                  <ReactSelect
+                    isMulti
+                    name="service"
+                    options={
+                      vehicleType
+                        ? (() => {
+                          let filteredServices = priceMatrix
+                            .filter(row => row.VEHICLE && row.VEHICLE.trim() === vehicleType.trim())
+                            .filter(row => {
+                              if (!wheelCategory) return true;
+                              if (!(row as any).type) return true;
+                              return doesTypeMatchWheelCategory((row as any).type, wheelCategory);
+                            })
+                            .map(row => row.SERVICE)
+                            .filter((v, i, arr) => v && arr.indexOf(v) === i);
+
+                          if (!filteredServices.includes("FULL WASH")) {
+                            filteredServices = ["FULL WASH", ...filteredServices];
+                          }
+
+                          const sortedServices = sortServicesWithPriority(filteredServices);
+                          return sortedServices.map(option => ({ value: option, label: option }));
+                        })()
+                        : []
+                    }
+                    value={service.map(option => ({ value: option, label: option }))}
+                    onChange={(selected) =>
+                      setService(Array.isArray(selected) ? selected.map((s: any) => s.value) : [])
+                    }
+                    placeholder={vehicleType ? "Select services" : (wheelCategory ? "Select vehicle type first" : "Select category first")}
+                    classNamePrefix="react-select"
+                    isDisabled={!wheelCategory || !vehicleType}
+                  />
                 </div>
               </div>
             )}

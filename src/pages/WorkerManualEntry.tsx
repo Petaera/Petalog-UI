@@ -761,7 +761,7 @@ export default function WorkerManualEntry({ selectedLocation }: WorkerManualEntr
     setService([]); // Reset service to empty array
     setAmount('');
 
-    if (entryType === 'customer') {
+    if (true) {
       // Wait for wheeler selection to populate lists
       if (wheelCategory) {
         const filteredRows = priceMatrix.filter(row => {
@@ -793,7 +793,7 @@ export default function WorkerManualEntry({ selectedLocation }: WorkerManualEntr
     // Don't reset if we're in edit mode or applying edit data
     if (isEditing || isApplyingEditData) return;
 
-    if (entryType === 'workshop' && workshop) {
+    if (false) {
       const filtered = workshopPriceMatrix.filter(row => row.WORKSHOP === workshop);
       const uniqueVehicles = [...new Set(filtered.map(row => row.VEHICLE && row.VEHICLE.trim()).filter(Boolean))];
       setVehicleTypes(uniqueVehicles);
@@ -810,7 +810,7 @@ export default function WorkerManualEntry({ selectedLocation }: WorkerManualEntr
     if (wheelCategory === 'other') {
       return;
     }
-    if (entryType === 'customer' && vehicleType && service.length > 0) {
+    if (vehicleType && service.length > 0) {
       // Try to use priceMatrix if available, else fallback
       let total = 0;
       for (const s of service) {
@@ -826,7 +826,7 @@ export default function WorkerManualEntry({ selectedLocation }: WorkerManualEntr
         }
       }
       setAmount(total.toString());
-    } else if (entryType === 'workshop' && workshop && vehicleType) {
+    } else if (false && entryType === 'workshop' && workshop && vehicleType) {
       const row = workshopPriceMatrix.find(
         row => (row.WORKSHOP && row.WORKSHOP.trim()) === workshop.trim() &&
           (row.VEHICLE && row.VEHICLE.trim()) === vehicleType.trim()
@@ -839,7 +839,7 @@ export default function WorkerManualEntry({ selectedLocation }: WorkerManualEntr
     } else {
       setAmount('');
     }
-  }, [entryType, vehicleType, service, workshop, priceMatrix, workshopPriceMatrix, wheelCategory]);
+  }, [vehicleType, service, workshop, priceMatrix, workshopPriceMatrix, wheelCategory]);
 
   // Fetch number of manual visits from logs-man for the typed vehicle number
   useEffect(() => {
@@ -1825,6 +1825,43 @@ export default function WorkerManualEntry({ selectedLocation }: WorkerManualEntr
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                {/* Service Selection (same logic as customer) */}
+                <div className="space-y-2">
+                  <Label htmlFor="service">Service Selection</Label>
+                  <SelectReact
+                    isMulti
+                    name="service"
+                    options={
+                      vehicleType
+                        ? (() => {
+                          let filteredServices = priceMatrix
+                            .filter(row => row.VEHICLE && row.VEHICLE.trim() === vehicleType.trim())
+                            .filter(row => {
+                              if (!wheelCategory) return true;
+                              if (!(row as any).type) return true;
+                              return doesTypeMatchWheelCategory((row as any).type, wheelCategory);
+                            })
+                            .map(row => row.SERVICE)
+                            .filter((v, i, arr) => v && arr.indexOf(v) === i);
+
+                          if (!filteredServices.includes("FULL WASH")) {
+                            filteredServices = ["FULL WASH", ...filteredServices];
+                          }
+
+                          const sortedServices = sortServicesWithPriority(filteredServices);
+                          return sortedServices.map(option => ({ value: option, label: option }));
+                        })()
+                        : []
+                    }
+                    value={service.map(option => ({ value: option, label: option }))}
+                    onChange={(selected) =>
+                      setService(Array.isArray(selected) ? selected.map((s: any) => s.value) : [])
+                    }
+                    placeholder={vehicleType ? "Select services" : (wheelCategory ? "Select vehicle type first" : "Select category first")}
+                    classNamePrefix="react-select"
+                    isDisabled={!wheelCategory || !vehicleType}
+                  />
                 </div>
               </div>
             )}
