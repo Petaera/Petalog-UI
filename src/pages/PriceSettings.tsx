@@ -174,13 +174,13 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
   // Generate sample Excel file
   const downloadSampleFile = () => {
     const sampleData = [
-      { SERVICE: 'Basic Wash', VEHICLE: 'Car', PRICE: 200, type: 'standard' },
-      { SERVICE: 'Basic Wash', VEHICLE: 'Bike', PRICE: 100, type: 'standard' },
-      { SERVICE: 'Premium Wash', VEHICLE: 'Car', PRICE: 500, type: 'premium' },
-      { SERVICE: 'Premium Wash', VEHICLE: 'Bike', PRICE: 300, type: 'premium' },
-      { SERVICE: 'Full Service', VEHICLE: 'SUV', PRICE: 800, type: 'premium' },
-      { SERVICE: 'Under Body Coating', VEHICLE: 'Car', PRICE: 1500, type: 'special' },
-      { SERVICE: 'Silencer Coating', VEHICLE: 'Bike', PRICE: 800, type: 'special' }
+      { SERVICE: 'Basic Wash', VEHICLE: 'Car', PRICE: 200, type: 4 },
+      { SERVICE: 'Basic Wash', VEHICLE: 'Bike', PRICE: 100, type: 2 },
+      { SERVICE: 'Premium Wash', VEHICLE: 'Car', PRICE: 500, type: 4 },
+      { SERVICE: 'Premium Wash', VEHICLE: 'Bike', PRICE: 300, type: 2 },
+      { SERVICE: 'Full Service', VEHICLE: 'SUV', PRICE: 800, type: 4 },
+      { SERVICE: 'Under Body Coating', VEHICLE: 'Car', PRICE: 1500, type: 4 },
+      { SERVICE: 'Silencer Coating', VEHICLE: 'Bike', PRICE: 800, type: 2 }
     ];
 
     const worksheet = XLSX.utils.json_to_sheet(sampleData);
@@ -435,7 +435,7 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
                     className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Required columns: SERVICE, VEHICLE, PRICE. Optional: type
+                    Required columns: SERVICE, VEHICLE, PRICE. Optional: type [2 wheeler/4 wheeler]
                   </p>
                 </div>
 
