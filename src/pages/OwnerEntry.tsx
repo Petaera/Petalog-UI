@@ -833,7 +833,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       const v = String((r && (r.VEHICLE ?? r.vehicle ?? r.vehicle_type)) ?? '').trim().toUpperCase();
       return w === targetWorkshop && v === targetVehicle;
     });
-    const raw = row ? ((row as any).DISCOUNT ?? (row as any).discount) : null;
+    const raw = row ? ((row as any).DISCOUNT ?? (row as any).discount ?? (row as any).Discount) : null;
     const d = raw != null && !isNaN(Number(raw)) ? Number(raw) : 0;
     setDiscount(String(d));
   }, [entryType, workshop, vehicleType, workshopPriceMatrix]);
