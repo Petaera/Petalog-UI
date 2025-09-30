@@ -1679,56 +1679,27 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       };
 
       const findOrCreateCustomer = async (): Promise<string | null> => {
-        const ownerId = (user as any)?.own_id || null;
-        // Prefer phone + owner + location match
-        if (phoneNumber !== '') {
-          const { data } = await supabase
-            .from('customers')
-            .select('id, name, phone, date_of_birth, location_id')
-            .eq('phone', phoneNumber)
-            .eq('owner_id', ownerId)
-            .eq('location_id', selectedLocation as string);
-          if (data && data[0]) {
-            const existing = data[0];
-            const updates: any = {};
-            if (customerName && customerName !== existing.name) updates.name = customerName;
-            if (phoneNumber && phoneNumber !== existing.phone) updates.phone = phoneNumber;
-            if (dateOfBirth && dateOfBirth !== existing.date_of_birth) updates.date_of_birth = dateOfBirth;
-            if (selectedLocation && selectedLocation !== existing.location_id) updates.location_id = selectedLocation;
-            if (Object.keys(updates).length > 0) {
-              await supabase.from('customers').update(updates).eq('id', existing.id);
-            }
-            return existing.id as string;
-          }
-        }
-        // Fallback to name + owner + location when phone missing
-        if (customerName && customerName.trim() !== '') {
-          const { data } = await supabase
-            .from('customers')
-            .select('id, name, phone, date_of_birth, location_id')
-            .eq('name', customerName)
-            .eq('owner_id', (user as any)?.own_id || null)
-            .eq('location_id', selectedLocation as string);
-          if (data && data[0]) {
-            const existing = data[0];
-            const updates: any = {};
-            if (customerName && customerName !== existing.name) updates.name = customerName;
-            if (phoneNumber && phoneNumber !== existing.phone) updates.phone = phoneNumber;
-            if (dateOfBirth && dateOfBirth !== existing.date_of_birth) updates.date_of_birth = dateOfBirth;
-            if (selectedLocation && selectedLocation !== existing.location_id) updates.location_id = selectedLocation;
-            if (Object.keys(updates).length > 0) {
-              await supabase.from('customers').update(updates).eq('id', existing.id);
-            }
-            return existing.id as string;
-          }
-        }
-        // If neither phone nor name provided, skip customer creation
-        if (!phoneNumber && !customerName) {
+        const phone = String(phoneNumber ?? '').trim();
+        if (!phone) {
+          // No phone provided: do not create a customer record
           return null;
         }
+        // Check by phone only
+        const { data: existing, error } = await supabase
+          .from('customers')
+          .select('id')
+          .eq('phone', phone)
+          .maybeSingle();
+        if (error && (error as any).code !== 'PGRST116') {
+          console.warn('Customer lookup error:', error);
+        }
+        if (existing && existing.id) {
+          return existing.id as string;
+        }
+        // Insert new customer with this phone
         const insertPayload: any = {
           name: customerName || null,
-          phone: phoneNumber || null,
+          phone: phone,
           date_of_birth: dateOfBirth || null,
           location_id: selectedLocation,
           owner_id: (user as any)?.own_id || null,
@@ -1881,53 +1852,26 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
       const plate = normalizePlate(vehicleNumber);
 
       const findOrCreateCustomer = async () => {
-        const ownerId = (user as any)?.own_id || null;
-        if (phoneNumber !== '') {
-          const { data } = await supabase
-            .from('customers')
-            .select('id, name, phone, date_of_birth, location_id')
-            .eq('phone', phoneNumber)
-            .eq('owner_id', ownerId)
-            .eq('location_id', selectedLocation as string);
-          if (data && data[0]) {
-            const existing = data[0];
-            const updates: any = {};
-            if (customerName && customerName !== existing.name) updates.name = customerName;
-            if (phoneNumber && phoneNumber !== existing.phone) updates.phone = phoneNumber;
-            if (dateOfBirth && dateOfBirth !== existing.date_of_birth) updates.date_of_birth = dateOfBirth;
-            if (selectedLocation && selectedLocation !== existing.location_id) updates.location_id = selectedLocation;
-            if (Object.keys(updates).length > 0) {
-              await supabase.from('customers').update(updates).eq('id', existing.id);
-            }
-            return existing.id as string;
-          }
+        const phone = String(phoneNumber ?? '').trim();
+        if (!phone) return null;
+        const { data: existing, error } = await supabase
+          .from('customers')
+          .select('id')
+          .eq('phone', phone)
+          .maybeSingle();
+        if (error && (error as any).code !== 'PGRST116') {
+          console.warn('Customer lookup error:', error);
         }
-        if (customerName && customerName.trim() !== '') {
-          const { data } = await supabase
-            .from('customers')
-            .select('id, name, phone, date_of_birth, location_id')
-            .eq('name', customerName)
-            .eq('owner_id', (user as any)?.own_id || null)
-            .eq('location_id', selectedLocation as string);
-          if (data && data[0]) {
-            const existing = data[0];
-            const updates: any = {};
-            if (phoneNumber && phoneNumber !== existing.phone) updates.phone = phoneNumber;
-            if (dateOfBirth && dateOfBirth !== existing.date_of_birth) updates.date_of_birth = dateOfBirth;
-            if (Object.keys(updates).length > 0) {
-              await supabase.from('customers').update(updates).eq('id', existing.id);
-            }
-            return existing.id as string;
-          }
-        }
+        if (existing && existing.id) return existing.id as string;
+
         const insertPayload: any = {
           name: customerName || null,
-          phone: phoneNumber || null,
+          phone: phone,
           date_of_birth: dateOfBirth || null,
           location_id: selectedLocation,
           owner_id: (user as any)?.own_id || null,
-          vehicles: [], // Initialize empty vehicles array
-          default_vehicle_id: null, // Initialize as null
+          vehicles: [],
+          default_vehicle_id: null,
         };
         const { data: created, error: custErr } = await supabase
           .from('customers')
