@@ -820,7 +820,7 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
   useEffect(() => {
     if (entryType !== 'workshop') return;
     if (!workshop || !vehicleType) return;
-    if (workshop === 'OTHER WORKSHOPS') { setDiscount('0'); return; }
+    //if (workshop === 'OTHER WORKSHOPS') { setDiscount('0'); return; }
     const targetWorkshop = workshop.trim().toUpperCase();
     const targetVehicle = vehicleType.trim().toUpperCase();
     const row = workshopPriceMatrix.find((r: any) => {
