@@ -26,6 +26,9 @@ interface ExpenseCategory {
   id: string;
   name: string;
   monthlyBudget?: number | null;
+  recurrenceType?: 'One-time' | 'Daily' | 'Weekly' | 'Monthly' | 'Bi-Monthly' | 'Quarterly' | 'Yearly' | null;
+  recurrenceInterval?: number | null;
+  defaultRecurrenceEnd?: string | null;
 }
 
 interface ExpenseRecord {
@@ -36,6 +39,10 @@ interface ExpenseRecord {
   paymentMode: 'Cash' | 'UPI' | string;
   notes?: string;
   isMonthly?: boolean;
+  recurrenceType?: 'One-time' | 'Daily' | 'Weekly' | 'Monthly' | 'Bi-Monthly' | 'Quarterly' | 'Yearly' | null;
+  recurrenceInterval?: number | null;
+  recurrenceEndDate?: string | null;
+  nextDueDate?: string | null;
 }
 
 const ExpensesPage: React.FC = () => {
@@ -64,17 +71,27 @@ const ExpensesPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [selectedUpiAccountId, setSelectedUpiAccountId] = useState<string>('');
   const [formRepeatDaily, setFormRepeatDaily] = useState<boolean>(false);
+  // Recurrence form state
+  const [formRecurrenceType, setFormRecurrenceType] = useState<'One-time' | 'Daily' | 'Weekly' | 'Monthly' | 'Bi-Monthly' | 'Quarterly' | 'Yearly'>('One-time');
+  const [formRecurrenceInterval, setFormRecurrenceInterval] = useState<string>('1');
+  const [formRecurrenceEndDate, setFormRecurrenceEndDate] = useState<string>('');
   // Manage Categories state
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [manageCategories, setManageCategories] = useState(false);
   const [catName, setCatName] = useState('');
   const [catDesc, setCatDesc] = useState('');
   const [catBudget, setCatBudget] = useState<string>('');
+  const [catRecurrenceType, setCatRecurrenceType] = useState<'One-time' | 'Daily' | 'Weekly' | 'Monthly' | 'Bi-Monthly' | 'Quarterly' | 'Yearly'>('One-time');
+  const [catRecurrenceInterval, setCatRecurrenceInterval] = useState<string>('1');
+  const [catDefaultRecurrenceEnd, setCatDefaultRecurrenceEnd] = useState<string>('');
   const [savingCategory, setSavingCategory] = useState(false);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [editingCategoryName, setEditingCategoryName] = useState('');
   const [editingCategoryDesc, setEditingCategoryDesc] = useState('');
   const [editingCategoryBudget, setEditingCategoryBudget] = useState<string>('');
+  const [editingCategoryRecurrenceType, setEditingCategoryRecurrenceType] = useState<'One-time' | 'Daily' | 'Weekly' | 'Monthly' | 'Bi-Monthly' | 'Quarterly' | 'Yearly'>('One-time');
+  const [editingCategoryRecurrenceInterval, setEditingCategoryRecurrenceInterval] = useState<string>('1');
+  const [editingCategoryDefaultRecurrenceEnd, setEditingCategoryDefaultRecurrenceEnd] = useState<string>('');
 
   // UPI accounts for selected branch (used when Payment Mode is UPI)
   const { accounts: upiAccounts } = useUpiAccounts(selectedLocationId);
@@ -88,6 +105,10 @@ const ExpensesPage: React.FC = () => {
   const [editUpiAccountId, setEditUpiAccountId] = useState<string>('');
   const [editNotes, setEditNotes] = useState<string>('');
   const [savingEdit, setSavingEdit] = useState(false);
+  // Edit recurrence state
+  const [editRecurrenceType, setEditRecurrenceType] = useState<'One-time' | 'Daily' | 'Weekly' | 'Monthly' | 'Bi-Monthly' | 'Quarterly' | 'Yearly'>('One-time');
+  const [editRecurrenceInterval, setEditRecurrenceInterval] = useState<string>('1');
+  const [editRecurrenceEndDate, setEditRecurrenceEndDate] = useState<string>('');
   // Delete dialogs state
   const [deleteExpenseOpen, setDeleteExpenseOpen] = useState(false);
   const [expenseToDeleteId, setExpenseToDeleteId] = useState<string | null>(null);
@@ -119,9 +140,10 @@ const ExpensesPage: React.FC = () => {
             .toISOString()
             .slice(0, 10);
 
+          // First try with new recurrence fields
           let expQuery = supabase
             .from('expenses')
-            .select('id,date,category_id,amount,payment_mode,notes,is_monthly,branch_id')
+            .select('id,date,category_id,amount,payment_mode,notes,is_monthly,branch_id,recurrence_type,recurrence_interval,recurrence_end_date,next_due_date')
             .gte('date', monthStart)
             .lte('date', monthEnd)
             .eq('branch_id', selectedLocationId)
@@ -138,10 +160,42 @@ const ExpensesPage: React.FC = () => {
                 paymentMode: e.payment_mode,
                 notes: e.notes || '',
                 isMonthly: e.is_monthly,
+                recurrenceType: e.recurrence_type || null,
+                recurrenceInterval: e.recurrence_interval || null,
+                recurrenceEndDate: e.recurrence_end_date || null,
+                nextDueDate: e.next_due_date || null,
               }))
             );
           } else {
-            setExpenses([]);
+            // Fallback to old query without recurrence fields
+            let fallbackQuery = supabase
+              .from('expenses')
+              .select('id,date,category_id,amount,payment_mode,notes,is_monthly,branch_id')
+              .gte('date', monthStart)
+              .lte('date', monthEnd)
+              .eq('branch_id', selectedLocationId)
+              .order('date', { ascending: false });
+            const { data: fallbackData, error: fallbackErr } = await fallbackQuery as any;
+            
+            if (!fallbackErr && fallbackData) {
+              setExpenses(
+                fallbackData.map((e: any) => ({
+                  id: e.id,
+                  date: e.date,
+                  categoryId: e.category_id,
+                  amount: e.amount,
+                  paymentMode: e.payment_mode,
+                  notes: e.notes || '',
+                  isMonthly: e.is_monthly,
+                  recurrenceType: null,
+                  recurrenceInterval: null,
+                  recurrenceEndDate: null,
+                  nextDueDate: null,
+                }))
+              );
+            } else {
+              setExpenses([]);
+            }
           }
         } catch (_) {
           setExpenses([]);
@@ -149,17 +203,44 @@ const ExpensesPage: React.FC = () => {
 
         // Categories for selected branch
         try {
+          // First try with new recurrence fields
           let catQuery = supabase
-        .from('expense_categories')
-        .select('id,name,branch_id,monthly_budget')
+            .from('expense_categories')
+            .select('id,name,branch_id,monthly_budget,recurrence_type,recurrence_interval,default_recurrence_end')
             .eq('branch_id', selectedLocationId)
             .order('name');
           const { data: catData, error: catErr } = await catQuery as any;
 
           if (!catErr && catData) {
-        setExpenseCategories((catData as any[]).map(r => ({ id: r.id, name: r.name, monthlyBudget: r.monthly_budget })));
+            setExpenseCategories((catData as any[]).map(r => ({ 
+              id: r.id, 
+              name: r.name, 
+              monthlyBudget: r.monthly_budget,
+              recurrenceType: r.recurrence_type || null,
+              recurrenceInterval: r.recurrence_interval || null,
+              defaultRecurrenceEnd: r.default_recurrence_end || null
+            })));
           } else {
-            setExpenseCategories([]);
+            // Fallback to old query without recurrence fields
+            let fallbackQuery = supabase
+              .from('expense_categories')
+              .select('id,name,branch_id,monthly_budget')
+              .eq('branch_id', selectedLocationId)
+              .order('name');
+            const { data: fallbackData, error: fallbackErr } = await fallbackQuery as any;
+            
+            if (!fallbackErr && fallbackData) {
+              setExpenseCategories((fallbackData as any[]).map(r => ({ 
+                id: r.id, 
+                name: r.name, 
+                monthlyBudget: r.monthly_budget,
+                recurrenceType: null,
+                recurrenceInterval: null,
+                defaultRecurrenceEnd: null
+              })));
+            } else {
+              setExpenseCategories([]);
+            }
           }
         } catch (_) {
           setExpenseCategories([]);
@@ -177,14 +258,43 @@ const ExpensesPage: React.FC = () => {
   const reloadCategories = async () => {
     if (!selectedLocationId) return;
     try {
+      // First try with new recurrence fields
       let catQuery = supabase
         .from('expense_categories')
-        .select('id,name,branch_id,monthly_budget')
+        .select('id,name,branch_id,monthly_budget,recurrence_type,recurrence_interval,default_recurrence_end')
         .eq('branch_id', selectedLocationId)
         .order('name');
       const { data: catData, error: catErr } = await catQuery as any;
-      if (catErr) throw catErr;
-      setExpenseCategories((catData as any[]).map(r => ({ id: r.id, name: r.name, monthlyBudget: r.monthly_budget })));
+      
+      if (!catErr && catData) {
+        setExpenseCategories((catData as any[]).map(r => ({ 
+          id: r.id, 
+          name: r.name, 
+          monthlyBudget: r.monthly_budget,
+          recurrenceType: r.recurrence_type || null,
+          recurrenceInterval: r.recurrence_interval || null,
+          defaultRecurrenceEnd: r.default_recurrence_end || null
+        })));
+      } else {
+        // Fallback to old query without recurrence fields
+        let fallbackQuery = supabase
+          .from('expense_categories')
+          .select('id,name,branch_id,monthly_budget')
+          .eq('branch_id', selectedLocationId)
+          .order('name');
+        const { data: fallbackData, error: fallbackErr } = await fallbackQuery as any;
+        
+        if (!fallbackErr && fallbackData) {
+          setExpenseCategories((fallbackData as any[]).map(r => ({ 
+            id: r.id, 
+            name: r.name, 
+            monthlyBudget: r.monthly_budget,
+            recurrenceType: null,
+            recurrenceInterval: null,
+            defaultRecurrenceEnd: null
+          })));
+        }
+      }
     } catch (_) {}
   };
 
@@ -195,25 +305,62 @@ const ExpensesPage: React.FC = () => {
       const monthEnd = new Date(new Date(monthStart).getFullYear(), new Date(monthStart).getMonth() + 1, 0)
         .toISOString()
         .slice(0, 10);
+      
+      // First try with new recurrence fields
       let expQuery = supabase
         .from('expenses')
-        .select('id,date,category_id,amount,payment_mode,notes,is_monthly,branch_id')
+        .select('id,date,category_id,amount,payment_mode,notes,is_monthly,branch_id,recurrence_type,recurrence_interval,recurrence_end_date,next_due_date')
         .gte('date', monthStart)
         .lte('date', monthEnd)
         .eq('branch_id', selectedLocationId)
         .order('date', { ascending: false });
-      const { data: expData } = await expQuery as any;
-      setExpenses(
-        (expData || []).map((e: any) => ({
-          id: e.id,
-          date: e.date,
-          categoryId: e.category_id,
-          amount: e.amount,
-          paymentMode: e.payment_mode,
-          notes: e.notes || '',
-          isMonthly: e.is_monthly,
-        }))
-      );
+      const { data: expData, error: expErr } = await expQuery as any;
+      
+      if (!expErr && expData) {
+        setExpenses(
+          (expData || []).map((e: any) => ({
+            id: e.id,
+            date: e.date,
+            categoryId: e.category_id,
+            amount: e.amount,
+            paymentMode: e.payment_mode,
+            notes: e.notes || '',
+            isMonthly: e.is_monthly,
+            recurrenceType: e.recurrence_type || null,
+            recurrenceInterval: e.recurrence_interval || null,
+            recurrenceEndDate: e.recurrence_end_date || null,
+            nextDueDate: e.next_due_date || null,
+          }))
+        );
+      } else {
+        // Fallback to old query without recurrence fields
+        let fallbackQuery = supabase
+          .from('expenses')
+          .select('id,date,category_id,amount,payment_mode,notes,is_monthly,branch_id')
+          .gte('date', monthStart)
+          .lte('date', monthEnd)
+          .eq('branch_id', selectedLocationId)
+          .order('date', { ascending: false });
+        const { data: fallbackData, error: fallbackErr } = await fallbackQuery as any;
+        
+        if (!fallbackErr && fallbackData) {
+          setExpenses(
+            (fallbackData || []).map((e: any) => ({
+              id: e.id,
+              date: e.date,
+              categoryId: e.category_id,
+              amount: e.amount,
+              paymentMode: e.payment_mode,
+              notes: e.notes || '',
+              isMonthly: e.is_monthly,
+              recurrenceType: null,
+              recurrenceInterval: null,
+              recurrenceEndDate: null,
+              nextDueDate: null,
+            }))
+          );
+        }
+      }
     } catch (_) {}
   };
 
@@ -226,6 +373,9 @@ const ExpensesPage: React.FC = () => {
     setFormIsMonthly(false);
     setFormMonthlyDays('');
     setFormRepeatDaily(false);
+    setFormRecurrenceType('One-time');
+    setFormRecurrenceInterval('1');
+    setFormRecurrenceEndDate('');
   };
 
   const saveExpense = async () => {
@@ -242,6 +392,11 @@ const ExpensesPage: React.FC = () => {
         }
         return formNotes || null;
       };
+
+      // Calculate next due date for recurring expenses
+      const nextDueDate = formRecurrenceType !== 'One-time' 
+        ? calculateNextDueDate(formDate, formRecurrenceType, Number(formRecurrenceInterval))
+        : null;
 
       if (formRepeatDaily) {
         const month = selectedMonth || formDate.slice(0, 7);
@@ -299,6 +454,9 @@ const ExpensesPage: React.FC = () => {
     setCatName('');
     setCatDesc('');
     setCatBudget('');
+    setCatRecurrenceType('One-time');
+    setCatRecurrenceInterval('1');
+    setCatDefaultRecurrenceEnd('');
   };
 
   const saveCategory = async () => {
@@ -318,6 +476,13 @@ const ExpensesPage: React.FC = () => {
         description: catDesc.trim() || null,
         monthly_budget: catBudget ? Number(catBudget) : null,
       };
+      
+      // Try to include recurrence fields, but don't fail if they don't exist
+      if (catRecurrenceType !== 'One-time') {
+        payload.recurrence_type = catRecurrenceType;
+        payload.recurrence_interval = Number(catRecurrenceInterval);
+        payload.default_recurrence_end = catDefaultRecurrenceEnd || null;
+      }
       const { error } = await supabase.from('expense_categories').insert(payload);
       if (error) throw error;
       toast({ 
@@ -342,6 +507,9 @@ const ExpensesPage: React.FC = () => {
     setEditingCategoryBudget(
       cat.monthlyBudget !== undefined && cat.monthlyBudget !== null ? String(cat.monthlyBudget) : ''
     );
+    setEditingCategoryRecurrenceType(cat.recurrenceType || 'One-time');
+    setEditingCategoryRecurrenceInterval(String(cat.recurrenceInterval || 1));
+    setEditingCategoryDefaultRecurrenceEnd(cat.defaultRecurrenceEnd || '');
   };
 
   const cancelEditCategory = () => {
@@ -349,6 +517,9 @@ const ExpensesPage: React.FC = () => {
     setEditingCategoryName('');
     setEditingCategoryDesc('');
     setEditingCategoryBudget('');
+    setEditingCategoryRecurrenceType('One-time');
+    setEditingCategoryRecurrenceInterval('1');
+    setEditingCategoryDefaultRecurrenceEnd('');
   };
 
   const updateCategory = async () => {
@@ -361,6 +532,13 @@ const ExpensesPage: React.FC = () => {
         description: editingCategoryDesc.trim() || null,
         monthly_budget: editingCategoryBudget ? Number(editingCategoryBudget) : null,
       };
+      
+      // Try to include recurrence fields, but don't fail if they don't exist
+      if (editingCategoryRecurrenceType !== 'One-time') {
+        updates.recurrence_type = editingCategoryRecurrenceType;
+        updates.recurrence_interval = Number(editingCategoryRecurrenceInterval);
+        updates.default_recurrence_end = editingCategoryDefaultRecurrenceEnd || null;
+      }
       const { error } = await supabase.from('expense_categories').update(updates).eq('id', editingCategoryId);
       if (error) throw error;
       toast({ 
@@ -419,6 +597,9 @@ const ExpensesPage: React.FC = () => {
     setEditMode(mode);
     setEditNotes(expense.notes || '');
     setEditUpiAccountId('');
+    setEditRecurrenceType(expense.recurrenceType || 'One-time');
+    setEditRecurrenceInterval(String(expense.recurrenceInterval || 1));
+    setEditRecurrenceEndDate(expense.recurrenceEndDate || '');
   };
 
   const cancelEditExpense = () => {
@@ -429,6 +610,9 @@ const ExpensesPage: React.FC = () => {
     setEditMode('');
     setEditNotes('');
     setEditUpiAccountId('');
+    setEditRecurrenceType('One-time');
+    setEditRecurrenceInterval('1');
+    setEditRecurrenceEndDate('');
   };
 
   const saveEditExpense = async () => {
@@ -445,6 +629,11 @@ const ExpensesPage: React.FC = () => {
         }
         return editNotes || null;
       })();
+      // Calculate next due date for recurring expenses
+      const nextDueDate = editRecurrenceType !== 'One-time' 
+        ? calculateNextDueDate(editDate, editRecurrenceType, Number(editRecurrenceInterval))
+        : null;
+
       const updates: any = {
         date: editDate,
         category_id: editCategory,
@@ -527,6 +716,87 @@ const ExpensesPage: React.FC = () => {
   const getCategoryName = (categoryId: string) => 
     expenseCategories.find(c => c.id === categoryId)?.name || 'Unknown';
 
+  const calculateNextDueDate = (startDate: string, recurrenceType: string, interval: number): string => {
+    const date = new Date(startDate);
+    switch (recurrenceType) {
+      case 'Daily':
+        date.setDate(date.getDate() + interval);
+        break;
+      case 'Weekly':
+        date.setDate(date.getDate() + (interval * 7));
+        break;
+      case 'Monthly':
+        date.setMonth(date.getMonth() + interval);
+        break;
+      case 'Bi-Monthly':
+        date.setMonth(date.getMonth() + (interval * 2));
+        break;
+      case 'Quarterly':
+        date.setMonth(date.getMonth() + (interval * 3));
+        break;
+      case 'Yearly':
+        date.setFullYear(date.getFullYear() + interval);
+        break;
+      default:
+        return startDate;
+    }
+    return date.toISOString().slice(0, 10);
+  };
+
+  const formatRecurrenceInfo = (expense: ExpenseRecord): string => {
+    if (!expense.recurrenceType || expense.recurrenceType === 'One-time') {
+      return 'One-time';
+    }
+    
+    const interval = expense.recurrenceInterval || 1;
+    const type = expense.recurrenceType.toLowerCase();
+    let recurrenceText = `Every ${interval} ${type}`;
+    
+    if (expense.recurrenceEndDate) {
+      recurrenceText += ` until ${formatDate(expense.recurrenceEndDate)}`;
+    }
+    
+    return recurrenceText;
+  };
+
+  const getRecurrenceSource = (expense: ExpenseRecord): { isInherited: boolean; categoryName: string } => {
+    const category = expenseCategories.find(cat => cat.id === expense.categoryId);
+    if (!category) return { isInherited: false, categoryName: 'Unknown' };
+    
+    const isInherited = category.recurrenceType === expense.recurrenceType && 
+                       category.recurrenceInterval === expense.recurrenceInterval &&
+                       category.defaultRecurrenceEnd === expense.recurrenceEndDate;
+    
+    return { isInherited, categoryName: category.name };
+  };
+
+  const formatCategoryRecurrenceInfo = (category: ExpenseCategory): string => {
+    if (!category.recurrenceType || category.recurrenceType === 'One-time') {
+      return 'One-time';
+    }
+    
+    const interval = category.recurrenceInterval || 1;
+    const type = category.recurrenceType.toLowerCase();
+    let recurrenceText = `Every ${interval} ${type}`;
+    
+    if (category.defaultRecurrenceEnd) {
+      recurrenceText += ` until ${formatDate(category.defaultRecurrenceEnd)}`;
+    }
+    
+    return recurrenceText;
+  };
+
+  const handleCategorySelection = (categoryId: string) => {
+    setFormCategory(categoryId);
+    const selectedCategory = expenseCategories.find(cat => cat.id === categoryId);
+    if (selectedCategory) {
+      // Auto-populate recurrence fields from category
+      setFormRecurrenceType(selectedCategory.recurrenceType || 'One-time');
+      setFormRecurrenceInterval(String(selectedCategory.recurrenceInterval || 1));
+      setFormRecurrenceEndDate(selectedCategory.defaultRecurrenceEnd || '');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -584,6 +854,71 @@ const ExpensesPage: React.FC = () => {
                   <Input type="number" min="0" step="1" value={catBudget} onChange={(e) => setCatBudget(e.target.value)} className="form-input" placeholder="Optional" />
                 </div>
               </div>
+              
+              {/* Recurrence Section */}
+              <div className="mt-4 border-t border-border pt-4">
+                <h4 className="text-sm font-medium text-foreground mb-3">Default Recurrence Settings</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="form-label">Recurrence Type</label>
+                    <select 
+                      value={catRecurrenceType} 
+                      onChange={e => setCatRecurrenceType(e.target.value as any)} 
+                      className="form-select w-full bg-white border-border rounded-md py-2 px-3"
+                    >
+                      <option value="One-time">One-time</option>
+                      <option value="Daily">Daily</option>
+                      <option value="Weekly">Weekly</option>
+                      <option value="Monthly">Monthly</option>
+                      <option value="Bi-Monthly">Bi-Monthly</option>
+                      <option value="Quarterly">Quarterly</option>
+                      <option value="Yearly">Yearly</option>
+                    </select>
+                  </div>
+                  
+                  {catRecurrenceType !== 'One-time' && (
+                    <div>
+                      <label className="form-label">Interval</label>
+                      <Input 
+                        type="number" 
+                        min="1" 
+                        step="1" 
+                        value={catRecurrenceInterval} 
+                        onChange={e => setCatRecurrenceInterval(e.target.value)} 
+                        className="form-input" 
+                        placeholder="1"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Every {catRecurrenceInterval} {catRecurrenceType.toLowerCase()}
+                      </p>
+                    </div>
+                  )}
+                  
+                  {catRecurrenceType !== 'One-time' && (
+                    <div>
+                      <label className="form-label">Default End Date (Optional)</label>
+                      <Input 
+                        type="date" 
+                        value={catDefaultRecurrenceEnd} 
+                        onChange={e => setCatDefaultRecurrenceEnd(e.target.value)} 
+                        className="form-input" 
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Leave empty for indefinite recurrence
+                      </p>
+                    </div>
+                  )}
+                </div>
+                
+                {catRecurrenceType !== 'One-time' && (
+                  <div className="mt-3 p-3 bg-muted/30 rounded-md">
+                    <p className="text-sm text-foreground">
+                      <strong>Preview:</strong> Expenses in this category will default to repeating every {catRecurrenceInterval} {catRecurrenceType.toLowerCase()}
+                      {catDefaultRecurrenceEnd && ` until ${formatDate(catDefaultRecurrenceEnd)}`}
+                    </p>
+                  </div>
+                )}
+              </div>
               <div className="mt-4 flex justify-end gap-2">
                 <Button variant="outline" onClick={() => { setShowAddCategory(false); }}>Cancel</Button>
                 <Button disabled={savingCategory || !selectedLocationId} onClick={saveCategory} className="bg-primary text-primary-foreground hover:bg-primary/90">
@@ -599,6 +934,7 @@ const ExpensesPage: React.FC = () => {
                 <tr>
                   <th className="text-left p-3 text-foreground">Name</th>
                   <th className="text-left p-3 text-foreground">Monthly Budget</th>
+                  <th className="text-left p-3 text-foreground">Recurrence</th>
                   <th className="text-left p-3 text-foreground">Actions</th>
                 </tr>
               </thead>
@@ -620,6 +956,56 @@ const ExpensesPage: React.FC = () => {
                         <Input type="number" min="0" step="1" value={editingCategoryBudget} onChange={(e) => setEditingCategoryBudget(e.target.value)} className="form-input" placeholder="₹" />
                       ) : (
                         <span>{typeof cat.monthlyBudget === 'number' ? `₹${(cat.monthlyBudget||0).toLocaleString('en-IN')}` : '—'}</span>
+                      )}
+                    </td>
+                    <td className="p-3 text-foreground">
+                      {editingCategoryId === cat.id ? (
+                        <div className="flex flex-col gap-2">
+                          <select 
+                            value={editingCategoryRecurrenceType} 
+                            onChange={e => setEditingCategoryRecurrenceType(e.target.value as any)} 
+                            className="form-select w-full text-sm"
+                          >
+                            <option value="One-time">One-time</option>
+                            <option value="Daily">Daily</option>
+                            <option value="Weekly">Weekly</option>
+                            <option value="Monthly">Monthly</option>
+                            <option value="Bi-Monthly">Bi-Monthly</option>
+                            <option value="Quarterly">Quarterly</option>
+                            <option value="Yearly">Yearly</option>
+                          </select>
+                          {editingCategoryRecurrenceType !== 'One-time' && (
+                            <>
+                              <Input 
+                                type="number" 
+                                min="1" 
+                                step="1" 
+                                value={editingCategoryRecurrenceInterval} 
+                                onChange={e => setEditingCategoryRecurrenceInterval(e.target.value)} 
+                                className="form-input text-sm" 
+                                placeholder="Interval"
+                              />
+                              <Input 
+                                type="date" 
+                                value={editingCategoryDefaultRecurrenceEnd} 
+                                onChange={e => setEditingCategoryDefaultRecurrenceEnd(e.target.value)} 
+                                className="form-input text-sm" 
+                                placeholder="End date (optional)"
+                              />
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-start gap-1">
+                          <span className={`status-badge ${cat.recurrenceType && cat.recurrenceType !== 'One-time' ? 'status-badge-success' : 'status-badge'}`}>
+                            {cat.recurrenceType && cat.recurrenceType !== 'One-time' ? '🔁 Recurring' : 'One-time'}
+                          </span>
+                          {cat.recurrenceType && cat.recurrenceType !== 'One-time' && (
+                            <span className="text-xs text-muted-foreground">
+                              {formatCategoryRecurrenceInfo(cat)}
+                            </span>
+                          )}
+                        </div>
                       )}
                     </td>
                     <td className="p-3">
@@ -657,12 +1043,25 @@ const ExpensesPage: React.FC = () => {
             </div>
             <div>
               <label className="form-label">Category</label>
-              <select value={formCategory} onChange={e => setFormCategory(e.target.value)} className="form-select w-full bg-white border-border rounded-md py-2 px-3">
+              <select value={formCategory} onChange={e => handleCategorySelection(e.target.value)} className="form-select w-full bg-white border-border rounded-md py-2 px-3">
                 <option value="">Select category</option>
                 {expenseCategories.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
+                  <option key={c.id} value={c.id}>
+                    {c.name} {c.recurrenceType && c.recurrenceType !== 'One-time' ? '🔁' : ''}
+                  </option>
                 ))}
               </select>
+              {formCategory && (() => {
+                const selectedCategory = expenseCategories.find(cat => cat.id === formCategory);
+                return selectedCategory && selectedCategory.recurrenceType && selectedCategory.recurrenceType !== 'One-time' ? (
+                  <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
+                    <p className="text-sm text-blue-800">
+                      <strong>Category Default:</strong> This category repeats every {selectedCategory.recurrenceInterval || 1} {selectedCategory.recurrenceType.toLowerCase()}
+                      {selectedCategory.defaultRecurrenceEnd && ` until ${formatDate(selectedCategory.defaultRecurrenceEnd)}`}
+                    </p>
+                  </div>
+                ) : null;
+              })()}
             </div>
             <div>
               <label className="form-label">Amount</label>
@@ -704,6 +1103,72 @@ const ExpensesPage: React.FC = () => {
             <div className="md:col-span-3 flex items-center gap-2">
               <input id="repeatDaily" type="checkbox" checked={formRepeatDaily} onChange={e => setFormRepeatDaily(e.target.checked)} />
               <label htmlFor="repeatDaily" className="text-sm text-foreground">Repeat daily for selected month</label>
+            </div>
+            
+            {/* Recurrence Section */}
+            <div className="md:col-span-3 border-t border-border pt-4">
+              <h4 className="text-sm font-medium text-foreground mb-3">Recurrence Settings</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="form-label">Recurrence Type</label>
+                  <select 
+                    value={formRecurrenceType} 
+                    onChange={e => setFormRecurrenceType(e.target.value as any)} 
+                    className="form-select w-full bg-white border-border rounded-md py-2 px-3"
+                  >
+                    <option value="One-time">One-time</option>
+                    <option value="Daily">Daily</option>
+                    <option value="Weekly">Weekly</option>
+                    <option value="Monthly">Monthly</option>
+                    <option value="Bi-Monthly">Bi-Monthly</option>
+                    <option value="Quarterly">Quarterly</option>
+                    <option value="Yearly">Yearly</option>
+                  </select>
+                </div>
+                
+                {formRecurrenceType !== 'One-time' && (
+                  <div>
+                    <label className="form-label">Interval</label>
+                    <Input 
+                      type="number" 
+                      min="1" 
+                      step="1" 
+                      value={formRecurrenceInterval} 
+                      onChange={e => setFormRecurrenceInterval(e.target.value)} 
+                      className="form-input" 
+                      placeholder="1"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Every {formRecurrenceInterval} {formRecurrenceType.toLowerCase()}
+                    </p>
+                  </div>
+                )}
+                
+                {formRecurrenceType !== 'One-time' && (
+                  <div>
+                    <label className="form-label">End Date (Optional)</label>
+                    <Input 
+                      type="date" 
+                      value={formRecurrenceEndDate} 
+                      onChange={e => setFormRecurrenceEndDate(e.target.value)} 
+                      className="form-input" 
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Leave empty for indefinite recurrence
+                    </p>
+                  </div>
+                )}
+              </div>
+              
+              {formRecurrenceType !== 'One-time' && (
+                <div className="mt-3 p-3 bg-muted/30 rounded-md">
+                  <p className="text-sm text-foreground">
+                    <strong>Preview:</strong> This expense will repeat every {formRecurrenceInterval} {formRecurrenceType.toLowerCase()}
+                    {formRecurrenceEndDate && ` until ${formatDate(formRecurrenceEndDate)}`}
+                    . Next due: {formatDate(calculateNextDueDate(formDate, formRecurrenceType, Number(formRecurrenceInterval)))}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
           <AlertDialogFooter>
@@ -953,7 +1418,7 @@ const ExpensesPage: React.FC = () => {
                 <th className="text-right p-4 font-medium text-foreground">Amount</th>
                 <th className="text-center p-4 font-medium text-foreground">Mode</th>
                 <th className="text-left p-4 font-medium text-foreground">Notes</th>
-                <th className="text-center p-4 font-medium text-foreground">Type</th>
+                <th className="text-center p-4 font-medium text-foreground">Recurrence</th>
                 <th className="text-center p-4 font-medium text-foreground">Actions</th>
               </tr>
             </thead>
@@ -996,7 +1461,41 @@ const ExpensesPage: React.FC = () => {
                         <Input value={editNotes} onChange={(e) => setEditNotes(e.target.value)} className="form-input" placeholder="Notes" />
                   </td>
                   <td className="p-4 text-center">
-                        <span className="status-badge">—</span>
+                        <div className="flex flex-col gap-2">
+                          <select 
+                            value={editRecurrenceType} 
+                            onChange={e => setEditRecurrenceType(e.target.value as any)} 
+                            className="form-select w-full text-sm"
+                          >
+                            <option value="One-time">One-time</option>
+                            <option value="Daily">Daily</option>
+                            <option value="Weekly">Weekly</option>
+                            <option value="Monthly">Monthly</option>
+                            <option value="Bi-Monthly">Bi-Monthly</option>
+                            <option value="Quarterly">Quarterly</option>
+                            <option value="Yearly">Yearly</option>
+                          </select>
+                          {editRecurrenceType !== 'One-time' && (
+                            <>
+                              <Input 
+                                type="number" 
+                                min="1" 
+                                step="1" 
+                                value={editRecurrenceInterval} 
+                                onChange={e => setEditRecurrenceInterval(e.target.value)} 
+                                className="form-input text-sm" 
+                                placeholder="Interval"
+                              />
+                              <Input 
+                                type="date" 
+                                value={editRecurrenceEndDate} 
+                                onChange={e => setEditRecurrenceEndDate(e.target.value)} 
+                                className="form-input text-sm" 
+                                placeholder="End date (optional)"
+                              />
+                            </>
+                          )}
+                        </div>
                   </td>
                   <td className="p-4">
                     <div className="flex items-center justify-center space-x-2">
@@ -1016,7 +1515,26 @@ const ExpensesPage: React.FC = () => {
                         <span className={`status-badge ${expense.paymentMode === 'Cash' ? 'status-badge-warning' : 'status-badge-success'}`}>{expense.paymentMode}</span>
                       </td>
                       <td className="p-4 text-muted-foreground max-w-xs truncate">{expense.notes || '-'}</td>
-                      <td className="p-4 text-center">{expense.isMonthly ? (<span className="status-badge-success">Monthly</span>) : (<span className="status-badge">One-time</span>)}</td>
+                      <td className="p-4 text-center">
+                        <div className="flex flex-col items-center gap-1">
+                          <span className={`status-badge ${expense.recurrenceType && expense.recurrenceType !== 'One-time' ? 'status-badge-success' : 'status-badge'}`}>
+                            {expense.recurrenceType && expense.recurrenceType !== 'One-time' ? 'Recurring' : 'One-time'}
+                          </span>
+                          {expense.recurrenceType && expense.recurrenceType !== 'One-time' && (() => {
+                            const source = getRecurrenceSource(expense);
+                            return (
+                              <div className="text-xs text-muted-foreground text-center">
+                                <div>{formatRecurrenceInfo(expense)}</div>
+                                {source.isInherited ? (
+                                  <div className="text-blue-600">📋 From {source.categoryName}</div>
+                                ) : (
+                                  <div className="text-orange-600">✏️ Custom</div>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </td>
                       <td className="p-4">
                         <div className="flex items-center justify-center space-x-2">
                           <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" onClick={() => startEditExpense(expense)}>
