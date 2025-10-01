@@ -31,6 +31,7 @@ const SettingsPage: React.FC = () => {
     salaryCalculationMethod: '30-day' as '30-day' | 'calendar',
     currency: 'INR',
     settlementMode: 'monthly' as 'monthly' | 'carry_forward',
+    currentPeriodMonth: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
   });
 
   const [loading, setSaving] = useState(false);
@@ -60,25 +61,23 @@ const SettingsPage: React.FC = () => {
           }
         } catch (_) {}
 
-        for (const table of ['payroll_settings', 'payroll.settings']) {
-          try {
-            const { data, error } = await supabase
-              .from(table)
-              .select('salary_calc_method, currency, settlement_mode')
-              .eq('branch_id', selectedLocationId)
-              .maybeSingle();
-            if (error) throw error;
-            if (data) {
-              setFormData(prev => ({
-                ...prev,
-                salaryCalculationMethod: data.salary_calc_method === 'calendar' ? 'calendar' : '30-day',
-                currency: data.currency || 'INR',
-                settlementMode: (data.settlement_mode === 'carry_forward' ? 'carry_forward' : 'monthly') as 'monthly' | 'carry_forward',
-              }));
-              break;
-            }
-          } catch (_) {}
-        }
+        try {
+          const { data, error } = await supabase
+            .from('payroll_settings')
+            .select('salary_calc_method, currency, settlement_mode, current_period_month')
+            .eq('branch_id', selectedLocationId)
+            .maybeSingle();
+          if (!error && data) {
+            setFormData(prev => ({
+              ...prev,
+              salaryCalculationMethod: data.salary_calc_method === 'calendar' ? 'calendar' : '30-day',
+              currency: data.currency || 'INR',
+              settlementMode: (data.settlement_mode === 'carry_forward' ? 'carry_forward' : 'monthly') as 'monthly' | 'carry_forward',
+              currentPeriodMonth: data.current_period_month || prev.currentPeriodMonth,
+            }));
+            setSettings(prev => ({ ...prev, currentMonth: data.current_period_month || prev.currentMonth }));
+          }
+        } catch (_) {}
       } catch (_) {
         // ignore
       }
@@ -98,17 +97,15 @@ const SettingsPage: React.FC = () => {
         salary_calc_method: formData.salaryCalculationMethod,
         currency: formData.currency || 'INR',
         settlement_mode: formData.settlementMode,
+        current_period_month: formData.currentPeriodMonth,
       } as any;
       let lastError: any = null;
-      for (const table of ['payroll_settings', 'payroll.settings']) {
-        try {
-          const { error } = await supabase.from(table).upsert(payload);
-          if (error) throw error;
-          lastError = null;
-          break;
-        } catch (e) {
-          lastError = e;
-        }
+      try {
+        const { error } = await supabase.from('payroll_settings').upsert(payload);
+        if (error) throw error;
+        lastError = null;
+      } catch (e) {
+        lastError = e;
       }
       if (lastError) throw lastError;
       setSettings(prev => ({ ...prev, companyName: formData.companyName }));
@@ -167,8 +164,8 @@ const SettingsPage: React.FC = () => {
               <div className="flex space-x-2">
                 <Input
                   type="month"
-                  value={settings.currentMonth}
-                  onChange={(e) => setSettings(prev => ({ ...prev, currentMonth: e.target.value }))}
+                  value={formData.currentPeriodMonth || settings.currentMonth}
+                  onChange={(e) => setFormData(prev => ({ ...prev, currentPeriodMonth: e.target.value }))}
                   className="form-input"
                   disabled={!isOwner}
                 />

@@ -119,7 +119,14 @@ const StaffPage: React.FC = () => {
   const [editSaving, setEditSaving] = useState(false);
   const [useCustomRole, setUseCustomRole] = useState(false);
 
-  const getCurrentMonth = () => new Date().toISOString().slice(0, 7); // YYYY-MM
+  const getCurrentMonth = () => {
+    // Prefer settings current period from public.payroll_settings for selected branch
+    try {
+      const stored = localStorage.getItem('payroll_current_period_month');
+      if (stored) return stored;
+    } catch (_) {}
+    return new Date().toISOString().slice(0, 7);
+  };
   const getMonthEndDate = (yyyyMm: string) => {
     const [yStr, mStr] = yyyyMm.split('-');
     const y = Number(yStr);
@@ -152,13 +159,17 @@ const StaffPage: React.FC = () => {
         async (q) => await q.eq('month', month).in('staff_id', staffIds)
       );
 
-      // Advances aggregates (include current month window)
-      const { data: advData } = await supabase
-        .rpc('get_advances_by_staff', {
-          staff_ids: staffIds,
-          start_date: month + '-01',
-          end_date: getMonthEndDate(month)
-        });
+      // Advances aggregates (include current month window) via public.payroll_advances
+      let advData: any[] = [];
+      try {
+        const { data } = await supabase
+          .from('payroll_advances')
+          .select('staff_id, amount, date')
+          .gte('date', month + '-01')
+          .lte('date', getMonthEndDate(month))
+          .in('staff_id', staffIds as any);
+        advData = data || [];
+      } catch (_) {}
 
       const attendanceByStaff: Record<string, { present_days: number; paid_leaves: number; unpaid_leaves: number; absent_days: number; }> = {};
       (attData || []).forEach((row: any) => {
@@ -346,14 +357,13 @@ const StaffPage: React.FC = () => {
       const advanceIds = baseActs.filter(a => a.kind === 'Advance' && a.ref_id).map(a => a.ref_id as string);
       let advanceMap: Record<string, string> = {};
       if (advanceIds.length > 0) {
-        const { data: advanceData } = await supabase
-          .rpc('get_advances_by_ids', { advance_ids: advanceIds });
-        (advanceData || []).forEach((row: any) => { 
-          // Double-check that the advance is from the current location
-          if (row.branch_id === selectedLocationId) {
-            advanceMap[row.id] = row.staff_id; 
-          }
-        });
+        try {
+          const { data: advRows } = await supabase
+            .from('payroll_advances')
+            .select('id, staff_id')
+            .in('id', advanceIds as any);
+          (advRows || []).forEach((row: any) => { advanceMap[row.id] = row.staff_id; });
+        } catch (_) {}
       }
 
       // Determine staff IDs per activity
@@ -486,18 +496,13 @@ const StaffPage: React.FC = () => {
 
         // Load settlement mode for the branch
         try {
-          for (const table of ['payroll_settings', 'payroll.settings']) {
-            try {
-              const { data, error } = await supabase
-                .from(table)
-                .select('settlement_mode')
-                .eq('branch_id', selectedLocationId)
-                .maybeSingle();
-              if (!error && data) {
-                setSettlementMode((data.settlement_mode === 'carry_forward' ? 'carry_forward' : 'monthly') as 'monthly' | 'carry_forward');
-                break;
-              }
-            } catch (_) {}
+          const { data } = await supabase
+            .from('payroll_settings')
+            .select('settlement_mode')
+            .eq('branch_id', selectedLocationId)
+            .maybeSingle();
+          if (data) {
+            setSettlementMode((data.settlement_mode === 'carry_forward' ? 'carry_forward' : 'monthly') as 'monthly' | 'carry_forward');
           }
         } catch (_) {}
 
@@ -556,18 +561,13 @@ const StaffPage: React.FC = () => {
     try {
       // Reload settlement mode
       try {
-        for (const table of ['payroll_settings', 'payroll.settings']) {
-          try {
-            const { data, error } = await supabase
-              .from(table)
-              .select('settlement_mode')
-              .eq('branch_id', selectedLocationId)
-              .maybeSingle();
-            if (!error && data) {
-              setSettlementMode((data.settlement_mode === 'carry_forward' ? 'carry_forward' : 'monthly') as 'monthly' | 'carry_forward');
-              break;
-            }
-          } catch (_) {}
+        const { data } = await supabase
+          .from('payroll_settings')
+          .select('settlement_mode')
+          .eq('branch_id', selectedLocationId)
+          .maybeSingle();
+        if (data) {
+          setSettlementMode((data.settlement_mode === 'carry_forward' ? 'carry_forward' : 'monthly') as 'monthly' | 'carry_forward');
         }
       } catch (_) {}
 
@@ -1317,46 +1317,40 @@ const StaffPage: React.FC = () => {
                 const month = getCurrentMonth();
                 const today = new Date().toISOString().slice(0,10);
                 if (paymentType === 'Advance') {
-                  // Insert into advances (fallback to public view if available)
-                  const advancePayload = {
-                    staff_id: paymentStaffId,
-                    date: today,
-                    amount: amtNum,
-                    payment_mode: paymentModeSel,
-                    notes: paymentNotes || null
-                  };
-                  const { data: advanceId, error: advErr } = await supabase
-                    .rpc('insert_advance', {
-                      staff_id_param: paymentStaffId,
-                      date_param: new Date().toISOString().split('T')[0],
-                      amount_param: amtNum,
-                      payment_mode_param: paymentMode,
-                      notes_param: paymentNotes || null
-                    });
-                  if (advErr) throw advErr;
-                  // Also log to activity_logs
-                  let selectedLocation = '';
-                  try { const stored = localStorage.getItem(`selectedLocation_${user?.id}` || ''); selectedLocation = stored || ''; } catch (_) {}
-                  const actPayload = {
-                    branch_id: selectedLocation || null,
-                    kind: 'Advance',
-                    ref_table: 'payroll_advances',
-                    ref_id: advanceId,
-                    date: new Date().toISOString(),
-                    description: paymentNotes || null,
-                    amount: amtNum
-                  };
-                  const { error: actErr } = await supabase
-                    .rpc('insert_activity_log', {
-                      branch_id_param: selectedLocation || null,
-                      kind_param: 'Advance',
-                      ref_table_param: 'payroll_advances',
-                      ref_id_param: advanceId,
-                      date_param: new Date().toISOString(),
-                      description_param: paymentNotes || null,
-                      amount_param: amtNum
-                    });
-                  if (actErr) throw actErr;
+                  // Prefer RPC: public.insert_payroll_advance, fallback to direct insert if exposed
+                  const payload = {
+                    staff_id_param: paymentStaffId,
+                    date_param: today,
+                    amount_param: amtNum,
+                    payment_mode_param: paymentModeSel,
+                    notes_param: paymentNotes || null
+                  } as any;
+                  let inserted = false;
+                  try {
+                    const { error: rpcErr } = await supabase.rpc('insert_payroll_advance', payload);
+                    if (rpcErr) throw rpcErr;
+                    inserted = true;
+                  } catch (_) {
+                    // Fallback direct insert into payroll.advances if REST is exposed
+                    try {
+                      const { data: advRow, error: advErr } = await supabase
+                        .from('payroll.advances')
+                        .insert({
+                          staff_id: paymentStaffId,
+                          date: today,
+                          amount: amtNum,
+                          payment_mode: paymentModeSel,
+                          notes: paymentNotes || null
+                        })
+                        .select('id')
+                        .single();
+                      if (advErr) throw advErr;
+                      inserted = !!advRow?.id;
+                    } catch (e) {
+                      toast({ title: 'Advance not saved', description: 'Enable RPC insert_payroll_advance or expose payroll.advances for inserts.', variant: 'destructive' });
+                      throw e;
+                    }
+                  }
                 } else {
                   // Salary payment: call apply_salary_payment for FIFO allocation in carry-forward mode, else log activity
                   try {
@@ -1371,20 +1365,8 @@ const StaffPage: React.FC = () => {
                     };
                     const { error: applyErr } = await supabase.rpc('apply_salary_payment', params);
                     if (applyErr) {
-                      // Fallback to simple activity log if RPC not present
-                      let selectedLocation = '';
-                      try { const stored = localStorage.getItem(`selectedLocation_${user?.id}` || ''); selectedLocation = stored || ''; } catch (_) {}
-                      const { error: salErr } = await supabase
-                        .rpc('insert_activity_log', {
-                          branch_id_param: selectedLocation || null,
-                          kind_param: 'SalaryPayment',
-                          ref_table_param: 'payroll_staff',
-                          ref_id_param: paymentStaffId,
-                          date_param: new Date().toISOString(),
-                          description_param: withUpi,
-                          amount_param: amtNum
-                        });
-                      if (salErr) throw salErr;
+                      toast({ title: 'Payment RPC missing', description: 'Backend must expose apply_salary_payment RPC', variant: 'destructive' });
+                      throw applyErr;
                     }
                   } catch (err) {
                     throw err;

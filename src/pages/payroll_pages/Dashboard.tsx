@@ -59,6 +59,10 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const selectedLocationId = useSelectedLocation();
   const [selectedMonth, setSelectedMonth] = useState(() => {
+    try {
+      const stored = localStorage.getItem('payroll_current_period_month');
+      if (stored) return stored;
+    } catch (_) {}
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
@@ -102,18 +106,17 @@ const Dashboard: React.FC = () => {
 
         // Load branch settlement mode
         try {
-          for (const t of ['payroll_settings', 'payroll.settings']) {
-            try {
-              const { data } = await supabase
-                .from(t)
-                .select('settlement_mode')
-                .eq('branch_id', selectedLocationId)
-                .maybeSingle();
-              if (data) {
-                setSettlementMode((data.settlement_mode === 'carry_forward' ? 'carry_forward' : 'monthly') as 'monthly' | 'carry_forward');
-                break;
-              }
-            } catch (_) {}
+          const { data } = await supabase
+            .from('payroll_settings')
+            .select('settlement_mode, current_period_month')
+            .eq('branch_id', selectedLocationId)
+            .maybeSingle();
+          if (data) {
+            setSettlementMode((data.settlement_mode === 'carry_forward' ? 'carry_forward' : 'monthly') as 'monthly' | 'carry_forward');
+            if (data.current_period_month) {
+              setSelectedMonth(data.current_period_month);
+              try { localStorage.setItem('payroll_current_period_month', data.current_period_month); } catch (_) {}
+            }
           }
         } catch (_) {}
 
@@ -138,17 +141,17 @@ const Dashboard: React.FC = () => {
 
         const staffIds = staffMapped.map(s => s.id);
 
-        // Advances in month
+        // Advances in month (via view)
         let totalAdvances = 0;
         let advancesData: any[] = [];
         if (staffIds.length > 0) {
-          const { data: advancesDataResult } = await supabase
-            .rpc('get_advances_by_staff', {
-              staff_ids: staffIds,
-              start_date: monthStart,
-              end_date: monthEnd
-            });
-          advancesData = advancesDataResult || [];
+          const { data: advancesRows } = await supabase
+            .from('payroll_advances')
+            .select('staff_id, amount, date')
+            .gte('date', monthStart)
+            .lte('date', monthEnd)
+            .in('staff_id', staffIds as any);
+          advancesData = advancesRows || [];
           totalAdvances = advancesData.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
         }
 
@@ -281,9 +284,11 @@ const Dashboard: React.FC = () => {
         const advanceIds = (payActs || []).filter(r => r.kind === 'Advance' && r.ref_id).map(r => r.ref_id);
         const advanceIdToStaff: Record<string, string> = {};
         if (advanceIds.length > 0) {
-          const { data: advanceData } = await supabase
-            .rpc('get_advances_by_ids', { advance_ids: advanceIds });
-          (advanceData || []).forEach((row: any) => { advanceIdToStaff[row.id] = row.staff_id; });
+          const { data: advRows } = await supabase
+            .from('payroll_advances')
+            .select('id, staff_id')
+            .in('id', advanceIds as any);
+          (advRows || []).forEach((row: any) => { advanceIdToStaff[row.id] = row.staff_id; });
         }
         // Build staff id -> name map; fetch missing names if needed
         const staffIdToName: Record<string, string> = {};
@@ -449,13 +454,13 @@ const Dashboard: React.FC = () => {
         // Prev advances
         let prevAdvances = 0;
         try {
-          const { data: advanceData } = await supabase
-            .rpc('get_advances_by_staff', {
-              staff_ids: staffIds,
-              start_date: prevStart,
-              end_date: prevEnd
-            });
-          prevAdvances = (advanceData || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+          const { data: prevAdvRows } = await supabase
+            .from('payroll_advances')
+            .select('staff_id, amount, date')
+            .gte('date', prevStart)
+            .lte('date', prevEnd)
+            .in('staff_id', staffIds as any);
+          prevAdvances = (prevAdvRows || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
         } catch (_) {}
         const prevPayable = Math.max(0, prevSalaries - prevAdvances); // ignoring prev paid here for comparable figure
         const prevNet = prevSalaries + prevExpenses;
