@@ -771,12 +771,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                             )}
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 ">
-                            {(() => {
-                              const currentAmount = log.Amount || 0;
-                              const discountAmount = log.discount || 0;
-                              const originalAmount = currentAmount - discountAmount;
-                              return originalAmount > 0 ? formatCurrency(originalAmount) : "-";
-                            })()}
+                            {log.Amount ? formatCurrency(log.Amount) : "-"}
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">

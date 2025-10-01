@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
 // import { ScratchMarking } from "@/components/ScratchMarking";
 import { LocationAutocomplete } from "@/components/LocationAutocomplete";
@@ -809,7 +810,7 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
   useEffect(() => {
     if (entryType !== 'workshop') return;
     if (!workshop || !vehicleType) return;
-    if (workshop === 'OTHER WORKSHOPS') { setDiscount('50'); return; }
+    //if (workshop === 'OTHER WORKSHOPS') { setDiscount('50'); return; }
     const targetWorkshop = workshop.trim().toUpperCase();
     const targetVehicle = vehicleType.trim().toUpperCase();
     const row = workshopPriceMatrix.find((r: any) => {
@@ -2909,20 +2910,21 @@ export default function ManagerOwnerEntry({ selectedLocation }: ManagerOwnerEntr
                       </p>
                     </div>
                   ) : (
-                    <>
-                      <Select value={selectedUpiAccount} onValueChange={setSelectedUpiAccount}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select UPI account" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {upiAccounts.map((account) => (
-                            <SelectItem key={account.id} value={account.id}>
-                              {account.account_name} - {account.upi_id} ({account.location_name || 'N/A'})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </>
+                    <div className="space-y-3 p-3 border rounded-lg bg-muted/10">
+                      <RadioGroup value={selectedUpiAccount} onValueChange={setSelectedUpiAccount}>
+                        {upiAccounts.map((account) => (
+                          <div key={account.id} className="flex items-start gap-3 p-2 rounded-md hover:bg-muted/40">
+                            <RadioGroupItem value={account.id} id={`upi-${account.id}`} />
+                            <label htmlFor={`upi-${account.id}`} className="flex-1 cursor-pointer">
+                              <div className="flex flex-col">
+                                <span className="text-sm font-medium">{account.account_name}</span>
+                                <span className="text-xs text-muted-foreground">{account.upi_id} {account.location_name ? `• ${account.location_name}` : ''}</span>
+                              </div>
+                            </label>
+                          </div>
+                        ))}
+                      </RadioGroup>
+                    </div>
                   )}
 
                   {/* QR Code Display */}
