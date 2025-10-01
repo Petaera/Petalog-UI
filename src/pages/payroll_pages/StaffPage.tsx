@@ -47,6 +47,7 @@ interface Staff {
   paymentMode: string;
   dp_url: string | null;
   doc_url: string[] | null;
+  carryForwardBalance?: number;
 }
 
 interface PayrollLine {
@@ -108,6 +109,9 @@ const StaffPage: React.FC = () => {
   const [activitiesLoading, setActivitiesLoading] = useState(false);
   const [leaves, setLeaves] = useState<Array<{ id: string; staff_id: string; start_date: string; end_date: string; leave_type: 'Paid' | 'Unpaid'; notes: string | null }>>([]);
   const [leavesLoading, setLeavesLoading] = useState(false);
+  const [settlementMode, setSettlementMode] = useState<'monthly' | 'carry_forward'>('monthly');
+  const [allocationPreview, setAllocationPreview] = useState<Array<{ month: string; applied: number; remaining: number }>>([]);
+  const [allocationLoading, setAllocationLoading] = useState(false);
 
 
   const { accounts: upiAccounts } = useUpiAccounts(selectedLocationId);
@@ -186,11 +190,48 @@ const StaffPage: React.FC = () => {
         salaryPaidByStaff[sid] = (salaryPaidByStaff[sid] || 0) + Number(row.amount || 0);
       });
 
+      // Carry-forward balances for current month (if available and enabled)
+      const carryForwardByStaff: Record<string, number> = {};
+      if (settlementMode === 'carry_forward') {
+        const tables = ['payroll_lines', 'payroll.payroll_lines'];
+        for (const table of tables) {
+          try {
+            // First try selecting the carry_forward_balance column
+            const { data: cfRows } = await supabase
+              .from(table)
+              .select('staff_id, carry_forward_balance, month')
+              .eq('month', month)
+              .in('staff_id', staffIds as any);
+            (cfRows || []).forEach((row: any) => {
+              carryForwardByStaff[row.staff_id] = Number(row.carry_forward_balance || 0);
+            });
+            break;
+          } catch (_) {
+            try {
+              // Fallback: select without the new column to avoid 400s on older schemas
+              const { data: cfRowsLite } = await supabase
+                .from(table)
+                .select('staff_id, month')
+                .eq('month', month)
+                .in('staff_id', staffIds as any);
+              (cfRowsLite || []).forEach((row: any) => {
+                carryForwardByStaff[row.staff_id] = 0;
+              });
+              break;
+            } catch (_) {
+              // try next table name
+            }
+          }
+        }
+      }
+
       const merged = baseStaff.map(s => {
         const att = attendanceByStaff[s.id] || { present_days: 0, paid_leaves: 0, unpaid_leaves: 0, absent_days: 0 };
         const advances = advancesByStaff[s.id] || 0;
         const paid = salaryPaidByStaff[s.id] || 0;
-        const payable = Math.max(0, (s.monthlySalary || 0) - advances - paid);
+        const cf = carryForwardByStaff[s.id] || 0;
+        const payableBase = (s.monthlySalary || 0) + (settlementMode === 'carry_forward' ? cf : 0);
+        const payable = Math.max(0, payableBase - advances - paid);
         return {
           ...s,
           presentDays: att.present_days,
@@ -201,7 +242,8 @@ const StaffPage: React.FC = () => {
           salaryPaid: paid,
           payableSalary: payable,
           dp_url: s.dp_url,
-        doc_url: s.doc_url || null,
+          doc_url: s.doc_url || null,
+          carryForwardBalance: cf,
         } as Staff;
       });
 
@@ -442,6 +484,23 @@ const StaffPage: React.FC = () => {
           return;
         }
 
+        // Load settlement mode for the branch
+        try {
+          for (const table of ['payroll_settings', 'payroll.settings']) {
+            try {
+              const { data, error } = await supabase
+                .from(table)
+                .select('settlement_mode')
+                .eq('branch_id', selectedLocationId)
+                .maybeSingle();
+              if (!error && data) {
+                setSettlementMode((data.settlement_mode === 'carry_forward' ? 'carry_forward' : 'monthly') as 'monthly' | 'carry_forward');
+                break;
+              }
+            } catch (_) {}
+          }
+        } catch (_) {}
+
         // Use RPC function to get staff by branch
         const { data: staffData, error: staffError } = await supabase
           .rpc('get_staff_by_branch', { branch_id_param: selectedLocationId });
@@ -495,6 +554,23 @@ const StaffPage: React.FC = () => {
     if (!user?.id || !selectedLocationId) return;
     setLoading(true);
     try {
+      // Reload settlement mode
+      try {
+        for (const table of ['payroll_settings', 'payroll.settings']) {
+          try {
+            const { data, error } = await supabase
+              .from(table)
+              .select('settlement_mode')
+              .eq('branch_id', selectedLocationId)
+              .maybeSingle();
+            if (!error && data) {
+              setSettlementMode((data.settlement_mode === 'carry_forward' ? 'carry_forward' : 'monthly') as 'monthly' | 'carry_forward');
+              break;
+            }
+          } catch (_) {}
+        }
+      } catch (_) {}
+
       // Use RPC function to get staff by branch
       const { data: staffData, error: staffError } = await supabase
         .rpc('get_staff_by_branch', { branch_id_param: selectedLocationId });
@@ -861,6 +937,34 @@ const StaffPage: React.FC = () => {
     return mode || '—';
   };
 
+  // Preview allocation for carry-forward mode
+  useEffect(() => {
+    const loadPreview = async () => {
+      if (settlementMode !== 'carry_forward') { setAllocationPreview([]); return; }
+      if (!paymentStaffId || !paymentAmount || paymentType !== 'Salary') { setAllocationPreview([]); return; }
+      try {
+        setAllocationLoading(true);
+        // Try RPC: preview_salary_allocation(staff_id, amount)
+        try {
+          const { data } = await supabase.rpc('preview_salary_allocation', {
+            staff_id_param: paymentStaffId,
+            amount_param: Number(paymentAmount)
+          });
+          if (Array.isArray(data)) {
+            const rows = data.map((r: any) => ({ month: r.month, applied: Number(r.applied || 0), remaining: Number(r.remaining || 0) }));
+            setAllocationPreview(rows);
+            return;
+          }
+        } catch (_) {}
+        // Fallback: no server preview available
+        setAllocationPreview([]);
+      } finally {
+        setAllocationLoading(false);
+      }
+    };
+    loadPreview();
+  }, [settlementMode, paymentStaffId, paymentAmount, paymentType]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -1186,6 +1290,20 @@ const StaffPage: React.FC = () => {
               <Input value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} placeholder="Optional" />
             </div>
           </div>
+          {settlementMode === 'carry_forward' && paymentType === 'Salary' && allocationPreview.length > 0 && (
+            <div className="mt-3 text-xs text-muted-foreground">
+              {allocationLoading ? 'Calculating allocation…' : (
+                <div>
+                  Payment allocation:
+                  <ul className="list-disc pl-5 mt-1">
+                    {allocationPreview.map((p, idx) => (
+                      <li key={idx}>{`${formatCurrency(p.applied)} will settle ${new Date(p.month + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}${p.remaining > 0 ? ` (remaining ${formatCurrency(p.remaining)})` : ''}`}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
           <div className="mt-4 flex justify-end gap-2">
             <Button variant="outline" onClick={() => setShowPaymentPanel(false)}>Close</Button>
             <Button disabled={savingPayment} onClick={async () => {
@@ -1240,32 +1358,37 @@ const StaffPage: React.FC = () => {
                     });
                   if (actErr) throw actErr;
                 } else {
-                  // Salary payment: log to activity_logs with ref_id = staff_id
-                  let selectedLocation = '';
-                  try { const stored = localStorage.getItem(`selectedLocation_${user?.id}` || ''); selectedLocation = stored || ''; } catch (_) {}
-                  const withUpi = paymentModeSel === 'UPI' && selectedUpiAccountId
-                    ? `${paymentNotes ? paymentNotes + ' | ' : ''}UPI:${upiAccounts.find(a => a.id === selectedUpiAccountId)?.account_name || ''}`
-                    : paymentNotes || null;
-                  const actPayload = {
-                    branch_id: selectedLocation || null,
-                    kind: 'SalaryPayment',
-                    ref_table: 'payroll_staff',
-                    ref_id: paymentStaffId,
-                    date: new Date().toISOString(),
-                    description: withUpi,
-                    amount: amtNum
-                  };
-                  const { error: salErr } = await supabase
-                    .rpc('insert_activity_log', {
-                      branch_id_param: selectedLocation || null,
-                      kind_param: 'SalaryPayment',
-                      ref_table_param: 'payroll_staff',
-                      ref_id_param: paymentStaffId,
-                      date_param: new Date().toISOString(),
-                      description_param: withUpi,
-                      amount_param: amtNum
-                    });
-                  if (salErr) throw salErr;
+                  // Salary payment: call apply_salary_payment for FIFO allocation in carry-forward mode, else log activity
+                  try {
+                    const withUpi = paymentModeSel === 'UPI' && selectedUpiAccountId
+                      ? `${paymentNotes ? paymentNotes + ' | ' : ''}UPI:${upiAccounts.find(a => a.id === selectedUpiAccountId)?.account_name || ''}`
+                      : paymentNotes || null;
+                    const params: any = {
+                      staff_id_param: paymentStaffId,
+                      amount_param: amtNum,
+                      payment_mode_param: paymentModeSel,
+                      ref_param: withUpi || null,
+                    };
+                    const { error: applyErr } = await supabase.rpc('apply_salary_payment', params);
+                    if (applyErr) {
+                      // Fallback to simple activity log if RPC not present
+                      let selectedLocation = '';
+                      try { const stored = localStorage.getItem(`selectedLocation_${user?.id}` || ''); selectedLocation = stored || ''; } catch (_) {}
+                      const { error: salErr } = await supabase
+                        .rpc('insert_activity_log', {
+                          branch_id_param: selectedLocation || null,
+                          kind_param: 'SalaryPayment',
+                          ref_table_param: 'payroll_staff',
+                          ref_id_param: paymentStaffId,
+                          date_param: new Date().toISOString(),
+                          description_param: withUpi,
+                          amount_param: amtNum
+                        });
+                      if (salErr) throw salErr;
+                    }
+                  } catch (err) {
+                    throw err;
+                  }
                 }
                 toast({ title: 'Payment recorded' });
                 setShowPaymentPanel(false);
@@ -1676,6 +1799,9 @@ const StaffPage: React.FC = () => {
                 {user?.role === 'owner' && (
                   <th className="text-right p-4 font-medium text-foreground">Salary</th>
                 )}
+                {user?.role === 'owner' && settlementMode === 'carry_forward' && (
+                  <th className="text-right p-4 font-medium text-foreground">Carry Fwd</th>
+                )}
                 <th className="text-center p-4 font-medium text-foreground">Attendance</th>
                 <th className="text-center p-4 font-medium text-foreground">Leaves</th>
                 <th className="text-center p-4 font-medium text-foreground">Advances</th>
@@ -1752,6 +1878,11 @@ const StaffPage: React.FC = () => {
                       </div>
                     </td>
                   )}
+                {user?.role === 'owner' && settlementMode === 'carry_forward' && (
+                  <td className="p-4 text-right font-medium text-foreground">
+                    {formatCurrency(member.carryForwardBalance || 0)}
+                  </td>
+                )}
                   <td className="p-4 text-center text-foreground">
                     <div className="flex flex-col items-center">
                       <span className="text-green-600 font-medium">{`${member.presentDays || 0}P`}</span>

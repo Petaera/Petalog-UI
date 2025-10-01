@@ -30,6 +30,7 @@ const SettingsPage: React.FC = () => {
     companyName: settings.companyName,
     salaryCalculationMethod: '30-day' as '30-day' | 'calendar',
     currency: 'INR',
+    settlementMode: 'monthly' as 'monthly' | 'carry_forward',
   });
 
   const [loading, setSaving] = useState(false);
@@ -63,7 +64,7 @@ const SettingsPage: React.FC = () => {
           try {
             const { data, error } = await supabase
               .from(table)
-              .select('salary_calc_method, currency')
+              .select('salary_calc_method, currency, settlement_mode')
               .eq('branch_id', selectedLocationId)
               .maybeSingle();
             if (error) throw error;
@@ -72,6 +73,7 @@ const SettingsPage: React.FC = () => {
                 ...prev,
                 salaryCalculationMethod: data.salary_calc_method === 'calendar' ? 'calendar' : '30-day',
                 currency: data.currency || 'INR',
+                settlementMode: (data.settlement_mode === 'carry_forward' ? 'carry_forward' : 'monthly') as 'monthly' | 'carry_forward',
               }));
               break;
             }
@@ -95,6 +97,7 @@ const SettingsPage: React.FC = () => {
         branch_id: selectedLocationId,
         salary_calc_method: formData.salaryCalculationMethod,
         currency: formData.currency || 'INR',
+        settlement_mode: formData.settlementMode,
       } as any;
       let lastError: any = null;
       for (const table of ['payroll_settings', 'payroll.settings']) {
@@ -223,6 +226,43 @@ const SettingsPage: React.FC = () => {
             </div>
             <p className="text-xs text-muted-foreground mt-2">
               This affects how daily rates are calculated for salary and attendance
+            </p>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Settlement Mode</label>
+            <div className="space-y-3">
+              <div className="flex items-center space-x-3">
+                <input
+                  type="radio"
+                  id="settleMonthly"
+                  value="monthly"
+                  checked={formData.settlementMode === 'monthly'}
+                  onChange={(e) => handleInputChange('settlementMode', e.target.value)}
+                  className="w-4 h-4 text-primary focus:ring-primary"
+                  disabled={!isOwner}
+                />
+                <label htmlFor="settleMonthly" className="text-sm text-foreground">
+                  <strong>Settle monthly</strong> - All dues settled within the month
+                </label>
+              </div>
+              <div className="flex items-center space-x-3">
+                <input
+                  type="radio"
+                  id="carryForward"
+                  value="carry_forward"
+                  checked={formData.settlementMode === 'carry_forward'}
+                  onChange={(e) => handleInputChange('settlementMode', e.target.value)}
+                  className="w-4 h-4 text-primary focus:ring-primary"
+                  disabled={!isOwner}
+                />
+                <label htmlFor="carryForward" className="text-sm text-foreground">
+                  <strong>Carry forward unpaid salaries</strong> - Roll unpaid balances to next month
+                </label>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              In carry-forward mode, payments are applied FIFO to oldest dues.
             </p>
           </div>
 
