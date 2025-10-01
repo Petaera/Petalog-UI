@@ -964,6 +964,15 @@ export function Customers() {
         setIsLoading(false);
         return;
       }
+      
+      // Validate payment amount
+      const validationPlan = (schemes || []).find((p: any) => p.id === (selectedPlanId || selectedScheme)) || {};
+      const planAmount = validationPlan?.plan_amount || validationPlan?.price || 0;
+      if (!planAmount || Number(planAmount) <= 0) {
+        toast({ title: 'Payment amount required', description: 'Please enter a valid payment amount', variant: 'destructive' });
+        setIsLoading(false);
+        return;
+      }
 
       // 1) Handle vehicle - reuse existing ID if available, otherwise create/update
       let vehicleId: string | null = null;
@@ -1175,7 +1184,7 @@ export function Customers() {
             {
               purchase_id: purchaseIdOut,
               customer_id: customerId,
-              amount: Number(totalValue || 0),
+              amount: Number(actualAmountPaid || 0),
               payment_method: normalizedMethod,
               payment_meta: paymentMeta,
               created_by: user?.id || null,
@@ -1201,7 +1210,7 @@ export function Customers() {
                 {
                   credit_account_id: creditAcc.id,
                   transaction_type: 'topup',
-                  amount: Number(totalValue || 0),
+                  amount: Number(actualAmountPaid || 0),
                   related_payment_id: relatedPaymentId || null,
                   created_by: user?.id || null,
                 }
@@ -1226,7 +1235,7 @@ export function Customers() {
           }
           const typeNorm = String(planRow?.type || '').toLowerCase().trim();
           if (typeNorm === 'credit') {
-            const amount = Number(selPlan?.price || planRow?.price || 0) || 0;
+            const amount = Number(actualAmountPaid || selPlan?.price || planRow?.price || 0) || 0;
             const nowIso = new Date().toISOString();
             const insertPayload = {
               customer_id: customerId,
@@ -1483,7 +1492,7 @@ export function Customers() {
           'Location': location.name || '',
           'Plan Name': plan.name || '',
           'Plan Type': plan.type || '',
-          'Plan Price': plan.price ? `₹${plan.price}` : '',
+          'Plan Price': plan.plan_amount ? `₹${plan.plan_amount}` : (plan.price ? `₹${plan.price}` : ''),
           'Plan Amount': plan.plan_amount ? `₹${plan.plan_amount}` : '',
           'Multiplier': plan.multiplier || '',
           'Vehicle Number': vehicle.number_plate || '',
@@ -1622,7 +1631,7 @@ export function Customers() {
                             className={`w-full justify-between border transition-colors ${selectedPlanId === p.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-foreground hover:bg-muted border-border'}`}
                             onClick={() => handlePlanSelect(p.id)}
                           >
-                            <span>{p.name} - ₹{p.price || p.plan_amount || 0}</span>
+                            <span>{p.name} - ₹{p.plan_amount || p.price || 0}</span>
                             <span className={`ml-2 px-2 py-0.5 rounded text-xs border ${selectedPlanId === p.id ? 'bg-white/10 text-white border-white/20' : typeColor}`}>{type.charAt(0).toUpperCase() + type.slice(1)}</span>
                           </Button>
                         );
@@ -1738,6 +1747,39 @@ export function Customers() {
                       <option value="Pay later">Pay later</option>
                     </select>
                   </div>
+                  <div>
+                    <label className="block mb-1 font-medium">Amount Paid (₹)</label>
+                    <Input 
+                      type="number" 
+                      min="0" 
+                      step="0.01"
+                      value={selectedPlanId ? (() => {
+                        const plan = schemes.find(p => p.id === selectedPlanId);
+                        return plan?.plan_amount ? String(plan.plan_amount) : '';
+                      })() : ''} 
+                      onChange={(e) => {
+                        // Update the plan_amount in the schemes array
+                        const planIndex = schemes.findIndex(p => p.id === selectedPlanId);
+                        if (planIndex !== -1) {
+                          const updatedSchemes = [...schemes];
+                          updatedSchemes[planIndex] = { ...updatedSchemes[planIndex], plan_amount: Number(e.target.value) };
+                          setSchemes(updatedSchemes);
+                        }
+                      }} 
+                      placeholder="Enter amount customer paid" 
+                    />
+                    {(() => {
+                      const plan = schemes.find(p => p.id === selectedPlanId);
+                      if (plan && plan.price && plan.plan_amount && plan.price !== plan.plan_amount) {
+                        return (
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            Plan value: ₹{plan.price} | Customer pays: ₹{plan.plan_amount}
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
                   {paymentMethod === 'UPI' && (
                     <div className="space-y-2">
                       <div>
@@ -1798,7 +1840,10 @@ export function Customers() {
                     <Input value={vehicleDetails.type || ''} onChange={(e) => setVehicleDetails({ ...vehicleDetails, type: e.target.value })} placeholder="Type (car/bike)" />
                   </div>
                   <div className="flex justify-end">
-                    <Button className="mt-2" onClick={handleSaveCustomer} disabled={isLoading || !(selectedPlanId || selectedScheme) || !(customerDetails?.phone || '').trim()}>
+                    <Button className="mt-2" onClick={handleSaveCustomer} disabled={isLoading || !(selectedPlanId || selectedScheme) || !(customerDetails?.phone || '').trim() || !(() => {
+                      const plan = schemes.find(p => p.id === (selectedPlanId || selectedScheme));
+                      return plan && (plan.plan_amount || plan.price) && Number(plan.plan_amount || plan.price) > 0;
+                    })()}>
                       {isLoading ? 'Saving...' : 'Save & Add to Scheme'}
                     </Button>
                   </div>
@@ -2055,7 +2100,7 @@ export function Customers() {
                   <CardContent>
                     <div className="text-sm text-muted-foreground">
                       <div>Type: {plan.type}</div>
-                      <div>Price: {plan.price ? `₹${plan.price}` : '-'}</div>
+                      <div>Price: {plan.plan_amount ? `₹${plan.plan_amount}` : (plan.price ? `₹${plan.price}` : '-')}</div>
                       <div>Max Redemptions: {plan.max_redemptions ?? '-'}</div>
                       <div>Currency: {plan.currency || '-'}</div>
                     </div>
@@ -2221,7 +2266,7 @@ export function Customers() {
                         <div className="text-sm text-muted-foreground grid grid-cols-2 gap-2">
                           <div>Name: {plan.name || '-'}</div>
                           <div>Type: {plan.type || '-'}</div>
-                          <div>Price: {plan.price ? `₹${plan.price}` : '-'}</div>
+                          <div>Price: {plan.plan_amount ? `₹${plan.plan_amount}` : (plan.price ? `₹${plan.price}` : '-')}</div>
                           <div>Max Redemptions: {plan.max_redemptions ?? '-'}</div>
                           <div>Start Date: {selectedPurchase.start_date ? new Date(selectedPurchase.start_date).toLocaleDateString() : '-'}</div>
                           <div>Expiry: {selectedPurchase.expiry_date ? new Date(selectedPurchase.expiry_date).toLocaleDateString() : '-'}</div>

@@ -25,12 +25,41 @@ export function SubscriptionSchemes() {
   const { toast } = useToast();
   const { user } = useAuth();
   const [schemes, setSchemes] = useState([]);
+  const [userCounts, setUserCounts] = useState<Record<string, number>>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   
   // Check if user is manager and get their role
   const isManager = user?.role?.toLowerCase() === 'manager';
   const userAssignedLocation = user?.assigned_location;
+
+  // Function to fetch user counts for schemes
+  const fetchUserCounts = async (schemeIds: string[]) => {
+    if (schemeIds.length === 0) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('subscription_purchases')
+        .select('plan_id')
+        .in('plan_id', schemeIds)
+        .eq('status', 'active');
+      
+      if (error) {
+        console.error('Error fetching user counts:', error);
+        return;
+      }
+      
+      // Count users per plan
+      const counts: Record<string, number> = {};
+      (data || []).forEach(purchase => {
+        counts[purchase.plan_id] = (counts[purchase.plan_id] || 0) + 1;
+      });
+      
+      setUserCounts(counts);
+    } catch (error) {
+      console.error('Unexpected error fetching user counts:', error);
+    }
+  };
 
   useEffect(() => {
     async function fetchSchemes() {
@@ -68,6 +97,10 @@ export function SubscriptionSchemes() {
           toast({ title: 'Failed to load plans', description: 'Please refresh and try again.', variant: 'destructive' });
         } else {
           setSchemes(data || []);
+          
+          // Fetch user counts for the schemes
+          const schemeIds = (data || []).map(scheme => scheme.id);
+          await fetchUserCounts(schemeIds);
         }
       } catch (error) {
         console.error('Unexpected error in fetchSchemes:', error);
@@ -99,6 +132,12 @@ export function SubscriptionSchemes() {
       toast({ title: 'Delete failed', description: 'Could not delete this plan.', variant: 'destructive' });
     } else {
       setSchemes((prev) => prev.filter((scheme) => scheme.id !== id));
+      // Update user counts by removing the deleted scheme
+      setUserCounts((prev) => {
+        const updated = { ...prev };
+        delete updated[id];
+        return updated;
+      });
       toast({ title: 'Plan deleted' });
     }
   };
@@ -239,7 +278,7 @@ export function SubscriptionSchemes() {
                   <div className="flex items-center gap-2">
                     <Users className="w-4 h-4 text-muted-foreground" />
                     <span className="text-sm text-foreground">
-                      {scheme.user_count !== undefined ? scheme.user_count : 'N/A'} users
+                      {userCounts[scheme.id] || 0} users
                     </span>
                   </div>
                   <div className="flex items-center gap-2">

@@ -74,7 +74,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
       // Ensure user can only edit their own plans
       const { data: plan, error } = await supabase
         .from('subscription_plans')
-        .select('id, name, type, duration_days, price, multiplier, short_description, currency, allow_multiple_locations, max_redemptions, allowed_payment_methods, allowed_locations, mixed_handling, allow_mixed_handling, expiry, refund_policy, owner_id')
+        .select('id, name, type, duration_days, price, plan_amount, multiplier, short_description, currency, allow_multiple_locations, max_redemptions, allowed_payment_methods, allowed_locations, mixed_handling, allow_mixed_handling, expiry, refund_policy, owner_id')
         .eq('id', planId)
         .eq('owner_id', user.id) // Only allow editing plans owned by the current user
         .maybeSingle();
@@ -89,7 +89,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
         name: plan.name || '',
         type: plan.type || '',
         duration_days: plan.duration_days != null ? String(plan.duration_days) : '',
-        price: plan.price != null ? String(plan.price) : '',
+        price: plan.plan_amount != null ? String(plan.plan_amount) : (plan.price != null ? String(plan.price) : ''),
         multiplier: plan.multiplier != null ? String(plan.multiplier) : '',
         description: plan.short_description || '',
         paymentModes: plan.allowed_payment_methods ? String(plan.allowed_payment_methods).split(',').map((s: string) => s.trim()).filter(Boolean) : [],
@@ -107,6 +107,18 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
   }, [isEditMode, planId]);
 
   const handleNext = async () => {
+    // Validation for step 5 (Rewards & Perks) - require price for package/visit plans
+    if (currentStep === 5) {
+      if ((formData.type === 'visit' || formData.type === 'package') && (!formData.price || Number(formData.price) <= 0)) {
+        toast({ title: 'Price Required', description: 'Please enter a valid price for package/visit plans', status: 'error' });
+        return;
+      }
+      if (formData.type === 'credit' && (!formData.price || Number(formData.price) <= 0)) {
+        toast({ title: 'Value Required', description: 'Please enter a valid value for credit plans', status: 'error' });
+        return;
+      }
+    }
+    
     if (currentStep < steps.length) {
       setCurrentStep(currentStep + 1);
     } else {
@@ -128,6 +140,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
               ? Number(formData.max_redemptions)
               : null,
           price: String(formData.price || '').trim() !== '' ? Number(formData.price) : 0,
+          plan_amount: String(formData.price || '').trim() !== '' ? Number(formData.price) : null,
           multiplier: String(formData.multiplier || '').trim() !== '' ? Number(formData.multiplier) : null,
           short_description: formData.description.trim() || null,
           allow_multiple_locations: formData.multiple_locations === 'yes',
@@ -177,6 +190,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
             ? Number(formData.max_redemptions)
             : null,
         price: String(formData.price || '').trim() !== '' ? Number(formData.price) : 0,
+        plan_amount: String(formData.price || '').trim() !== '' ? Number(formData.price) : null,
         multiplier: String(formData.multiplier || '').trim() !== '' ? Number(formData.multiplier) : null,
         short_description: formData.description.trim() || null,
         currency: 'INR',
@@ -254,6 +268,7 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
           ? Number(formData.max_redemptions)
           : null,
       price: String(formData.price || '').trim() !== '' ? Number(formData.price) : 0,
+      plan_amount: String(formData.price || '').trim() !== '' ? Number(formData.price) : null,
       multiplier: String(formData.multiplier || '').trim() !== '' ? Number(formData.multiplier) : null,
       short_description: formData.description.trim() || null,
       allow_multiple_locations: formData.multiple_locations === 'yes',
@@ -635,23 +650,37 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
             <p className="text-muted-foreground">Attach loyalty perks to make your scheme attractive.</p>
             <div className="space-y-4">
               {(formData.type === 'visit' || formData.type === 'package') && (
-                <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Max Redemptions <span className="text-muted-foreground">(number of visits or packages)</span>
-                  </label>
-                  <Input
-                    type="number"
-                    min={1}
-                    placeholder="e.g. 10"
-                    value={formData.max_redemptions || ''}
-                    onChange={(e) =>
-                      setFormData((prev: any) => ({
-                        ...prev,
-                        max_redemptions: e.target.value
-                      }))
-                    }
-                  />
-                </div>
+                <>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">
+                      Package/Visit Price <span className="text-muted-foreground">(amount customer pays)</span>
+                    </label>
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="e.g. 500"
+                      value={formData.price || ''}
+                      onChange={(e) => handleChange('price', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">
+                      Max Redemptions <span className="text-muted-foreground">(number of visits or packages)</span>
+                    </label>
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder="e.g. 10"
+                      value={formData.max_redemptions || ''}
+                      onChange={(e) =>
+                        setFormData((prev: any) => ({
+                          ...prev,
+                          max_redemptions: e.target.value
+                        }))
+                      }
+                    />
+                  </div>
+                </>
               )}
               <div>
                 <label className="block text-sm font-medium mb-1">Reward Description</label>
@@ -699,9 +728,9 @@ export function CreateSchemeWizard({ onComplete }: CreateSchemeWizardProps) {
                         ? 'Unlimited'
                         : `${formData.duration_days} days`}
                     </div>
-                    {String(formData.type || '').toLowerCase() === 'credit' && (
+                    {(String(formData.type || '').toLowerCase() === 'credit' || String(formData.type || '').toLowerCase() === 'visit' || String(formData.type || '').toLowerCase() === 'package') && (
                       <div>
-                        <strong>Value:</strong>{' '}
+                        <strong>Price:</strong>{' '}
                         {formData.price ? `₹${formData.price}` : <span className="text-muted-foreground">Not set</span>}
                       </div>
                     )}
