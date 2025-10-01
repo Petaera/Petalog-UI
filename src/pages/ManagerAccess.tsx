@@ -34,6 +34,13 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
   const [editForm, setEditForm] = useState<{ id: string; email: string; role: 'manager' | 'worker'; assignedLocation: string; firstName?: string; lastName?: string; newPassword?: string } | null>(null);
+  
+  // Helper function to get location name from ID
+  const getLocationName = (locationId: string | null): string => {
+    if (!locationId) return '—';
+    const location = locations.find(loc => loc.id === locationId);
+    return location ? location.name : locationId; // Fallback to ID if name not found
+  };
    
   // Form state
   const [formData, setFormData] = useState({
@@ -619,7 +626,7 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
                   <TableRow key={manager.id}>
                     <TableCell className="font-medium">{manager.name}</TableCell>
                     <TableCell>{manager.email}</TableCell>
-                    <TableCell>{manager.assigned_location || '—'}</TableCell>
+                    <TableCell>{getLocationName(manager.assigned_location)}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Badge variant={manager.status === "Active" ? "default" : "secondary"}>
@@ -677,7 +684,7 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
                   <TableRow key={worker.id}>
                     <TableCell className="font-medium">{worker.name}</TableCell>
                     <TableCell>{worker.email}</TableCell>
-                    <TableCell>{worker.assigned_location || '—'}</TableCell>
+                    <TableCell>{getLocationName(worker.assigned_location)}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Badge variant={worker.status === "Active" ? "default" : "secondary"}>
