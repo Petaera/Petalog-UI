@@ -878,32 +878,11 @@ const Dashboard: React.FC = () => {
                       </td>
                       <td className="p-3 text-center">
                         <button
-                          className="text-primary hover:underline text-sm"
-                          onClick={async () => {
-                            const amt = prompt('Enter amount to pay');
-                            if (!amt) return;
-                            const amtNum = Number(amt);
-                            if (!amtNum || amtNum <= 0) return;
-                            try {
-                              const { error } = await supabase.rpc('apply_salary_payment', {
-                                staff_id: l.staff_id,
-                                amount: amtNum,
-                                payment_mode: 'Cash',
-                                description: `Dashboard payment for ${selectedMonth}`
-                              } as any);
-                              if (error) throw error;
-                              toast({ title: 'Payment applied' });
-                              // reload lines
-                              const { data: vrows } = await supabase
-                                .from('v_payroll_lines')
-                                .select('*')
-                                .eq('period_month', selectedMonth)
-                                .order('staff_name', { ascending: true } as any);
-                              setLines(vrows || []);
-                            } catch (e: any) {
-                              toast({ title: 'Payment failed', description: e?.message, variant: 'destructive' });
-                            }
+                          className="text-muted-foreground cursor-not-allowed text-sm"
+                          onClick={() => {
+                            toast({ title: 'Salary payments disabled', description: 'Recording salary payments is currently disabled.', variant: 'destructive' });
                           }}
+                          disabled
                         >Pay</button>
                         <a className="ml-3 text-blue-600 hover:underline text-sm" href="#" onClick={(e) => { e.preventDefault(); /* link to activity logs page/section if available */ }}>
                           Activity

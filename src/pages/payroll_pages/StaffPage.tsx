@@ -67,18 +67,31 @@ interface PayrollLine {
   created_at: string;
 }
 
+const calculateAdjustedSalary = (baseSalary: number, unpaidLeaves: number) => {
+  return baseSalary - (baseSalary * (unpaidLeaves / 30));
+};
+
 const StaffPage: React.FC = () => {
   const { user } = useAuth();
+  
+  // State for staff management
   const [staff, setStaff] = useState<Staff[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [payrollHistory, setPayrollHistory] = useState<PayrollLine[]>([]);
-  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
-  const [showPayrollHistory, setShowPayrollHistory] = useState(false);
   const [filterRole, setFilterRole] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  
+  // State for payroll history
+  const [payrollHistory, setPayrollHistory] = useState<PayrollLine[]>([]);
+  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
+  const [showPayrollHistory, setShowPayrollHistory] = useState(false);
+  
+  // Location state
   const selectedLocationId = useSelectedLocation();
+  
+  // Payments state
+  // (Removed duplicate block, keep only the later block below)
 
   // Add Staff form state
   const [name, setName] = useState('');
@@ -97,12 +110,28 @@ const StaffPage: React.FC = () => {
   // Payments state
   const [showPaymentPanel, setShowPaymentPanel] = useState(false);
   const [paymentStaffId, setPaymentStaffId] = useState<string>('');
-  const [paymentType, setPaymentType] = useState<'Advance' | 'Salary'>('Advance');
+  const [paymentType, setPaymentType] = useState<'Advance' | 'Salary' | 'Salary_Carryforward'>('Advance');
   const [paymentAmount, setPaymentAmount] = useState<string>('');
   const [paymentModeSel, setPaymentModeSel] = useState<'Cash' | 'UPI' | ''>('');
   const [paymentNotes, setPaymentNotes] = useState<string>('');
   const [savingPayment, setSavingPayment] = useState(false);
   const [activities, setActivities] = useState<{ id: string; date: string; kind: 'Advance' | 'SalaryPayment'; description: string | null; amount: number; staffId?: string; staffName?: string }[]>([]);
+
+  // Effect to handle automatic salary calculation
+  useEffect(() => {
+    const calculateAndSetSalary = () => {
+      if (paymentType === 'Salary' && paymentStaffId) {
+        const selectedStaff = staff.find(s => s.id === paymentStaffId);
+        if (selectedStaff) {
+          const baseSalary = selectedStaff.monthlySalary || 0;
+          const totalLeaves = selectedStaff.unpaidLeaves || 0;
+          const adjustedSalary = baseSalary - (baseSalary * (totalLeaves/30));
+          setPaymentAmount(adjustedSalary.toFixed(2));
+        }
+      }
+    };
+    calculateAndSetSalary();
+  }, [paymentType, paymentStaffId, staff]);
   const [activitiesPage, setActivitiesPage] = useState(0);
   const [activitiesPageSize] = useState(10);
   const [activitiesHasNext, setActivitiesHasNext] = useState(false);
@@ -944,19 +973,7 @@ const StaffPage: React.FC = () => {
       if (!paymentStaffId || !paymentAmount || paymentType !== 'Salary') { setAllocationPreview([]); return; }
       try {
         setAllocationLoading(true);
-        // Try RPC: preview_salary_allocation(staff_id, amount)
-        try {
-          const { data } = await supabase.rpc('preview_salary_allocation', {
-            staff_id_param: paymentStaffId,
-            amount_param: Number(paymentAmount)
-          });
-          if (Array.isArray(data)) {
-            const rows = data.map((r: any) => ({ month: r.month, applied: Number(r.applied || 0), remaining: Number(r.remaining || 0) }));
-            setAllocationPreview(rows);
-            return;
-          }
-        } catch (_) {}
-        // Fallback: no server preview available
+        // Server-side preview disabled; skip RPC and show no preview
         setAllocationPreview([]);
       } finally {
         setAllocationLoading(false);
@@ -1227,24 +1244,65 @@ const StaffPage: React.FC = () => {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label>Staff</Label>
-              <Select value={paymentStaffId} onValueChange={setPaymentStaffId}>
+              <Select 
+                value={paymentStaffId} 
+                onValueChange={(value) => {
+                  setPaymentStaffId(value);
+                  if (paymentType === 'Salary') {
+                    const selectedStaff = staff.find(s => s.id === value);
+                    if (selectedStaff) {
+                      const adjustedSalary = calculateAdjustedSalary(
+                        selectedStaff.monthlySalary || 0,
+                        selectedStaff.unpaidLeaves || 0
+                      );
+                      setPaymentAmount(adjustedSalary.toString());
+                    }
+                  }
+                }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select staff" />
                 </SelectTrigger>
                 <SelectContent>
-                  {staff.map(s => (
-                    <SelectItem key={s.id} value={s.id}>{s.name} — {s.role}</SelectItem>
-                  ))}
+                  {staff.map(s => {
+                    // Calculate adjusted salary if this is a salary payment
+                    let label = `${s.name} — ${s.role}`;
+                    if (paymentType === 'Salary') {
+                      const baseSalary = s.monthlySalary || 0;
+                      const leaves = s.unpaidLeaves || 0;
+                      const adjustedSalary = baseSalary - (baseSalary * (leaves/30));
+                      label += ` (₹${adjustedSalary.toFixed(2)})`;
+                    }
+                    return (
+                      <SelectItem key={s.id} value={s.id}>{label}</SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
             <div className="grid gap-2">
               <Label>Type</Label>
-              <Select value={paymentType} onValueChange={(v: any) => setPaymentType(v)}>
+              <Select 
+                value={paymentType} 
+                onValueChange={(v: 'Advance' | 'Salary') => {
+                  setPaymentType(v);
+                  // Reset amount when changing payment type
+                  if (v === 'Salary' && paymentStaffId) {
+                    const selectedStaff = staff.find(s => s.id === paymentStaffId);
+                    if (selectedStaff) {
+                      const baseSalary = selectedStaff.monthlySalary || 0;
+                      const leaves = selectedStaff.unpaidLeaves || 0;
+                      const adjustedSalary = baseSalary - (baseSalary * (leaves/30));
+                      setPaymentAmount(adjustedSalary.toFixed(2));
+                    }
+                  } else {
+                    setPaymentAmount('');
+                  }
+                }}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="Salary_Carryforward">Salary Carryforward</SelectItem>
                   <SelectItem value="Advance">Advance</SelectItem>
                   {user?.role === 'owner' && (
                     <SelectItem value="Salary">Salary</SelectItem>
@@ -1254,7 +1312,54 @@ const StaffPage: React.FC = () => {
             </div>
             <div className="grid gap-2">
               <Label>Amount</Label>
-              <Input type="number" min="0" step="1" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} />
+              <Input 
+                type="number" 
+                min="0" 
+                step="1" 
+                value={paymentAmount} 
+                onChange={(e) => {
+                  if (paymentType === 'Salary' && paymentStaffId) {
+                    const selectedStaff = staff.find(s => s.id === paymentStaffId);
+                    if (selectedStaff) {
+                      const baseSalary = selectedStaff.monthlySalary || 0;
+                      const totalLeaves = selectedStaff.unpaidLeaves || 0;
+                      const adjustedSalary = calculateAdjustedSalary(baseSalary, totalLeaves);
+                      setPaymentAmount(adjustedSalary.toFixed(2));
+                    }
+                  } else {
+                    setPaymentAmount(e.target.value);
+                  }
+                }} 
+                readOnly={paymentType === 'Salary'}
+              />
+              {paymentType === 'Salary' && paymentStaffId && (
+                <div className="text-sm text-muted-foreground mt-1">
+                  {(() => {
+                    const selectedStaff = staff.find(s => s.id === paymentStaffId);
+                    if (!selectedStaff) return null;
+                    const baseSalary = selectedStaff.monthlySalary || 0;
+                    const totalLeaves = selectedStaff.unpaidLeaves || 0;
+                    const adjustedSalary = calculateAdjustedSalary(baseSalary, totalLeaves);
+                    return (
+                      <>
+                        <p>Base Salary: {new Intl.NumberFormat('en-IN', {
+                          style: 'currency',
+                          currency: 'INR'
+                        }).format(baseSalary)}</p>
+                        {totalLeaves > 0 && (
+                          <>
+                            <p>Unpaid Leaves: {totalLeaves} days</p>
+                            <p>Adjusted Salary: {new Intl.NumberFormat('en-IN', {
+                              style: 'currency',
+                              currency: 'INR'
+                            }).format(adjustedSalary)}</p>
+                          </>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
             <div className="grid gap-2">
               <Label>Payment Mode</Label>
@@ -1352,25 +1457,9 @@ const StaffPage: React.FC = () => {
                     }
                   }
                 } else {
-                  // Salary payment: call apply_salary_payment for FIFO allocation in carry-forward mode, else log activity
-                  try {
-                    const withUpi = paymentModeSel === 'UPI' && selectedUpiAccountId
-                      ? `${paymentNotes ? paymentNotes + ' | ' : ''}UPI:${upiAccounts.find(a => a.id === selectedUpiAccountId)?.account_name || ''}`
-                      : paymentNotes || null;
-                    const params: any = {
-                      staff_id_param: paymentStaffId,
-                      amount_param: amtNum,
-                      payment_mode_param: paymentModeSel,
-                      ref_param: withUpi || null,
-                    };
-                    const { error: applyErr } = await supabase.rpc('apply_salary_payment', params);
-                    if (applyErr) {
-                      toast({ title: 'Payment RPC missing', description: 'Backend must expose apply_salary_payment RPC', variant: 'destructive' });
-                      throw applyErr;
-                    }
-                  } catch (err) {
-                    throw err;
-                  }
+                  // Salary payments are disabled in backend
+                  toast({ title: 'Salary payments disabled', description: 'Recording salary payments is currently disabled.', variant: 'destructive' });
+                  return;
                 }
                 toast({ title: 'Payment recorded' });
                 setShowPaymentPanel(false);
