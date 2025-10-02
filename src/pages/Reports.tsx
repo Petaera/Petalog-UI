@@ -96,6 +96,7 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
   // Data states
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [comparisonLogs, setComparisonLogs] = useState<LogEntry[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [servicePrices, setServicePrices] = useState<ServicePrice[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -283,6 +284,86 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
       fetchFilteredData();
     }
   }, [authLoading, selectedLocation, dateRange, vehicleType, service, entryType, manager, customFromDate, customToDate, debouncedSearchTerm, user?.assigned_location, user?.role]);
+
+  // Fetch a superset of logs for comparison (yesterday/last week/previous period)
+  useEffect(() => {
+    if (authLoading) return;
+    const fetchComparisonLogs = async () => {
+      try {
+        let query = supabase.from('logs-man').select('*');
+
+        // Always approved for comparisons
+        query = query.eq('approval_status', 'approved');
+
+        // Location filter
+        const currentLocation = user?.role === 'manager' ? user?.assigned_location : (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
+        if (currentLocation) {
+          query = query.eq('location_id', currentLocation);
+        }
+
+        // Other filters (same as comparisons use, excluding search term)
+        if (vehicleType !== 'all') {
+          query = query.ilike('vehicle_type', vehicleType);
+        }
+        if (service !== 'all') {
+          query = query.ilike('service', service);
+        }
+        if (entryType !== 'all') {
+          query = query.ilike('entry_type', entryType);
+        }
+        if (manager !== 'all') {
+          query = query.eq('created_by', manager);
+        }
+
+        // Date window that covers current and previous comparison periods
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        if (dateRange === 'today') {
+          const start = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+          const end = new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString();
+          query = query.gte('created_at', start).lt('created_at', end);
+        } else if (dateRange === 'yesterday') {
+          const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+          const start = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate() - 7).toISOString();
+          const end = today.toISOString();
+          query = query.gte('created_at', start).lt('created_at', end);
+        } else if (dateRange === 'singleday' && customFromDate) {
+          const single = new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate());
+          const start = new Date(single.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+          const end = new Date(single.getTime() + 24 * 60 * 60 * 1000).toISOString();
+          query = query.gte('created_at', start).lt('created_at', end);
+        } else if (dateRange === 'last7days' || dateRange === 'last30days' || (dateRange === 'custom' && customFromDate && customToDate)) {
+          let rangeDays = dateRange === 'last30days' ? 30 : 7;
+          let periodStart: Date;
+          let periodEnd: Date;
+          if (dateRange === 'custom' && customFromDate && customToDate) {
+            periodStart = new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate());
+            periodEnd = new Date(customToDate.getFullYear(), customToDate.getMonth(), customToDate.getDate() + 1);
+            rangeDays = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (24 * 60 * 60 * 1000));
+          } else {
+            periodEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+            periodStart = new Date(periodEnd.getTime() - rangeDays * 24 * 60 * 60 * 1000);
+          }
+
+          const prevPeriodStart = new Date(periodStart.getTime() - rangeDays * 24 * 60 * 60 * 1000);
+          const start = prevPeriodStart.toISOString();
+          const end = periodEnd.toISOString();
+          query = query.gte('created_at', start).lt('created_at', end);
+        }
+
+        const { data, error } = await query;
+        if (!error) {
+          setComparisonLogs(data || []);
+        } else {
+          setComparisonLogs([]);
+        }
+      } catch (e) {
+        setComparisonLogs([]);
+      }
+    };
+    fetchComparisonLogs();
+  }, [authLoading, selectedLocation, dateRange, vehicleType, service, entryType, manager, customFromDate, customToDate, user?.assigned_location, user?.role]);
 
 useEffect(() => {
   const fetchTodayPendingLogs = async () => {
@@ -774,12 +855,24 @@ useEffect(() => {
               {/* Single Day Selection */}
               {dateRange === "singleday" && (
                 <div className="space-y-2 pt-2 p-3 bg-muted/30 rounded-lg border min-w-[320px] overflow-visible">
-                  <Label className="text-xs font-medium text-muted-foreground">Select a specific date</Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-medium text-muted-foreground">Select a specific date</Label>
+                    {/* <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowSingleDayCalendar(true)}
+                      aria-label="Open single day calendar"
+                    >
+                      Change date
+                    </Button> */}
+                  </div>
                   {showSingleDayCalendar && (
                     <div className="overflow-visible">
                       <CalendarComponent
                         mode="single"
                         selected={customFromDate}
+                        defaultMonth={customFromDate || new Date()}
+                        key={(customFromDate ? customFromDate.toISOString() : 'no-date') + String(showSingleDayCalendar)}
                         onSelect={(date) => {
                           setCustomFromDate(date as Date | undefined);
                           setCustomToDate(date as Date | undefined); // treat as single-day (from = to)
@@ -792,9 +885,17 @@ useEffect(() => {
                       />
                     </div>
                   )}
-                  {customFromDate && (
+                  {customFromDate && !showSingleDayCalendar && (
                     <div className="text-xs text-muted-foreground">
-                      Showing data for: <span className="font-medium">{format(customFromDate, "PPP")}</span>
+                      Showing data for: 
+                      <button
+                        type="button"
+                        className="ml-1 font-medium underline underline-offset-2 hover:text-foreground"
+                        onClick={() => setShowSingleDayCalendar(true)}
+                        aria-label="Change single day date"
+                      >
+                        {format(customFromDate, "PPP")}
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1079,7 +1180,7 @@ useEffect(() => {
             {/* --- Revenue Comparison Section --- */}
             {(() => {
               // Use the same filters as getFilteredData, except for date
-              let baseFilteredLogs = [...logs];
+              let baseFilteredLogs = [...comparisonLogs];
               // Location filter
               const currentLocation = user?.role === 'manager'
                 ? user?.assigned_location
@@ -1434,7 +1535,7 @@ useEffect(() => {
             {/* --- Vehicle Count Comparison Section --- */}
             {(() => {
               // Use the same filters as getFilteredData, except for date
-              let baseFilteredLogs = [...logs];
+              let baseFilteredLogs = [...comparisonLogs];
               // Location filter
               const currentLocation = user?.role === 'manager'
                 ? user?.assigned_location

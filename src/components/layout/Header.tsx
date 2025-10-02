@@ -248,7 +248,7 @@ export function Header({ locations, selectedLocation, onLocationChange }: Header
             className="hidden md:inline-flex items-center whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold text-white bg-gradient-to-r from-red-500 via-red-600 to-red-500 shadow-sm animate-pulse hover:animate-none hover:brightness-110 focus:outline-none"
             title="View Pay Later details"
           >
-            {isPayLaterLoading ? 'Pay Later: …' : `Pay Later: ₹${payLaterDue.toLocaleString()}`}
+            {isPayLaterLoading ? 'Pay Later: …' : `Pending payments: ₹${payLaterDue.toLocaleString()}`}
           </button>
           {/* Global Pay Later badge (mobile only, compact) */}
           <button
