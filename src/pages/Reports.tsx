@@ -99,6 +99,7 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
   const [comparisonLogs, setComparisonLogs] = useState<LogEntry[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [servicePrices, setServicePrices] = useState<ServicePrice[]>([]);
+  const [servicePriceOptions, setServicePriceOptions] = useState<any[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -237,6 +238,7 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
       } else {
         console.log('✅ Service prices fetched successfully:', servicePricesRes.data?.length || 0, 'records');
         setServicePrices(servicePricesRes.data || []);
+        setServicePriceOptions(servicePricesRes.data || []);
       }
 
       if (usersRes.error) {
@@ -1027,25 +1029,17 @@ useEffect(() => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="Car">Car</SelectItem>
-                  <SelectItem value="Bike">Bike</SelectItem>
-                  <SelectItem value="SUV">SUV</SelectItem>
-                  <SelectItem value="Truck">Truck</SelectItem>
                   {(() => {
-                    // Get unique vehicle types with proper normalization
-                    const standardTypes = ['Car', 'Bike', 'SUV', 'Truck'];
-                    const uniqueTypes = [...new Set(
-                      logs
-                        .map(log => log.vehicle_type)
-                        .filter(type => type && typeof type === 'string')
-                        .map(type => type.trim()) // Remove whitespace
-                        .filter(type => type.length > 0)
-                    )]
-                      .filter(type => !standardTypes.some(std => std.toLowerCase() === type.toLowerCase()))
-                      .sort(); // Sort alphabetically
-
-                    return uniqueTypes.map((type, index) => (
-                      <SelectItem key={`vehicle-type-${type}-${index}`} value={type}>{type}</SelectItem>
+                    const currentLocation = user?.role === 'manager'
+                      ? user?.assigned_location
+                      : (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
+                    const fromPrices = (servicePriceOptions || [])
+                      .filter((sp: any) => !currentLocation || sp.locationid === currentLocation)
+                      .map((sp: any) => (sp['VEHICLE'] || '').toString().trim())
+                      .filter((v: string) => v.length > 0);
+                    const uniqueVehicles = Array.from(new Set(fromPrices)).sort((a, b) => a.localeCompare(b));
+                    return uniqueVehicles.map((type, index) => (
+                      <SelectItem key={`vehicle-type-price-${type}-${index}`} value={type}>{type}</SelectItem>
                     ));
                   })()}
                 </SelectContent>
@@ -1061,26 +1055,17 @@ useEffect(() => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Services</SelectItem>
-                  <SelectItem value="Basic Wash">Basic Wash</SelectItem>
-                  <SelectItem value="Premium Wash">Premium Wash</SelectItem>
-                  <SelectItem value="Full Service">Full Service</SelectItem>
-                  <SelectItem value="Quick Wash">Quick Wash</SelectItem>
-                  <SelectItem value="Workshop">Workshop</SelectItem>
                   {(() => {
-                    // Get unique service types with proper normalization
-                    const standardServices = ['Basic Wash', 'Premium Wash', 'Full Service', 'Quick Wash', 'Workshop'];
-                    const uniqueServices = [...new Set(
-                      logs
-                        .map(log => log.service)
-                        .filter(service => service && typeof service === 'string')
-                        .map(service => service.trim()) // Remove whitespace
-                        .filter(service => service.length > 0)
-                    )]
-                      .filter(service => !standardServices.some(std => std.toLowerCase() === service.toLowerCase()))
-                      .sort(); // Sort alphabetically
-
-                    return uniqueServices.map((service, index) => (
-                      <SelectItem key={`service-type-${service}-${index}`} value={service}>{service}</SelectItem>
+                    const currentLocation = user?.role === 'manager'
+                      ? user?.assigned_location
+                      : (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
+                    const fromPrices = (servicePriceOptions || [])
+                      .filter((sp: any) => !currentLocation || sp.locationid === currentLocation)
+                      .map((sp: any) => (sp['SERVICE'] || '').toString().trim())
+                      .filter((v: string) => v.length > 0);
+                    const uniqueServices = Array.from(new Set(fromPrices)).sort((a, b) => a.localeCompare(b));
+                    return uniqueServices.map((svc, index) => (
+                      <SelectItem key={`service-type-price-${svc}-${index}`} value={svc}>{svc}</SelectItem>
                     ));
                   })()}
                 </SelectContent>
@@ -1096,23 +1081,20 @@ useEffect(() => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Entry Types</SelectItem>
-                  <SelectItem value="Manual">Manual Entry</SelectItem>
-                  <SelectItem value="Automatic">Automatic Entry</SelectItem>
+                  <SelectItem value="Customer">Customer</SelectItem>
+                  <SelectItem value="Workshop">Workshop</SelectItem>
                   {(() => {
-                    // Get unique entry types with proper normalization
-                    const standardTypes = ['Manual', 'Automatic'];
-                    const uniqueTypes = [...new Set(
+                    // Include any other types present in logs just in case
+                    const base = ['Customer', 'Workshop'];
+                    const uniques = Array.from(new Set(
                       logs
-                        .map(log => log.entry_type)
-                        .filter(type => type && typeof type === 'string')
-                        .map(type => type.trim()) // Remove whitespace
-                        .filter(type => type.length > 0)
-                    )]
-                      .filter(type => !standardTypes.some(std => std.toLowerCase() === type.toLowerCase()))
-                      .sort(); // Sort alphabetically
-
-                    return uniqueTypes.map((type, index) => (
-                      <SelectItem key={`entry-type-${type}-${index}`} value={type}>{type}</SelectItem>
+                        .map(log => (log.entry_type || '').toString().trim())
+                        .filter(v => v.length > 0)
+                    ))
+                      .filter(v => !base.some(b => b.toLowerCase() === v.toLowerCase()))
+                      .sort((a, b) => a.localeCompare(b));
+                    return uniques.map((v, idx) => (
+                      <SelectItem key={`entry-type-extra-${v}-${idx}`} value={v}>{v}</SelectItem>
                     ));
                   })()}
                 </SelectContent>
@@ -1128,9 +1110,22 @@ useEffect(() => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Managers</SelectItem>
-                  {users.filter(user => user.role === 'manager').map((mgr) => (
-                    <SelectItem key={`manager-${mgr.id}`} value={mgr.id}>{mgr.name}</SelectItem>
-                  ))}
+                  {(() => {
+                    const currentLocation = user?.role === 'manager'
+                      ? user?.assigned_location
+                      : (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
+                    // Prefer names from users table to avoid showing UUIDs
+                    const byLocation = (users || [])
+                      .filter((u: any) => (u.role || '').toString().toLowerCase() === 'manager')
+                      .filter((u: any) => !currentLocation || u.assigned_location === currentLocation);
+                    // Sort by name
+                    byLocation.sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''));
+                    // If none found by location, fall back to any manager users we have
+                    const source = byLocation.length > 0 ? byLocation : (users || []).filter((u: any) => (u.role || '').toString().toLowerCase() === 'manager');
+                    return source.map((mgr: any) => (
+                      <SelectItem key={`manager-${mgr.id}`} value={String(mgr.id)}>{mgr.name || 'Manager'}</SelectItem>
+                    ));
+                  })()}
                 </SelectContent>
               </Select>
             </div>
