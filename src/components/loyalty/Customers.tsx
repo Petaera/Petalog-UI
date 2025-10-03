@@ -72,6 +72,7 @@ export function Customers() {
   const [customerDetailsMap, setCustomerDetailsMap] = useState<Record<string, any>>({});
   const [planDetailsMap, setPlanDetailsMap] = useState<Record<string, any>>({});
   const [vehicleInfoMap, setVehicleInfoMap] = useState<Record<string, any>>({});
+  const [existingVehicleSubscriptions, setExistingVehicleSubscriptions] = useState<Array<{ id: string; plan_id: string; status: string | null; expiry_date: string | null; remaining_visits: number | null; start_date: string | null }>>([]);
   const [creditAccountMap, setCreditAccountMap] = useState<Record<string, { id: string; balance: number; total_deposited: number }>>({});
   const [usageHistoryMap, setUsageHistoryMap] = useState<Record<string, Array<{ id: string; purchase_id: string; service_type: string | null; use_date: string | null; notes: string | null }>>>({});
   const [loyaltyVisitsMap, setLoyaltyVisitsMap] = useState<Record<string, Array<{ id: string; visit_type: string; service_rendered: string | null; amount_charged: number; visit_time: string | null; payment_method: string | null }>>>({});
@@ -253,6 +254,17 @@ export function Customers() {
       if (vehicle) {
         setExistingVehicle(vehicle);
         setShowVehicleSuggestions(true);
+        // Load existing subscriptions for this vehicle
+        try {
+          const { data: subs } = await supabase
+            .from('subscription_purchases')
+            .select('id, plan_id, status, expiry_date, remaining_visits, start_date')
+            .eq('vehicle_id', vehicle.id)
+            .order('created_at', { ascending: false });
+          setExistingVehicleSubscriptions(subs || []);
+        } catch (_) {
+          setExistingVehicleSubscriptions([]);
+        }
         
         // Auto-fill the vehicle details in the form
         setVehicleDetails({
@@ -339,6 +351,7 @@ export function Customers() {
           // no vehicle found anywhere
           setExistingVehicle(null);
           setShowVehicleSuggestions(false);
+          setExistingVehicleSubscriptions([]);
         }
       }
     } catch (error) {
@@ -1738,6 +1751,28 @@ export function Customers() {
                             <div>Brand: {existingVehicle.Brand || 'Not provided'}</div>
                             <div>Model: {(existingVehicle as any).Vehicles_in_india?.Models || 'Not provided'}</div>
                           </div>
+                          {existingVehicleSubscriptions.length > 0 ? (
+                            <div className="mt-2 text-xs">
+                              <div className="font-medium text-green-900 mb-1">Existing Subscriptions</div>
+                              <div className="space-y-1">
+                                {existingVehicleSubscriptions.slice(0,3).map((sp) => (
+                                  <div key={sp.id} className="flex items-center justify-between text-green-800">
+                                    <span>
+                                      {(() => {
+                                        const plan = planDetailsMap[sp.plan_id];
+                                        return plan?.name || sp.plan_id;
+                                      })()} ({sp.status || 'active'})
+                                    </span>
+                                    <span className="text-green-700">
+                                      {sp.expiry_date ? new Date(sp.expiry_date).toLocaleDateString() : ''}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="mt-2 text-xs text-green-700">No existing subscriptions found for this vehicle</div>
+                          )}
                           <div className="text-xs text-green-600 mt-1">
                             This vehicle's details will be auto-filled in the next step.
                           </div>
