@@ -779,7 +779,7 @@ const StaffPage: React.FC = () => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Salary_Carryforward">Salary Carryforward</SelectItem>
+                  
                   <SelectItem value="Advance">Advance</SelectItem>
                   {user?.role === 'owner' && (
                     <SelectItem value="Salary">Salary</SelectItem>
@@ -948,8 +948,9 @@ const StaffPage: React.FC = () => {
                     fullSalary = staffRow ? Number(staffRow.monthly_salary || 0) : 0;
                   }
                 
-                  // Calculate how much salary is actually unpaid
+                  // Calculate unpaid vs overpaid amounts
                   const unpaidSalary = Math.max(fullSalary - amountNum, 0);
+                  const overpay = Math.max(amountNum - fullSalary, 0);
                   
                   if (unpaidSalary > 0) {
                     // First, try to cover unpaid salary from advance
@@ -1005,6 +1006,30 @@ const StaffPage: React.FC = () => {
                           .eq('staff_id', paymentStaffId);
                         if (cfUpdErr) throw cfUpdErr;
                       }
+                    }
+                  }
+
+                  // If overpaid, the extra becomes advance
+                  if (overpay > 0) {
+                    const { data: advRow2, error: advSelErr2 } = await supabase
+                      .from('advance')
+                      .select('staff_id, advance')
+                      .eq('staff_id', paymentStaffId)
+                      .maybeSingle();
+                    if (advSelErr2) throw advSelErr2;
+
+                    if (!advRow2) {
+                      const { error: advInsErr2 } = await supabase
+                        .from('advance')
+                        .insert([{ staff_id: paymentStaffId, advance: overpay, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }]);
+                      if (advInsErr2) throw advInsErr2;
+                    } else {
+                      const newAdvance2 = Number(advRow2.advance || 0) + overpay;
+                      const { error: advUpdErr2 } = await supabase
+                        .from('advance')
+                        .update({ advance: newAdvance2, updated_at: new Date().toISOString() })
+                        .eq('staff_id', paymentStaffId);
+                      if (advUpdErr2) throw advUpdErr2;
                     }
                   }
                 }
