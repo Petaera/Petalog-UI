@@ -61,6 +61,9 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
   const [payLaterLogs, setPayLaterLogs] = useState<any[]>([]); // filtered for display/export
   const [loading, setLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [useDateRange, setUseDateRange] = useState(false);
   const [selectedWorkshop, setSelectedWorkshop] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
 
@@ -68,6 +71,12 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
   const [settleOpen, setSettleOpen] = useState(false);
   const [settleLog, setSettleLog] = useState<any | null>(null);
   const [settlePaymentMode, setSettlePaymentMode] = useState<'cash' | 'upi'>('cash');
+
+  // Mass checkout modal state
+  const [massCheckoutOpen, setMassCheckoutOpen] = useState(false);
+  const [massPaymentMode, setMassPaymentMode] = useState<'cash' | 'upi'>('cash');
+  const [isMassProcessing, setIsMassProcessing] = useState(false);
+  const [massProgress, setMassProgress] = useState({ current: 0, total: 0 });
 
   // UPI accounts state
   const [selectedUpiAccount, setSelectedUpiAccount] = useState<string>('');
@@ -144,22 +153,38 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
         .eq("payment_mode", "credit")
         .order("created_at", { ascending: false });
 
-      // Add date filter only if a date is selected
-      if (selectedDate && selectedDate.trim() !== '') {
-        const selectedDateObj = new Date(selectedDate);
-        const payLaterStartOfDay = selectedDateObj.toISOString().split('T')[0] + 'T00:00:00.000Z';
-        const payLaterEndOfDay = selectedDateObj.toISOString().split('T')[0] + 'T23:59:59.999Z';
-        
-        payLaterQuery = payLaterQuery
-          .gte("entry_time", payLaterStartOfDay)
-          .lte("entry_time", payLaterEndOfDay);
+      // Add date filter based on mode
+      if (useDateRange) {
+        // Date range filtering
+        if (fromDate && fromDate.trim() !== '') {
+          const fromDateObj = new Date(fromDate);
+          const fromStartOfDay = fromDateObj.toISOString().split('T')[0] + 'T00:00:00.000Z';
+          payLaterQuery = payLaterQuery.gte("entry_time", fromStartOfDay);
+        }
+        if (toDate && toDate.trim() !== '') {
+          const toDateObj = new Date(toDate);
+          const toEndOfDay = toDateObj.toISOString().split('T')[0] + 'T23:59:59.999Z';
+          payLaterQuery = payLaterQuery.lte("entry_time", toEndOfDay);
+        }
+      } else {
+        // Single date filtering
+        if (selectedDate && selectedDate.trim() !== '') {
+          const selectedDateObj = new Date(selectedDate);
+          const payLaterStartOfDay = selectedDateObj.toISOString().split('T')[0] + 'T00:00:00.000Z';
+          const payLaterEndOfDay = selectedDateObj.toISOString().split('T')[0] + 'T23:59:59.999Z';
+          
+          payLaterQuery = payLaterQuery
+            .gte("entry_time", payLaterStartOfDay)
+            .lte("entry_time", payLaterEndOfDay);
+        }
       }
 
       const { data: payLaterData, error: payLaterError } = await payLaterQuery;
 
       let finalPayLater: any[] = [];
       // If no results with entry_time filter, try created_at (only when date filter is applied)
-      if (selectedDate && selectedDate.trim() !== '' && (payLaterData?.length || 0) === 0) {
+      const hasDateFilter = useDateRange ? (fromDate || toDate) : selectedDate;
+      if (hasDateFilter && (payLaterData?.length || 0) === 0) {
         let payLaterFallbackQuery = supabase
           .from("logs-man")
           .select("*, vehicles(number_plate)")
@@ -168,13 +193,30 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
           .eq("payment_mode", "credit")
           .order("created_at", { ascending: false });
         
-        const selectedDateObj = new Date(selectedDate);
-        const payLaterFallbackStartOfDay = selectedDateObj.toISOString().split('T')[0] + 'T00:00:00.000Z';
-        const payLaterFallbackEndOfDay = selectedDateObj.toISOString().split('T')[0] + 'T23:59:59.999Z';
+        if (useDateRange) {
+          // Date range fallback
+          if (fromDate && fromDate.trim() !== '') {
+            const fromDateObj = new Date(fromDate);
+            const fromStartOfDay = fromDateObj.toISOString().split('T')[0] + 'T00:00:00.000Z';
+            payLaterFallbackQuery = payLaterFallbackQuery.gte("created_at", fromStartOfDay);
+          }
+          if (toDate && toDate.trim() !== '') {
+            const toDateObj = new Date(toDate);
+            const toEndOfDay = toDateObj.toISOString().split('T')[0] + 'T23:59:59.999Z';
+            payLaterFallbackQuery = payLaterFallbackQuery.lte("created_at", toEndOfDay);
+          }
+        } else {
+          // Single date fallback
+          const selectedDateObj = new Date(selectedDate);
+          const payLaterFallbackStartOfDay = selectedDateObj.toISOString().split('T')[0] + 'T00:00:00.000Z';
+          const payLaterFallbackEndOfDay = selectedDateObj.toISOString().split('T')[0] + 'T23:59:59.999Z';
+          
+          payLaterFallbackQuery = payLaterFallbackQuery
+            .gte("created_at", payLaterFallbackStartOfDay)
+            .lte("created_at", payLaterFallbackEndOfDay);
+        }
         
-        const { data: payLaterFallbackData } = await payLaterFallbackQuery
-          .gte("created_at", payLaterFallbackStartOfDay)
-          .lte("created_at", payLaterFallbackEndOfDay);
+        const { data: payLaterFallbackData } = await payLaterFallbackQuery;
         
         if (payLaterFallbackData && payLaterFallbackData.length > 0) {
           finalPayLater = payLaterFallbackData;
@@ -249,6 +291,72 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
     }
   };
 
+  const openMassCheckout = () => {
+    const eligibleRecords = payLaterLogs.filter(log => log.workshop); // Only workshop-based records
+    if (eligibleRecords.length === 0) {
+      toast({ title: 'Error', description: 'No eligible records found for mass checkout', variant: 'destructive' });
+      return;
+    }
+    setMassCheckoutOpen(true);
+    setMassPaymentMode('cash');
+    setSelectedUpiAccount('');
+    setIsMassProcessing(false);
+    setMassProgress({ current: 0, total: eligibleRecords.length });
+  };
+
+  const confirmMassCheckout = async () => {
+    // Validate UPI account selection if UPI is selected
+    if (massPaymentMode === 'upi' && !selectedUpiAccount) {
+      toast({ title: 'Error', description: 'Please select a UPI account', variant: 'destructive' });
+      return;
+    }
+    
+    try {
+      setIsMassProcessing(true);
+      const eligibleRecords = payLaterLogs.filter(log => log.workshop);
+      const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
+      
+      let successCount = 0;
+      
+      for (let i = 0; i < eligibleRecords.length; i++) {
+        const log = eligibleRecords[i];
+        setMassProgress({ current: i + 1, total: eligibleRecords.length });
+        
+        const updateData: any = {
+          payment_mode: massPaymentMode,
+          payment_date: new Date().toISOString(),
+        };
+        
+        // Add UPI account information if UPI is selected
+        if (massPaymentMode === 'upi' && selectedAccount) {
+          updateData.upi_account_id = selectedUpiAccount;
+          updateData.upi_account_name = selectedAccount.account_name;
+          updateData.upi_id = selectedAccount.upi_id;
+        }
+        
+        const { error } = await supabase
+          .from('logs-man')
+          .update(updateData)
+          .eq('id', log.id);
+          
+        if (error) throw error;
+        successCount++;
+        
+        // Small delay to show progress
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+      
+      toast({ title: 'Success', description: `${successCount} payments settled successfully` });
+      setMassCheckoutOpen(false);
+      setSelectedUpiAccount('');
+      setIsMassProcessing(false);
+      fetchPayLaterLogs();
+    } catch (err: any) {
+      toast({ title: 'Error', description: `Mass checkout failed: ${err?.message || err}`, variant: 'destructive' });
+      setIsMassProcessing(false);
+    }
+  };
+
   const handleEdit = (log: any) => {
     console.log('Edit log:', log);
     toast({ title: 'Info', description: 'Edit functionality will be implemented' });
@@ -310,7 +418,7 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
       fetchPayLaterLogs();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedLocation, selectedDate]);
+  }, [selectedLocation, selectedDate, fromDate, toDate, useDateRange]);
 
   useEffect(() => {
     setPayLaterLogs(applyFilters(allPayLaterLogs));
@@ -332,60 +440,120 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
     <div className="space-y-6">
       {/* Header with Date & Workshop Filter */}
       <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+        <CardContent className="p-4 space-y-4">
+          {/* Date Filter Section */}
+          <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Calendar className="h-5 w-5 text-muted-foreground" />
-              <Label htmlFor="date-filter" className="text-sm font-medium">
-                Filter by Date:
-              </Label>
+              <Label className="text-sm font-medium">Filter by Date:</Label>
             </div>
-            <div className="flex flex-col sm:flex-row gap-2 w-full">
-              <Input
-                id="date-filter"
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="w-full sm:w-48"
-              />
-              {/* Workshop Filter */}
-              <div className="flex items-center gap-2 w-full sm:w-56">
-                <Label htmlFor="workshop-filter" className="text-sm font-medium whitespace-nowrap">Workshop:</Label>
-                <Select value={selectedWorkshop} onValueChange={setSelectedWorkshop}>
-                  <SelectTrigger id="workshop-filter" className="w-full">
-                    <SelectValue placeholder="All Workshops" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Workshops</SelectItem>
-                    {/* Dynamic workshops from base logs for switching */}
-                    {Array.from(new Set(allPayLaterLogs.map((l: any) => String(l.workshop ?? '').trim()).filter((s) => !!s && s !== 'null' && s !== 'undefined')))
-                      .sort()
-                      .map((wk: string) => (
-                        <SelectItem key={wk} value={wk}>{wk}</SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {/* Date Input Group */}
+              <div className="md:col-span-2 lg:col-span-2">
+                {!useDateRange ? (
+                  <Input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="w-full"
+                    placeholder="Select single date"
+                  />
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      type="date"
+                      value={fromDate}
+                      onChange={(e) => setFromDate(e.target.value)}
+                      className="w-full"
+                      placeholder="From date"
+                    />
+                    <Input
+                      type="date"
+                      value={toDate}
+                      onChange={(e) => setToDate(e.target.value)}
+                      className="w-full"
+                      placeholder="To date"
+                    />
+                  </div>
+                )}
               </div>
+              
+              {/* Mode Toggle */}
+              <div>
+                <Button
+                  variant="outline"
+                  onClick={() => setUseDateRange(!useDateRange)}
+                  className="w-full"
+                >
+                  {useDateRange ? 'Single Date' : 'Date Range'}
+                </Button>
+              </div>
+            </div>
+
+            {/* Workshop Filter */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="md:col-span-1">
+                <div className="flex flex-col">
+                  <Label htmlFor="workshop-filter" className="text-sm font-medium mb-1">Workshop:</Label>
+                  <Select value={selectedWorkshop} onValueChange={setSelectedWorkshop}>
+                    <SelectTrigger id="workshop-filter" className="w-full">
+                      <SelectValue placeholder="All Workshops" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Workshops</SelectItem>
+                      {/* Dynamic workshops from base logs for switching */}
+                      {Array.from(new Set(allPayLaterLogs.map((l: any) => String(l.workshop ?? '').trim()).filter((s) => !!s && s !== 'null' && s !== 'undefined')))
+                        .sort()
+                        .map((wk: string) => (
+                          <SelectItem key={wk} value={wk}>{wk}</SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
               {/* Search */}
-              <Input
-                placeholder="Search name, phone, vehicle..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full sm:w-64"
-              />
+              <div className="md:col-span-2 lg:col-span-2">
+                <div className="flex flex-col">
+                  <Label className="text-sm font-medium mb-1">Search:</Label>
+                  <Input
+                    placeholder="Search name, phone, vehicle..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
               <Button
                 variant="outline"
-                onClick={() => setSelectedDate('')}
-                className="w-full sm:w-auto"
+                onClick={() => {
+                  setSelectedDate('');
+                  setFromDate('');
+                  setToDate('');
+                }}
+                className="w-full"
               >
                 Clear Date
               </Button>
               <Button
                 onClick={exportCsv}
-                className="w-full sm:w-auto"
+                className="w-full"
               >
                 <Download className="h-4 w-4 mr-2" />
                 Export CSV
+              </Button>
+              <Button
+                onClick={openMassCheckout}
+                className="w-full bg-red-600 hover:bg-red-700 text-white sm:col-span-2 lg:col-span-1"
+                disabled={payLaterLogs.length === 0}
+              >
+                <Check className="h-4 w-4 mr-2" />
+                Mass Checkout
               </Button>
             </div>
           </div>
@@ -395,28 +563,46 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
       {/* Pay Later Section */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex flex-col sm:flex-row sm:items-center gap-2">
+          <CardTitle className="flex flex-col gap-3">
             <div className="flex items-center gap-2">
               <Clock className="h-5 w-5 text-purple-500" />
               <span>Pay Later</span>
               <Badge variant="secondary">{payLaterLogs.length}</Badge>
             </div>
-            {selectedDate && selectedDate.trim() !== '' ? (
-              <Badge variant="outline" className="sm:ml-2">
-                {new Date(selectedDate).toLocaleDateString()}
-              </Badge>
-            ) : (
-              <Badge variant="secondary" className="sm:ml-2">
-                All Records
-              </Badge>
-            )}
-            {selectedWorkshop && selectedWorkshop !== 'all' && (
-              <Badge variant="outline" className="sm:ml-2">{selectedWorkshop}</Badge>
-            )}
+            <div className="flex flex-wrap gap-2">
+              {useDateRange ? (
+                (fromDate || toDate) ? (
+                  <Badge variant="outline">
+                    {fromDate && toDate ? 
+                      `${new Date(fromDate).toLocaleDateString()} - ${new Date(toDate).toLocaleDateString()}` :
+                      fromDate ? `From ${new Date(fromDate).toLocaleDateString()}` :
+                      `Until ${new Date(toDate).toLocaleDateString()}`
+                    }
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary">
+                    All Records
+                  </Badge>
+                )
+              ) : (
+                selectedDate && selectedDate.trim() !== '' ? (
+                  <Badge variant="outline">
+                    {new Date(selectedDate).toLocaleDateString()}
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary">
+                    All Records
+                  </Badge>
+                )
+                )}
+              {selectedWorkshop && selectedWorkshop !== 'all' && (
+                <Badge variant="outline">{selectedWorkshop}</Badge>
+              )}
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto -mx-4 sm:mx-0">
+          <div className="overflow-x-auto">
             <div className="min-w-full inline-block align-middle">
               <div className="overflow-hidden">
                 <table className="min-w-full divide-y divide-gray-200">
@@ -428,7 +614,7 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Service</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Workshop</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Workshop</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Entry Time</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Exit Time</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Date</th>
@@ -441,7 +627,15 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
                       <tr><td colSpan={12} className="text-center py-4">Loading...</td></tr>
                     ) : payLaterLogs.length === 0 ? (
                       <tr><td colSpan={12} className="text-center py-4 text-muted-foreground">
-                        {selectedDate && selectedDate.trim() !== '' ? `No pay later tickets for ${new Date(selectedDate).toLocaleDateString()}` : 'No pay later tickets found'}
+                        {useDateRange ? (
+                          (fromDate || toDate) ? 
+                            `No pay later tickets for date range` : 
+                            'No pay later tickets found'
+                        ) : (
+                          selectedDate && selectedDate.trim() !== '' ? 
+                            `No pay later tickets for ${new Date(selectedDate).toLocaleDateString()}` : 
+                            'No pay later tickets found'
+                        )}
                       </td></tr>
                     ) : (
                       payLaterLogs.map((log: any, idx: number) => (
@@ -468,7 +662,7 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
                             {log.Amount ? formatCurrency(log.Amount) : "-"}
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{String(log.workshop ?? '-') }</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{String(log.workshop ?? '-') }</td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
                             {log.entry_time ? new Date(log.entry_time).toLocaleString() :
                               log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
@@ -510,7 +704,7 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
 
       {/* Settle Pay Later Dialog */}
       <Dialog open={settleOpen} onOpenChange={setSettleOpen}>
-        <DialogContent className="max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogContent className="max-h-[90vh] overflow-hidden flex flex-col max-w-md md:max-w-lg">
           <DialogHeader>
             <DialogTitle>Settle Payment</DialogTitle>
             <DialogDescription>Choose payment mode to close this Pay Later ticket.</DialogDescription>
@@ -598,6 +792,130 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
           <DialogFooter>
             <Button variant="outline" onClick={() => setSettleOpen(false)}>Cancel</Button>
             <Button onClick={confirmSettle}>Confirm</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Mass Checkout Dialog */}
+      <Dialog open={massCheckoutOpen} onOpenChange={setMassCheckoutOpen}>
+        <DialogContent className="max-h-[90vh] overflow-hidden flex flex-col max-w-md md:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Check className="h-5 w-5 text-red-600" />
+              Mass Checkout
+            </DialogTitle>
+            <DialogDescription>
+              Settle multiple Pay Later payments at once using the same payment method.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 overflow-y-auto flex-1 pr-2">
+            {/* Summary */}
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Check className="h-4 w-4 text-red-600" />
+                <span className="font-medium text-red-900">Selected Records</span>
+              </div>
+              <div className="text-sm text-red-800">
+                <p><strong>{payLaterLogs.length}</strong> records will be processed</p>
+                <p><strong>Total Amount:</strong> {formatCurrency(payLaterLogs.reduce((sum, log) => sum + (Number(log.Amount) || 0), 0))}</p>
+              </div>
+            </div>
+
+            {/* Payment Mode Selection */}
+            <div>
+              <Label>Payment Mode</Label>
+              <Select value={massPaymentMode} onValueChange={(v: any) => setMassPaymentMode(v)}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select payment mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="upi">UPI</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* UPI Account Selection for Mass Checkout */}
+            {massPaymentMode === 'upi' && (
+              <div>
+                <Label>Select UPI Account</Label>
+                <Select value={selectedUpiAccount} onValueChange={setSelectedUpiAccount}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder={upiAccountsLoading ? "Loading accounts..." : "Select UPI account"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {upiAccounts.map((account) => (
+                      <SelectItem key={account.id} value={account.id}>
+                        {account.account_name} - {account.upi_id} ({account.location_name || 'N/A'})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {upiAccounts.length === 0 && !upiAccountsLoading && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    No UPI accounts found. Please add UPI accounts in the settings.
+                  </p>
+                )}
+                
+                {/* QR Code Display for Mass Checkout */}
+                {selectedUpiAccount && (
+                  <div className="mt-4 space-y-2">
+                    <Label>QR Code</Label>
+                    {(() => {
+                      const selectedAccount = upiAccounts.find(acc => acc.id === selectedUpiAccount);
+                      if (selectedAccount?.qr_code_url) {
+                        return (
+                          <div className="flex justify-center p-2">
+                            <img 
+                              src={selectedAccount.qr_code_url} 
+                              alt={`QR Code for ${selectedAccount.account_name}`}
+                              className="w-32 h-32 object-contain border rounded-lg shadow-sm"
+                            />
+                          </div>
+                        );
+                      } else {
+                        return (
+                          <div className="text-sm text-muted-foreground text-center py-8 border rounded-lg bg-muted/20">
+                            No QR code available for this account
+                          </div>
+                        );
+                      }
+                    })()}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Progress Indicator */}
+            {isMassProcessing && (
+              <div className="space-y-2">
+                <Label>Processing Payments...</Label>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex justify-between text-sm text-blue-800 mb-2">
+                    <span>Progress</span>
+                    <span>{massProgress.current} / {massProgress.total}</span>
+                  </div>
+                  <div className="w-full bg-blue-200 rounded-full h-2">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                      style={{ width: `${(massProgress.current / massProgress.total) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMassCheckoutOpen(false)} disabled={isMassProcessing}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={confirmMassCheckout} 
+              disabled={isMassProcessing}
+              className={isMassProcessing ? '' : 'bg-red-600 hover:bg-red-700 text-white'}
+            >
+              {isMassProcessing ? 'Processing...' : 'Confirm Mass Checkout'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
