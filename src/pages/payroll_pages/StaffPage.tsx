@@ -89,10 +89,9 @@ const StaffPage: React.FC = () => {
   const toggleActive = async (memberId: string, current: boolean) => {
     try {
       const { error } = await supabase
-        .rpc('update_staff', {
-          staff_id_param: memberId,
-          is_active_param: !current
-        });
+        .from('staff')
+        .update({ is_active: !current, updated_at: new Date().toISOString() })
+        .eq('id', memberId);
       if (error) throw error;
       toast({ title: current ? 'Staff deactivated' : 'Staff activated' });
       await refreshStaff();
@@ -103,8 +102,10 @@ const StaffPage: React.FC = () => {
 
   const deleteStaff = async (memberId: string) => {
     try {
-      // Delete staff using RPC function
-      const { error } = await supabase.rpc('delete_staff', { staff_id_param: memberId });
+      const { error } = await supabase
+        .from('staff')
+        .delete()
+        .eq('id', memberId);
       if (error) throw error;
       toast({ title: 'Staff deleted' });
       await refreshStaff();
@@ -128,9 +129,12 @@ const StaffPage: React.FC = () => {
           return;
         }
 
-        // Use RPC function to get staff by branch
+        // Load staff from public.staff by branch
         const { data: staffData, error: staffError } = await supabase
-          .rpc('get_staff_by_branch', { branch_id_param: selectedLocationId });
+          .from('staff')
+          .select('id,name,role_title,contact,date_of_joining,monthly_salary,default_payment_mode,is_active,dp_url,doc_url')
+          .eq('branch_id', selectedLocationId)
+          .order('name', { ascending: true });
         if (staffError) throw staffError;
         
         // Debug log to check raw data
@@ -170,9 +174,11 @@ const StaffPage: React.FC = () => {
     if (!user?.id || !selectedLocationId) return;
     setLoading(true);
     try {
-      // Use RPC function to get staff by branch
       const { data: staffData, error: staffError } = await supabase
-        .rpc('get_staff_by_branch', { branch_id_param: selectedLocationId });
+        .from('staff')
+        .select('id,name,role_title,contact,date_of_joining,monthly_salary,default_payment_mode,is_active,dp_url,doc_url')
+        .eq('branch_id', selectedLocationId)
+        .order('name', { ascending: true });
       if (staffError) throw staffError;
       
       const mapped: Staff[] = (staffData || []).map((row: any): Staff => ({
@@ -364,20 +370,26 @@ const StaffPage: React.FC = () => {
     try {
       const contactToSave = (contact || '').trim();
       
-      // Insert staff record using RPC function
-      const { data: insertedStaffId, error: insertError } = await supabase
-        .rpc('insert_staff', {
-          branch_id_param: selectedLocationId,
-          name_param: name,
-          role_title_param: roleTitle,
-          contact_param: contact,
-          date_of_joining_param: dateOfJoining,
-          monthly_salary_param: Number(monthlySalary),
-          default_payment_mode_param: paymentMode,
-          dp_url_param: null
-        });
-        
+      // Insert staff record into public.staff
+      const { data: insertedRow, error: insertError } = await supabase
+        .from('staff')
+        .insert([
+          {
+            branch_id: selectedLocationId,
+            name,
+            role_title: roleTitle,
+            contact: contactToSave,
+            date_of_joining: dateOfJoining,
+            monthly_salary: Number(monthlySalary),
+            default_payment_mode: paymentMode,
+            dp_url: null,
+            is_active: true,
+          }
+        ])
+        .select('id')
+        .single();
       if (insertError) throw insertError;
+      const insertedStaffId = insertedRow?.id as string | undefined;
       
       // Upload profile image if provided
       let imageUrl = null;
@@ -387,10 +399,9 @@ const StaffPage: React.FC = () => {
         // Update staff record with image URL
         if (imageUrl) {
           const { error: updateError } = await supabase
-            .rpc('update_staff', {
-              staff_id_param: insertedStaffId,
-              dp_url_param: imageUrl
-            });
+            .from('staff')
+            .update({ dp_url: imageUrl })
+            .eq('id', insertedStaffId);
             
           if (updateError) {
             console.warn('Failed to update image URL:', updateError);
@@ -406,10 +417,9 @@ const StaffPage: React.FC = () => {
         // Update staff record with document URLs
         if (documentUrls.length > 0) {
           const { error: updateError } = await supabase
-            .rpc('update_staff_doc_url', {
-              staff_id_param: insertedStaffId,
-              doc_url_param: documentUrls
-            });
+            .from('staff')
+            .update({ doc_url: documentUrls })
+            .eq('id', insertedStaffId);
             
           if (updateError) {
             console.warn('Failed to update document URLs:', updateError);
@@ -1276,16 +1286,10 @@ const StaffPage: React.FC = () => {
                   }
                 }
                 
-                const { error } = await supabase.rpc('update_staff', {
-                  staff_id_param: editMemberId,
-                  name_param: updates.name,
-                  role_title_param: updates.role_title,
-                  contact_param: updates.contact,
-                  date_of_joining_param: updates.date_of_joining,
-                  monthly_salary_param: updates.monthly_salary,
-                  default_payment_mode_param: updates.default_payment_mode,
-                  dp_url_param: updates.dp_url
-                });
+                const { error } = await supabase
+                  .from('staff')
+                  .update(updates)
+                  .eq('id', editMemberId);
                 if (error) throw error;
                 toast({ title: 'Staff updated' });
                 setEditMemberId(null);

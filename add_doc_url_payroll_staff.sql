@@ -72,7 +72,7 @@ BEGIN
     COALESCE(s.doc_url, ARRAY[]::text[]) as doc_url,
     s.created_at,
     s.updated_at
-  FROM payroll.staff s
+  FROM public.staff s
   WHERE s.branch_id = branch_id_param
   ORDER BY s.name;
 END;
@@ -112,7 +112,7 @@ BEGIN
     COALESCE(s.doc_url, ARRAY[]::text[]) as doc_url,
     s.created_at,
     s.updated_at
-  FROM payroll.staff s
+  FROM public.staff s
   WHERE s.id = ANY(staff_ids)
   ORDER BY s.name;
 END;
@@ -120,22 +120,7 @@ $$;
 
 -- 5. Update the public.staff view to include doc_url
 -- This will make the doc_url available through the public view as well
-CREATE OR REPLACE VIEW public.staff AS
-SELECT 
-  s.id,
-  s.name,
-  s.role_title,
-  s.contact,
-  s.date_of_joining,
-  s.monthly_salary,
-  s.default_payment_mode,
-  s.is_active,
-  s.dp_url,
-  COALESCE(s.doc_url, ARRAY[]::text[]) as doc_url,
-  s.created_at,
-  s.updated_at,
-  s.branch_id
-FROM payroll.staff s;
+-- View already exists pointing to payroll.staff; keep consumer queries targeting public.staff
 
 -- 6. Grant execute permissions
 GRANT EXECUTE ON FUNCTION update_staff TO authenticated;

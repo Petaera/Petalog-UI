@@ -77,7 +77,7 @@ BEGIN
     COALESCE(s.doc_url, ARRAY[]::text[]) as doc_url,
     s.created_at,
     s.updated_at
-  FROM payroll.staff s
+  FROM public.staff s
   WHERE s.branch_id = branch_id_param
   ORDER BY s.name;
 END;
@@ -117,7 +117,7 @@ BEGIN
     COALESCE(s.doc_url, ARRAY[]::text[]) as doc_url,
     s.created_at,
     s.updated_at
-  FROM payroll.staff s
+  FROM public.staff s
   WHERE s.id = ANY(staff_ids)
   ORDER BY s.name;
 END;

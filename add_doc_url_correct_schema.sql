@@ -56,7 +56,7 @@ BEGIN
     s.is_active,
     s.branch_id,
     COALESCE(s.doc_url, ARRAY[]::text[]) as doc_url
-  FROM payroll.staff s
+  FROM public.staff s
   WHERE s.branch_id = branch_id_param
   ORDER BY s.name;
 END;
@@ -84,7 +84,7 @@ BEGIN
     s.is_active,
     s.branch_id,
     COALESCE(s.doc_url, ARRAY[]::text[]) as doc_url
-  FROM payroll.staff s
+  FROM public.staff s
   WHERE s.id = ANY(staff_ids)
   ORDER BY s.name;
 END;
@@ -92,15 +92,7 @@ $$;
 
 -- 6. Update the public.staff view to include doc_url
 -- Only including fields that exist in the actual schema
-CREATE OR REPLACE VIEW public.staff AS
-SELECT 
-  s.id,
-  s.name,
-  s.role_title,
-  s.is_active,
-  s.branch_id,
-  COALESCE(s.doc_url, ARRAY[]::text[]) as doc_url
-FROM payroll.staff s;
+-- View already exists; keep queries using public.staff
 
 -- 7. Grant execute permissions
 GRANT EXECUTE ON FUNCTION update_staff TO authenticated;
