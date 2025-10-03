@@ -1864,9 +1864,7 @@ useEffect(() => {
               const payLaterCount = payLaterLogs.length;
               const payLaterDue = payLaterLogs.reduce((sum, log) => {
                 const amount = Number(log.Amount) || 0;
-                const discount = Number(log.discount) || 0;
-                const net = amount - discount;
-                return sum + (net > 0 ? net : 0);
+                return sum + amount;
               }, 0);
 
               return (
