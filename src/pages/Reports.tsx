@@ -15,7 +15,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 import { useAuth } from '@/contexts/AuthContext';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, XAxis, YAxis,LabelList} from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, XAxis, YAxis, LabelList, CartesianGrid} from 'recharts';
 import { Switch } from "@/components/ui/switch";
 // Types for our data
 interface Vehicle {
@@ -2291,16 +2291,24 @@ useEffect(() => {
         </CardContent>
       </Card>
 
-      {/* Hourly Sales Bar Chart - Only for today, yesterday, or single day */}
-      {["today", "yesterday", "singleday"].includes(dateRange) && (
+      {/* Hourly Sales Bar Chart - Available for all date ranges */}
+      {(
         <Card>
           <CardHeader>
             <CardTitle>Hourly Sales Breakdown</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {dateRange === "today" && "Today's hourly sales"}
+              {dateRange === "yesterday" && "Yesterday's hourly sales"}
+              {dateRange === "singleday" && "Selected day hourly sales"}
+              {dateRange === "last7days" && "Last 7 days - aggregated hourly sales"}
+              {dateRange === "last30days" && "Last 30 days - aggregated hourly sales"}
+              {dateRange === "custom" && "Custom period - aggregated hourly sales"}
+            </p>
           </CardHeader>
           <CardContent>
             {filteredData.filteredVehicles.length === 0 ? (
               <div className="text-center p-4 text-muted-foreground">
-                No data available for selected day
+                No data available for selected period
               </div>
             ) : (
               <div className="w-full h-64">
@@ -2323,26 +2331,14 @@ useEffect(() => {
                             amount: 0,
                             count: 0,
                           }));
-                          let targetDate: Date | undefined;
-                          if (dateRange === "today") {
-                            targetDate = new Date();
-                          } else if (dateRange === "yesterday") {
-                            targetDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
-                          } else if (dateRange === "singleday" && customFromDate) {
-                            targetDate = customFromDate;
-                          }
-                          if (targetDate) {
-                            const dayStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
-                            const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
-                            filteredData.filteredVehicles.forEach((vehicle) => {
-                              const created = new Date(vehicle.created_at);
-                              if (created >= dayStart && created < dayEnd) {
-                                const hour = created.getHours();
-                                hours[hour].amount += vehicle.price || 0;
-                                hours[hour].count += 1;
-                              }
-                            });
-                          }
+                          // For all date ranges (single day and multi-day), aggregate hourly data
+                          // The data is already filtered by date range at the database level
+                          filteredData.filteredVehicles.forEach((vehicle) => {
+                            const created = new Date(vehicle.created_at);
+                            const hour = created.getHours();
+                            hours[hour].amount += vehicle.price || 0;
+                            hours[hour].count += 1;
+                          });
                           return hours;
                         })()}
                         margin={{ top: 10, right: 20, left: 0, bottom: 20 }}
@@ -2385,6 +2381,477 @@ useEffect(() => {
           </CardContent>
         </Card>
       )}
+
+      {/* Period Comparison Chart - Comparing current period with last 5 periods */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Period Comparison</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Revenue and Vehicle Count comparison across 6 periods
+          </p>
+        </CardHeader>
+        <CardContent>
+          {filteredData.filteredVehicles.length === 0 ? (
+            <div className="text-center p-4 text-muted-foreground">
+              No data available for comparison
+            </div>
+          ) : (
+            <div className="w-full h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={(() => {
+                    const currentPeriod = {
+                      revenue: filteredData.totalRevenue,
+                      vehicleCount: filteredData.totalVehicles,
+                      label: (() => {
+                        if (dateRange === "today") return "Today";
+                        if (dateRange === "yesterday") return "Yesterday";
+                        if (dateRange === "singleday" && customFromDate) return format(customFromDate, "dd MMM");
+                        if (dateRange === "last7days") return "Last 7 Days";
+                        if (dateRange === "last30days") return "Last 30 Days";
+                        if (dateRange === "custom" && (customFromDate || customToDate)) {
+                          return `${format(customFromDate || new Date(), "dd MMM")} - ${format(customToDate || new Date(), "dd MMM")}`;
+                        }
+                        return "Current Period";
+                      })()
+                    };
+
+                    // Generate 5 previous periods
+                    const previousPeriods = (() => {
+                      const periods = [];
+                      const now = new Date();
+
+                      if (dateRange === "today") {
+                        for (let i = 1; i <= 5; i++) {
+                          const day = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+                          periods.push({
+                            label: format(day, "dd MMM"),
+                            revenue: 0, // Will be calculated from comparison logs
+                            vehicleCount: 0
+                          });
+                        }
+                      } else if (dateRange === "yesterday") {
+                        for (let i = 2; i <= 6; i++) {
+                          const day = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+                          periods.push({
+                            label: format(day, "dd MMM"),
+                            revenue: 0,
+                            vehicleCount: 0
+                          });
+                        }
+                      } else if (dateRange === "singleday" && customFromDate) {
+                        for (let i = 1; i <= 5; i++) {
+                          const day = new Date(customFromDate.getTime() - i * 24 * 60 * 60 * 1000);
+                          periods.push({
+                            label: format(day, "dd MMM"),
+                            revenue: 0,
+                            vehicleCount: 0
+                          });
+                        }
+                      } else if (dateRange === "last7days") {
+                        for (let i = 1; i <= 5; i++) {
+                          const weekStart = new Date(now.getTime() - (i * 7 * 24 * 60 * 60 * 1000) - 6 * 24 * 60 * 60 * 1000);
+                          const weekEnd = new Date(weekStart.getTime() + 6 * 24 * 60 * 60 * 1000);
+                          periods.push({
+                            label: `Week ${6 - i}`,
+                            revenue: 0,
+                            vehicleCount: 0,
+                            startDate: weekStart,
+                            endDate: weekEnd
+                          });
+                        }
+                      } else if (dateRange === "last30days") {
+                        for (let i = 1; i <= 5; i++) {
+                          const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                          const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+                          periods.push({
+                            label: `${monthStart.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`,
+                            revenue: 0,
+                            vehicleCount: 0,
+                            startDate: monthStart,
+                            endDate: monthEnd
+                          });
+                        }
+                      } else if (dateRange === "custom" && customFromDate && customToDate) {
+                        const customDays = Math.ceil((customToDate.getTime() - customFromDate.getTime()) / (24 * 60 * 60 * 1000));
+                        for (let i = 1; i <= 5; i++) {
+                          const periodStart = new Date(customFromDate.getTime() - (i * customDays * 24 * 60 * 60 * 1000));
+                          const periodEnd = new Date(periodStart.getTime() + customDays * 24 * 60 * 60 * 1000);
+                          periods.push({
+                            label: `Period ${6 - i}`,
+                            revenue: 0,
+                            vehicleCount: 0,
+                            startDate: periodStart,
+                            endDate: periodEnd
+                          });
+                        }
+                      }
+
+                      return periods;
+                    })();
+
+                    // Calculate previous period data from comparison logs
+                    previousPeriods.forEach((period, index) => {
+                      if (dateRange === "today" || dateRange === "yesterday" || dateRange === "singleday") {
+                        // For daily periods, calculate from comparison logs
+                        const currentLocation = user?.role === 'manager' ? user?.assigned_location : 
+                          (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
+                        
+                        let filteredLogs = [...comparisonLogs];
+                        
+                        if (currentLocation) {
+                          filteredLogs = filteredLogs.filter(log => log.location_id === currentLocation);
+                        }
+                        
+                        filteredLogs = filteredLogs.filter(log => log.approval_status === 'approved');
+                        
+                        // Filter by specific day
+                        let dayStart: Date, dayEnd: Date;
+                        if (period.label.includes('Week') || period.startDate) {
+                          dayStart = period.startDate!;
+                          dayEnd = period.endDate!;
+                        } else {
+                          // Parse day from label for daily periods
+                          const dayDate = new Date();
+                          if (dateRange === "today") {
+                            dayDate.setTime(new Date().getTime() - (index + 1) * 24 * 60 * 60 * 1000);
+                          } else if (dateRange === "yesterday") {
+                            dayDate.setTime(new Date().getTime() - (index + 2) * 24 * 60 * 60 * 1000);
+                          } else if (dateRange === "singleday" && customFromDate) {
+                            dayDate.setTime(customFromDate.getTime() - (index + 1) * 24 * 60 * 60 * 1000);
+                          }
+                          dayStart = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate());
+                          dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+                        }
+                        
+                        const dayLogs = filteredLogs.filter(log => {
+                          const created = new Date(log.created_at);
+                          return created >= dayStart && created < dayEnd;
+                        });
+                        
+                        period.revenue = dayLogs.reduce((sum, log) => sum + (log.Amount || 0), 0);
+                        period.vehicleCount = dayLogs.length;
+                      } else {
+                        // For weekly/monthly/custom periods
+                        const currentLocation = user?.role === 'manager' ? user?.assigned_location : 
+                          (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
+                        
+                        let filteredLogs = [...comparisonLogs];
+                        
+                        if (currentLocation) {
+                          filteredLogs = filteredLogs.filter(log => log.location_id === currentLocation);
+                        }
+                        
+                        filteredLogs = filteredLogs.filter(log => log.approval_status === 'approved');
+                        
+                        const dayLogs = filteredLogs.filter(log => {
+                          const created = new Date(log.created_at);
+                          return created >= period.startDate! && created <= period.endDate!;
+                        });
+                        
+                        period.revenue = dayLogs.reduce((sum, log) => sum + (log.Amount || 0), 0);
+                        period.vehicleCount = dayLogs.length;
+                      }
+                    });
+
+                    return [
+                      currentPeriod,
+                      ...previousPeriods
+                    ];
+                  })()}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="label" />
+                  <YAxis yAxisId="revenue" orientation="left" />
+                  <YAxis yAxisId="count" orientation="right" />
+                  <Tooltip
+                    formatter={(value: number, name: string) => {
+                      if (name === "revenue") return [`₹${value.toLocaleString()}`, "Revenue"];
+                      if (name === "vehicleCount") return [value.toLocaleString(), "Vehicles"];
+                      return [value, name];
+                    }}
+                    labelFormatter={(label: string) => `Period: ${label}`}
+                  />
+                  <Bar dataKey="revenue" fill="#6366f1" yAxisId="revenue" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="vehicleCount" fill="#10b981" yAxisId="count" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+
+      {/* Top Vehicle Types Chart */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Top Vehicle Types Breakdown</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Top 6 vehicle types by count for selected period, grouped by categories
+          </p>
+        </CardHeader>
+        <CardContent>
+          {filteredData.filteredVehicles.length === 0 ? (
+            <div className="text-center p-4 text-muted-foreground">
+              No data available for vehicle type breakdown
+          </div>
+          ) : (() => {
+            // Count vehicles by type for current period
+            const typeCounts = filteredData.filteredVehicles.reduce((acc, vehicle) => {
+              const type = vehicle.vehicle_type || 'Unknown';
+              acc[type] = (acc[type] || 0) + 1;
+              return acc;
+            }, {} as Record<string, number>);
+
+            // Get top 6 types for current period
+            const topTypesCurrent = Object.entries(typeCounts)
+              .sort(([,a], [,b]) => b - a)
+              .slice(0, 6)
+              .map(([type, count]) => ({ type, count }));
+
+            // Generate comparison data for previous periods
+            const comparisonData = topTypesCurrent.map(currentType => {
+              const comparisonByPeriod = [];
+              
+              // Add current period first
+              comparisonByPeriod.push({
+                period: (() => {
+                  if (dateRange === "today") return "Today";
+                  if (dateRange === "yesterday") return "Yesterday";
+                  if (dateRange === "singleday" && customFromDate) return format(customFromDate, "MMM dd");
+                  if (dateRange === "last7days") return "Last 7 Days";
+                  if (dateRange === "last30days") return "Last 30 Days";
+                  if (dateRange === "custom" && customFromDate && customToDate) {
+                    return `${format(customFromDate, "MMM dd")} - ${format(customToDate, "MMM dd")}`;
+                  }
+                  return "Current Period";
+                })(),
+                count: currentType.count
+              });
+
+              // Add previous periods (simplified - showing last 5 periods)
+              for (let i = 1; i <= 5; i++) {
+                let periodLabel = "";
+                let periodStart: Date, periodEnd: Date;
+                
+                if (dateRange === "today") {
+                  const day = new Date(new Date().getTime() - i * 24 * 60 * 60 * 1000);
+                  periodLabel = format(day, "MMM dd");
+                  periodStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+                  periodEnd = new Date(periodStart.getTime() + 24 * 60 * 60 * 1000);
+                } else if (dateRange === "yesterday") {
+                  const day = new Date(new Date().getTime() - (i + 1) * 24 * 60 * 60 * 1000);
+                  periodLabel = format(day, "MMM-dd");
+                  periodStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+                  periodEnd = new Date(periodStart.getTime() + 24 * 60 * 60 * 1000);
+                } else if (dateRange === "singleday" && customFromDate) {
+                  const day = new Date(customFromDate.getTime() - i * 24 * 60 * 60 * 1000);
+                  periodLabel = format(day, "MMM-dd");
+                  periodStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+                  periodEnd = new Date(periodStart.getTime() + 24 * 60 * 60 * 1000);
+                } else {
+                  periodLabel = `Period ${i}`;
+                  periodEnd = new Date();
+                  if (dateRange === "last7days") {
+                    periodStart = new Date(periodEnd.getTime() - (i * 7 + 6) * 24 * 60 * 60 * 1000);
+                    periodLabel = `Week ${i}`;
+                  } else if (dateRange === "last30days") {
+                    periodStart = new Date(periodEnd.getFullYear(), periodEnd.getMonth() - i, 1);
+                    periodLabel = periodStart.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                  } else {
+                    periodStart = new Date(periodEnd.getTime() - i * 30 * 24 * 60 * 60 * 1000);
+                  }
+                }
+                
+                // Calculate count for this vehicle type in this period
+                const currentLocation = user?.role === 'manager' ? user?.assigned_location : 
+                  (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
+                
+                let filteredLogs = [...comparisonLogs];
+                
+                if (currentLocation) {
+                  filteredLogs = filteredLogs.filter(log => log.location_id === currentLocation);
+                }
+                
+                filteredLogs = filteredLogs.filter(log => log.approval_status === 'approved');
+                
+                const periodLogs = filteredLogs.filter(log => {
+                  const created = new Date(log.created_at);
+                  return created >= periodStart && created < periodEnd;
+                });
+                
+                const typeLogs = periodLogs.filter(log => 
+                  (log.vehicle_type || '').toLowerCase() === currentType.type.toLowerCase()
+                );
+                
+                comparisonByPeriod.push({
+                  period: periodLabel,
+                  count: typeLogs.length
+                });
+              }
+
+              return {
+                vehicleType: currentType.type,
+                data: comparisonByPeriod // Show current first, then reverse chronological order
+              };
+            });
+
+            return (
+              <div className="space-y-6">
+                {/* Current Period Summary */}
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {topTypesCurrent.map((item, idx) => (
+                    <div key={item.type} className="p-3 bg-accent/50 rounded-lg border-2 border-accent/20">
+                      <div className="text-lg font-bold text-primary">{item.count}</div>
+                      <div className="text-sm font-medium">{item.type}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {filteredData.totalVehicles > 0 ? ((item.count / filteredData.totalVehicles) * 100).toFixed(1) : 0}% of total
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Individual Charts for each Top Type */}
+                <div className="space-y-8">
+                  {comparisonData.map((typeData, idx) => (
+                    <div key={typeData.vehicleType} className="space-y-3">
+                      <div className="flex items-center gap-3">
+                        <span
+                          className="inline-block w-4 h-4 rounded"
+                          style={{
+                            backgroundColor: [
+                              "#6366f1", "#22d3ee", "#f59e42", "#10b981",
+                              "#f43f5e", "#a21caf"
+                            ][idx % 6]
+                          }}
+                        />
+                        <h3 className="font-semibold text-lg">{typeData.vehicleType}</h3>
+                        <span className="text-sm text-muted-foreground">
+                          Trend over last 6 periods
+                        </span>
+                      </div>
+                      
+                      <div className="w-full h-32">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={typeData.data}
+                            margin={{ top: 10, right: 20, left: 10, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis 
+                              dataKey="period" 
+                              fontSize={11}
+                              interval={0}
+                            />
+                            <YAxis width={40} fontSize={11} />
+                            <Tooltip 
+                              formatter={(value: number) => [value, "Count"]}
+                              labelFormatter={(label: string) => `Period: ${label}`}
+                            />
+                            <Bar 
+                              dataKey="count" 
+                              fill={[
+                                "#6366f1", "#22d3ee", "#f59e42", "#10b981",
+                                "#f43f5e", "#a21caf"
+                              ][idx % 6]} 
+                              radius={[2, 2, 0, 0]}
+                            >
+                              <LabelList 
+                                dataKey="count" 
+                                position="top" 
+                                fontSize={10}
+                                formatter={(value: number) => value > 0 ? value : ""}
+                              />
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+        </CardContent>
+      </Card>
+
+      {/* Vehicle Model Statistics Chart */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Vehicle Model Statistics</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Top vehicle models/brands breakdown for selected period
+          </p>
+        </CardHeader>
+        <CardContent>
+          {filteredData.filteredVehicles.length === 0 ? (
+            <div className="text-center p-4 text-muted-foreground">
+              No data available for vehicle model breakdown
+            </div>
+          ) : (() => {
+            // Count vehicles by model/brand
+            const modelCounts = filteredData.filteredVehicles.reduce((acc, vehicle) => {
+              const model = vehicle.vehicle_model || 'Unknown';
+              acc[model] = (acc[model] || 0) + 1;
+              return acc;
+            }, {} as Record<string, number>);
+
+            // Get top models (limit to prevent overcrowding)
+            const topModels = Object.entries(modelCounts)
+              .sort(([,a], [,b]) => b - a)
+              .slice(0, 10)
+              .map(([model, count]) => ({ model, count }));
+
+            return (
+              <div className="w-full h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={topModels}
+                    margin={{ top: 20, right: 30, left: 20, bottom: 40 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="model" 
+                      angle={-45}
+                      textAnchor="end"
+                      height={100}
+                    />
+                    <YAxis />
+                    <Tooltip formatter={(value: number) => [value, "Count"]} />
+                    <Bar dataKey="count" fill="#ef4444" radius={[4, 4, 0, 0]}>
+                      <LabelList dataKey="count" position="top" />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                
+                {/* Detailed breakdown button */}
+                <div className="mt-4 flex justify-center">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const detailedBreakdown = Object.entries(modelCounts)
+                        .sort(([,a], [,b]) => b - a)
+                        .map(([model, count]) => ({
+                          model,
+                          count,
+                          percentage: ((count / filteredData.totalVehicles) * 100).toFixed(1) + '%'
+                        }));
+
+                      alert(`Detailed Vehicle Model Breakdown:\n\n${detailedBreakdown.map(item => 
+                        `${item.model}: ${item.count} vehicles (${item.percentage})`
+                      ).join('\n')}`);
+                    }}
+                  >
+                    View Detailed Breakdown
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
+        </CardContent>
+      </Card>
 
       {/* Records Table with Pagination */}
       <Card>
