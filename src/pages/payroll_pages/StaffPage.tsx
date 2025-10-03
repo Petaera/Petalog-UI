@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabaseClient';
+// Supabase import removed
 import { 
   Plus, 
   Search, 
@@ -28,6 +28,7 @@ import { toast } from '@/hooks/use-toast';
 import { useUpiAccounts } from '@/hooks/useUpiAccounts';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useSelectedLocation } from '@/hooks/useSelectedLocation';
+import { supabase } from '@/lib/supabaseClient';
 
 interface Staff {
   id: string;
@@ -76,7 +77,7 @@ const StaffPage: React.FC = () => {
   
   // State for staff management
   const [staff, setStaff] = useState<Staff[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
@@ -300,7 +301,7 @@ const StaffPage: React.FC = () => {
     }
     try {
       setLeavesLoading(true);
-      const candidates = ['staff_leave_periods', 'payroll_staff_leave_periods'];
+  const candidates = ['staff_leave_periods', 'public_staff_leave_periods'];
       let rows: any[] | null = null;
       for (const t of candidates) {
         try {
@@ -509,130 +510,15 @@ const StaffPage: React.FC = () => {
   };
 
   useEffect(() => {
-    const loadStaff = async () => {
-      try {
-        setLoading(true);
-        if (!user?.id) {
-          setStaff([]);
-          return;
-        }
-
-        // Only load staff if we have a selected location
-        if (!selectedLocationId) {
-          setStaff([]);
-          return;
-        }
-
-        // Load settlement mode for the branch
-        try {
-          const { data } = await supabase
-            .from('payroll_settings')
-            .select('settlement_mode')
-            .eq('branch_id', selectedLocationId)
-            .maybeSingle();
-          if (data) {
-            setSettlementMode((data.settlement_mode === 'carry_forward' ? 'carry_forward' : 'monthly') as 'monthly' | 'carry_forward');
-          }
-        } catch (_) {}
-
-        // Use RPC function to get staff by branch
-        const { data: staffData, error: staffError } = await supabase
-          .rpc('get_staff_by_branch', { branch_id_param: selectedLocationId });
-        if (staffError) throw staffError;
-        
-        // Debug log to check raw data
-        console.log('Raw staff data from RPC (loadStaff):', staffData);
-        console.log('dp_url values:', staffData?.map(s => ({ name: s.name, dp_url: s.dp_url })));
-        staffData?.forEach((s, index) => {
-          console.log(`Staff ${index + 1}:`, { name: s.name, dp_url: s.dp_url, hasDpUrl: !!s.dp_url });
-        });
-
-      let mapped: Staff[] = (staffData || []).map((row: any): Staff => ({
-        id: row.id,
-        name: row.name,
-        role: row.role_title || row.role || '',
-        isActive: typeof row.is_active === 'boolean' ? row.is_active : row.isActive,
-        monthlySalary: Number((row.monthly_salary ?? row.monthlySalary) || 0),
-        payableSalary: Number((row.monthly_salary ?? row.monthlySalary) || 0),
-        totalAdvances: 0,
-        presentDays: 0,
-        absences: 0,
-        paidLeaves: 0,
-        unpaidLeaves: 0,
-        contact: row.contact || '',
-        dateOfJoining: row.date_of_joining || row.dateOfJoining,
-        paymentMode: row.default_payment_mode || row.payment_mode || row.paymentMode || '',
-        dp_url: row.dp_url || null,
-        doc_url: row.doc_url || null
-      }));
-        mapped = await mergeMonthlyAggregates(mapped) as Staff[];
-        setStaff(mapped);
-      } catch (error) {
-        console.error('Error loading staff:', error);
-        toast({
-          title: "Error",
-          description: "Failed to load staff data",
-          variant: "destructive"
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadStaff();
-    loadActivities(0);
-    // leaves will load after staff is set in a separate effect below
+    // Supabase code removed. You can add local mock data here if needed
+    setStaff([]); // Or set to local data
+    setLoading(false);
   }, [selectedLocationId]);
 
   const refreshStaff = async () => {
-    if (!user?.id || !selectedLocationId) return;
-    setLoading(true);
-    try {
-      // Reload settlement mode
-      try {
-        const { data } = await supabase
-          .from('payroll_settings')
-          .select('settlement_mode')
-          .eq('branch_id', selectedLocationId)
-          .maybeSingle();
-        if (data) {
-          setSettlementMode((data.settlement_mode === 'carry_forward' ? 'carry_forward' : 'monthly') as 'monthly' | 'carry_forward');
-        }
-      } catch (_) {}
-
-      // Use RPC function to get staff by branch
-      const { data: staffData, error: staffError } = await supabase
-        .rpc('get_staff_by_branch', { branch_id_param: selectedLocationId });
-      if (staffError) throw staffError;
-      
-      // Debug log to check raw data
-      console.log('Raw staff data from RPC:', staffData);
-
-      let mapped: Staff[] = (staffData || []).map((row: any): Staff => ({
-        id: row.id,
-        name: row.name,
-        role: row.role_title || row.role || '',
-        isActive: typeof row.is_active === 'boolean' ? row.is_active : row.isActive,
-        monthlySalary: Number((row.monthly_salary ?? row.monthlySalary) || 0),
-        payableSalary: Number((row.monthly_salary ?? row.monthlySalary) || 0),
-        totalAdvances: 0,
-        presentDays: 0,
-        absences: 0,
-        paidLeaves: 0,
-        unpaidLeaves: 0,
-        contact: row.contact || '',
-        dateOfJoining: row.date_of_joining || row.dateOfJoining,
-        paymentMode: row.default_payment_mode || row.payment_mode || row.paymentMode || '',
-        dp_url: row.dp_url || null,
-        doc_url: row.doc_url || null
-      }));
-      mapped = await mergeMonthlyAggregates(mapped) as Staff[];
-      setStaff(mapped);
-      // Also reload activities when staff is refreshed
-      await loadActivities(0);
-    } finally {
-      setLoading(false);
-    }
+    // Supabase code removed
+    setStaff([]); // Or set to local data
+    setLoading(false);
   };
 
   // Load leaves whenever the visible staff list changes (e.g., location filter changes)
