@@ -75,6 +75,14 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
 
   // Checkout remarks state
   const [checkoutRemarks, setCheckoutRemarks] = useState<string>('');
+  const [checkoutLoyaltyAmount, setCheckoutLoyaltyAmount] = useState<number | null>(null);
+
+  // Loyalty add flow state
+  const [addLoyaltyOpen, setAddLoyaltyOpen] = useState(false);
+  const [loyaltyLog, setLoyaltyLog] = useState<any | null>(null);
+  const [loyaltyPlans, setLoyaltyPlans] = useState<any[]>([]);
+  const [selectedLoyaltyPlanId, setSelectedLoyaltyPlanId] = useState<string>('');
+  const [addingToLoyalty, setAddingToLoyalty] = useState(false);
 
   // Reset UPI account selection when selectedLocation changes
   useEffect(() => {
@@ -96,7 +104,40 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
     }
   }, [selectedLocation]);
 
-  const openCheckout = (log: any) => {
+  // Load active loyalty plans (owner's or manager's permitted)
+  useEffect(() => {
+    const loadPlans = async () => {
+      if (!user?.id) return;
+      try {
+        const isManager = String(user.role || '').toLowerCase().includes('manager');
+        let permittedOwnerIds: string[] = [];
+        if (isManager && user.assigned_location) {
+          const { data: ownerMap } = await supabase
+            .from('location_owners')
+            .select('owner_id')
+            .eq('location_id', user.assigned_location);
+          permittedOwnerIds = (ownerMap || []).map((o: any) => o.owner_id).filter(Boolean);
+        }
+        let q = supabase
+          .from('subscription_plans')
+          .select('id, name, type, price, active, duration_days, max_redemptions, plan_amount, multiplier, owner_id')
+          .eq('active', true);
+        if (isManager) {
+          if (permittedOwnerIds.length === 0) { setLoyaltyPlans([]); return; }
+          q = q.in('owner_id', permittedOwnerIds);
+        } else {
+          q = q.eq('owner_id', user.id);
+        }
+        const { data } = await q;
+        setLoyaltyPlans(data || []);
+      } catch (e) {
+        setLoyaltyPlans([]);
+      }
+    };
+    loadPlans();
+  }, [user?.id, user?.role, user?.assigned_location]);
+
+  const openCheckout = (log: any, opts?: { loyaltyAmount?: number }) => {
     setCheckoutLog(log);
     setCheckoutPaymentMode((log?.payment_mode as any) || 'cash');
     setCheckoutDiscount(log?.discount != null ? String(log.discount) : '');
@@ -110,6 +151,11 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
     
     setSelectedUpiAccount(''); // Reset UPI account selection
     setCheckoutRemarks(''); // Reset remarks
+    if (opts && typeof opts.loyaltyAmount === 'number') {
+      setCheckoutLoyaltyAmount(Number(opts.loyaltyAmount) || 0);
+    } else {
+      setCheckoutLoyaltyAmount(null);
+    }
 
 
     setCheckoutOpen(true);
@@ -660,6 +706,18 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                                 size="sm"
                                 variant="outline"
                                 className="text-xs"
+                                onClick={() => {
+                                  setLoyaltyLog(log);
+                                  setSelectedLoyaltyPlanId('');
+                                  setAddLoyaltyOpen(true);
+                                }}
+                              >
+                                Add to Loyalty
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-xs"
                                 onClick={() => handleEdit(log)}
                               >
                                 <Edit className="h-3 w-3 mr-1" />
@@ -965,7 +1023,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
       </Card>
 
       {/* Checkout Dialog */}
-        <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
+        <Dialog open={checkoutOpen} onOpenChange={(v)=>{ setCheckoutOpen(v); if(!v) setCheckoutLoyaltyAmount(null); }}>
           <DialogContent className="max-h-[90vh] overflow-hidden flex flex-col">
             <DialogHeader>
               <DialogTitle>Checkout</DialogTitle>
@@ -1021,6 +1079,11 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                       return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(finalAmt);
                     })()}
                   </div>
+                  {checkoutLoyaltyAmount != null && (
+                    <div className="mt-1 text-xs text-muted-foreground text-right">
+                      Loyalty: {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(checkoutLoyaltyAmount)}
+                    </div>
+                  )}
                 </div>
               </div>
               <div>
@@ -1101,7 +1164,7 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setCheckoutOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setCheckoutOpen(false); setCheckoutLoyaltyAmount(null); }}>Cancel</Button>
               <Button onClick={confirmCheckout}>Confirm Checkout</Button>
             </DialogFooter>
           </DialogContent>
@@ -1354,6 +1417,112 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
                 toast.error(`Update failed: ${err?.message || err}`);
               }
             }}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add to Loyalty Dialog */}
+      <Dialog open={addLoyaltyOpen} onOpenChange={setAddLoyaltyOpen}>
+        <DialogContent className="max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Add to Loyalty</DialogTitle>
+            <DialogDescription>Select a plan to enroll this customer.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 overflow-y-auto flex-1 pr-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Customer</Label>
+                <div className="mt-1 text-sm font-medium">{loyaltyLog?.Name || '-'}</div>
+              </div>
+              <div>
+                <Label>Phone</Label>
+                <div className="mt-1 text-sm">{loyaltyLog?.Phone_no || '-'}</div>
+              </div>
+            </div>
+            <div>
+              <Label>Choose Plan</Label>
+              <Select value={selectedLoyaltyPlanId} onValueChange={setSelectedLoyaltyPlanId}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder={loyaltyPlans.length ? 'Select plan' : 'No plans available'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {loyaltyPlans.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name} - ₹{p.plan_amount || p.price || 0} ({String(p.type || '').toLowerCase()})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddLoyaltyOpen(false)}>Cancel</Button>
+            <Button disabled={!selectedLoyaltyPlanId || addingToLoyalty} onClick={async () => {
+              if (!loyaltyLog || !selectedLoyaltyPlanId || !user?.id) return;
+              setAddingToLoyalty(true);
+              try {
+                // Ensure customer exists (by phone), create or update
+                const phoneKey = (loyaltyLog.Phone_no || '').toString();
+                let customerId: string | null = null;
+                if (phoneKey) {
+                  const { data: existing } = await supabase
+                    .from('customers')
+                    .select('id')
+                    .eq('phone', phoneKey)
+                    .limit(1);
+                  if (existing && existing.length > 0) {
+                    customerId = existing[0].id;
+                    await supabase.from('customers').update({
+                      name: loyaltyLog.Name || null,
+                      email: null,
+                      owner_id: user.id
+                    }).eq('id', customerId);
+                  } else {
+                    const { data: ins } = await supabase
+                      .from('customers')
+                      .insert([{ name: loyaltyLog.Name || null, phone: phoneKey, owner_id: user.id }])
+                      .select('id')
+                      .limit(1);
+                    customerId = ins && ins[0]?.id;
+                  }
+                }
+
+                // Create purchase
+                const plan = loyaltyPlans.find(p => p.id === selectedLoyaltyPlanId) || {} as any;
+                const now = new Date();
+                const startDate = now.toISOString();
+                const expiryDate = plan?.duration_days ? new Date(now.getTime() + (Number(plan.duration_days) || 0) * 24 * 60 * 60 * 1000).toISOString() : null;
+                const remainingVisits = plan?.max_redemptions != null ? Number(plan.max_redemptions) : null;
+                const totalValue = Number(plan?.price || 0);
+
+                await supabase
+                  .from('subscription_purchases')
+                  .insert([
+                    {
+                      plan_id: selectedLoyaltyPlanId,
+                      customer_id: customerId,
+                      vehicle_id: null,
+                      location_id: selectedLocation || null,
+                      status: 'active',
+                      created_by: user.id,
+                      start_date: startDate,
+                      expiry_date: expiryDate,
+                      total_value: totalValue,
+                      remaining_visits: remainingVisits,
+                      source_payment_method: null,
+                    }
+                  ]);
+
+                setAddLoyaltyOpen(false);
+                // Immediately proceed to checkout with same log, pass loyalty reference amount
+                const loyaltyAmount = Number(plan?.plan_amount || plan?.price || 0) || 0;
+                openCheckout(loyaltyLog, { loyaltyAmount });
+              } catch (e) {
+                toast.error('Failed to add to loyalty');
+              } finally {
+                setAddingToLoyalty(false);
+              }
+            }}>Add & Checkout</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

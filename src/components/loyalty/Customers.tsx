@@ -290,9 +290,56 @@ export function Customers() {
           }
         }
       } else {
-        // no vehicle found
-        setExistingVehicle(null);
-        setShowVehicleSuggestions(false);
+        // No vehicle found in vehicles table; try to enrich from latest logs-man entry
+        const { data: latestLog } = await supabase
+          .from('logs-man')
+          .select('vehicle_number, vehicle_type, vehicle_brand, vehicle_model, Name, Phone_no')
+          .eq('vehicle_number', numberPlate.trim().toUpperCase())
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (latestLog && latestLog.length > 0) {
+          const log = latestLog[0];
+          // Prefill vehicle details for the form step
+          setVehicleDetails((prev: any) => ({
+            ...prev,
+            number_plate: log.vehicle_number || prev.number_plate || numberPlate.trim().toUpperCase(),
+            type: log.vehicle_type || prev.type || '',
+            vehicle_brand: log.vehicle_brand || prev.vehicle_brand || '',
+            vehicle_model: log.vehicle_model || prev.vehicle_model || ''
+          }));
+
+          // Prefill associated customer details if present
+          if (log.Name || log.Phone_no) {
+            setExistingCustomer({
+              id: undefined,
+              name: log.Name || '',
+              phone: log.Phone_no || '',
+              email: '',
+              date_of_birth: ''
+            });
+            setShowCustomerSuggestions(true);
+            setCustomerDetails((prev: any) => ({
+              ...(prev || {}),
+              name: log.Name || (prev?.name || ''),
+              phone: log.Phone_no || (prev?.phone || ''),
+            }));
+          }
+
+          // Show a lightweight suggestion that details were auto-filled
+          setExistingVehicle({
+            id: null,
+            number_plate: log.vehicle_number,
+            type: log.vehicle_type,
+            Brand: log.vehicle_brand,
+            Vehicles_in_india: [{ Models: log.vehicle_model }]
+          } as any);
+          setShowVehicleSuggestions(true);
+        } else {
+          // no vehicle found anywhere
+          setExistingVehicle(null);
+          setShowVehicleSuggestions(false);
+        }
       }
     } catch (error) {
       toast({ title: 'Fetch failed', description: 'Could not fetch vehicle details', variant: 'destructive' });
@@ -897,6 +944,13 @@ export function Customers() {
           vehicle_model: '' 
         });
       }
+      // Ensure the number plate carrying over from the first dialog
+      if ((vehicleNumberInput || '').trim()) {
+        setVehicleDetails((prev: any) => ({
+          ...(prev || {}),
+          number_plate: vehicleNumberInput.trim().toUpperCase()
+        }));
+      }
       
       // If we found a vehicle with an associated customer, ensure customer data is also set
       if (existingCustomer && !customerDetails) {
@@ -995,6 +1049,7 @@ export function Customers() {
               Brand: vehicleDetails.vehicle_brand || null,
               model: modelId,
               location_id: locationArray,
+              owner_id: null,
             })
             .eq('id', vehicleId);
         } else {
@@ -1003,7 +1058,6 @@ export function Customers() {
             .from('vehicles')
             .select('id, type')
             .eq('number_plate', numberPlate)
-            .eq('owner_id', user?.id)
             .limit(1);
 
           if (existingVehicle && existingVehicle.length > 0) {
@@ -1020,6 +1074,7 @@ export function Customers() {
                 Brand: vehicleDetails.vehicle_brand || null,
                 model: modelId,
                 location_id: locationArray,
+                owner_id: null,
               })
               .eq('id', vehicleId);
             if (!vehicleDetails.type && existingType) {
@@ -1036,7 +1091,7 @@ export function Customers() {
                 {
                   number_plate: numberPlate,
                   type: finalType,
-                  owner_id: user?.id || null,
+                  owner_id: null,
                   Brand: vehicleDetails.vehicle_brand || null,
                   model: modelId,
                   location_id: locationArray,
@@ -1052,7 +1107,7 @@ export function Customers() {
       }
 
       // 2) Handle customer - reuse existing ID if available, otherwise create/update
-      const phoneKey = customerDetails.phone;
+      const phoneKey = (customerDetails.phone || '').trim();
       let customerId: string | null = null;
       
       // If we have an existing customer ID from the identify step, use it
@@ -1064,6 +1119,7 @@ export function Customers() {
           phone: phoneKey,
           email: customerDetails.email || null,
           owner_id: user?.id || null,
+          location_id: selectedLocationId || null,
         };
         if (customerDetails.dob) customerPayload.date_of_birth = customerDetails.dob;
         
@@ -1081,6 +1137,7 @@ export function Customers() {
           phone: phoneKey,
           email: customerDetails.email || null,
           owner_id: user?.id || null,
+          location_id: selectedLocationId || null,
         };
         if (customerDetails.dob) customerPayload.date_of_birth = customerDetails.dob;
 
@@ -1671,6 +1728,7 @@ export function Customers() {
                         value={vehicleNumberInput} 
                         onChange={(e) => setVehicleNumberInput(e.target.value.toUpperCase())} 
                         placeholder="Enter vehicle number" 
+                        readOnly={Boolean(existingVehicle?.number_plate)}
                       />
                       {showVehicleSuggestions && existingVehicle && (
                         <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
@@ -1829,15 +1887,30 @@ export function Customers() {
                   </div>
                   <div>
                     <label className="block mb-1 font-medium">Manufacturer</label>
-                    <Input value={vehicleDetails.vehicle_brand || ''} onChange={(e) => setVehicleDetails({ ...vehicleDetails, vehicle_brand: e.target.value })} placeholder="Brand / Manufacturer" />
+                    <Input 
+                      value={vehicleDetails.vehicle_brand || ''} 
+                      onChange={(e) => setVehicleDetails({ ...vehicleDetails, vehicle_brand: e.target.value })} 
+                      placeholder="Brand / Manufacturer"
+                      readOnly={Boolean(vehicleDetails.id)}
+                    />
                   </div>
                   <div>
                     <label className="block mb-1 font-medium">Vehicle Number</label>
-                    <Input value={vehicleDetails.number_plate || ''} onChange={(e) => setVehicleDetails({ ...vehicleDetails, number_plate: e.target.value.toUpperCase() })} placeholder="Vehicle Number" />
+                    <Input 
+                      value={vehicleDetails.number_plate || ''} 
+                      onChange={(e) => setVehicleDetails({ ...vehicleDetails, number_plate: e.target.value.toUpperCase() })} 
+                      placeholder="Vehicle Number"
+                      readOnly={Boolean(vehicleDetails.number_plate)}
+                    />
                   </div>
                   <div>
                     <label className="block mb-1 font-medium">Vehicle Type</label>
-                    <Input value={vehicleDetails.type || ''} onChange={(e) => setVehicleDetails({ ...vehicleDetails, type: e.target.value })} placeholder="Type (car/bike)" />
+                    <Input 
+                      value={vehicleDetails.type || ''} 
+                      onChange={(e) => setVehicleDetails({ ...vehicleDetails, type: e.target.value })} 
+                      placeholder="Type (car/bike)"
+                      readOnly={Boolean(vehicleDetails.id)}
+                    />
                   </div>
                   <div className="flex justify-end">
                     <Button className="mt-2" onClick={handleSaveCustomer} disabled={isLoading || !(selectedPlanId || selectedScheme) || !(customerDetails?.phone || '').trim() || !(() => {
