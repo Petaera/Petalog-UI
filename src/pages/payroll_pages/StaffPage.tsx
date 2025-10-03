@@ -78,6 +78,8 @@ const StaffPage: React.FC = () => {
   const [paymentModeSel, setPaymentModeSel] = useState<'Cash' | 'UPI' | ''>('');
   const [paymentNotes, setPaymentNotes] = useState<string>('');
   const [savingPayment, setSavingPayment] = useState(false);
+  const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [intendedSalary, setIntendedSalary] = useState<number | null>(null);
 
   const { accounts: upiAccounts } = useUpiAccounts(selectedLocationId);
   const [editMemberId, setEditMemberId] = useState<string | null>(null);
@@ -761,6 +763,7 @@ const StaffPage: React.FC = () => {
                 onValueChange={(v: 'Advance' | 'Salary' | 'Salary_Carryforward') => {
                   setPaymentType(v);
                   setPaymentAmount('');
+                  setIntendedSalary(null);
                 }}>
                 <SelectTrigger>
                   <SelectValue />
@@ -774,6 +777,32 @@ const StaffPage: React.FC = () => {
                 </SelectContent>
               </Select>
             </div>
+            {paymentType === 'Salary' && paymentStaffId && (
+              <div className="grid gap-2">
+                <Label>Suggested Salary</Label>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const st = staff.find(s => s.id === paymentStaffId);
+                    const sal = st ? Number(st.monthlySalary || 0) : 0;
+                    setIntendedSalary(sal);
+                    setPaymentAmount(String(sal || ''));
+                  }}
+                >
+                  Use Staff Salary
+                </Button>
+              </div>
+            )}
+            {user?.role === 'owner' && (
+              <div className="grid gap-2">
+                <Label>Payment Date</Label>
+                <Input 
+                  type="date" 
+                  value={paymentDate}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                />
+              </div>
+            )}
             <div className="grid gap-2">
               <Label>Amount</Label>
               <Input 
@@ -783,6 +812,9 @@ const StaffPage: React.FC = () => {
                 value={paymentAmount} 
                 onChange={(e) => setPaymentAmount(e.target.value)} 
               />
+              {paymentType === 'Salary' && intendedSalary != null && (
+                <p className="text-xs text-muted-foreground">Suggested salary: ₹{Number(intendedSalary || 0).toLocaleString('en-IN')}</p>
+              )}
             </div>
             <div className="grid gap-2">
               <Label>Payment Mode</Label>
@@ -827,8 +859,146 @@ const StaffPage: React.FC = () => {
               }
               try {
                 setSavingPayment(true);
-                // Payment logic will be implemented by your friend
-                toast({ title: 'Payment feature', description: 'Payment logic to be implemented', variant: 'default' });
+                const amountNum = Number(paymentAmount || 0);
+                if (!amountNum || amountNum <= 0) {
+                  toast({ title: 'Invalid amount', description: 'Enter a valid amount', variant: 'destructive' });
+                  setSavingPayment(false);
+                  return;
+                }
+
+                // Insert into public.payment_data
+                const paymentRecord: any = {
+                  staff_id: paymentStaffId,
+                  amount: amountNum,
+                  type: paymentType,
+                  payment_mode: paymentModeSel.toLowerCase(),
+                  notes: paymentNotes || null,
+                  payment_date: paymentDate || new Date().toISOString().split('T')[0],
+                  created_by: user?.id || null,
+                  location_id: selectedLocationId || null,
+                };
+                if (paymentModeSel === 'UPI' && selectedUpiAccountId) {
+                  paymentRecord.upi_account_id = selectedUpiAccountId;
+                }
+                const { error: payInsErr } = await supabase
+                  .from('payment_data')
+                  .insert([paymentRecord]);
+                if (payInsErr) {
+                  console.error('payment_data insert error:', payInsErr);
+                  throw new Error(payInsErr.message || 'Insert failed');
+                }
+
+                if (paymentType === 'Advance') {
+                  // First check if this payment was already recorded in advance table
+                  const { data: existingPayment } = await supabase
+                    .from('payment_data')
+                    .select('id')
+                    .eq('staff_id', paymentStaffId)
+                    .eq('amount', amountNum)
+                    .eq('type', 'Advance')
+                    .gte('created_at', new Date(Date.now() - 60000).toISOString()) // last 1 min
+                    .maybeSingle();
+                  
+                  // Only update advance table if not already processed
+                  if (!existingPayment) {
+                    // Your existing advance update code here
+                    const { data: advRow } = await supabase
+                      .from('advance')
+                      .select('staff_id, advance')
+                      .eq('staff_id', paymentStaffId)
+                      .maybeSingle();
+                
+                    if (!advRow) {
+                      await supabase.from('advance').insert([{ 
+                        staff_id: paymentStaffId, 
+                        advance: amountNum 
+                      }]);
+                    } else {
+                      const newAdvance = Number(advRow.advance || 0) + amountNum;
+                      await supabase
+                        .from('advance')
+                        .update({ advance: newAdvance })
+                        .eq('staff_id', paymentStaffId);
+                    }
+                  }
+                }
+                if (paymentType === 'Salary') {
+                  // Get staff's full salary
+                  let fullSalary = intendedSalary;
+                  if (fullSalary == null) {
+                    const st = staff.find(s => s.id === paymentStaffId);
+                    fullSalary = st ? Number(st.monthlySalary || 0) : null;
+                  }
+                  if (fullSalary == null) {
+                    const { data: staffRow } = await supabase
+                      .from('staff')
+                      .select('monthly_salary')
+                      .eq('id', paymentStaffId)
+                      .maybeSingle();
+                    fullSalary = staffRow ? Number(staffRow.monthly_salary || 0) : 0;
+                  }
+                
+                  // Calculate how much salary is actually unpaid
+                  const unpaidSalary = Math.max(fullSalary - amountNum, 0);
+                  
+                  if (unpaidSalary > 0) {
+                    // First, try to cover unpaid salary from advance
+                    const { data: advRow, error: advSelErr } = await supabase
+                      .from('advance')
+                      .select('staff_id, advance')
+                      .eq('staff_id', paymentStaffId)
+                      .maybeSingle();
+                    if (advSelErr) throw advSelErr;
+                
+                    let remainingUnpaid = unpaidSalary;
+                    
+                    // Deduct from advance if available
+                    if (advRow && Number(advRow.advance || 0) > 0) {
+                      const advanceDeduction = Math.min(remainingUnpaid, Number(advRow.advance || 0));
+                      const newAdvance = Number(advRow.advance || 0) - advanceDeduction;
+                      remainingUnpaid -= advanceDeduction;
+                      
+                      const { error: advUpdErr } = await supabase
+                        .from('advance')
+                        .update({ advance: newAdvance, updated_at: new Date().toISOString() })
+                        .eq('staff_id', paymentStaffId);
+                      if (advUpdErr) throw advUpdErr;
+                    }
+                
+                    // Only the remaining unpaid salary after advance deduction goes to carry_forward
+                    if (remainingUnpaid > 0) {
+                      const { data: cfRow, error: cfSelErr } = await supabase
+                        .from('carry_fwd')
+                        .select('staff_id, amount')
+                        .eq('staff_id', paymentStaffId)
+                        .maybeSingle();
+                      if (cfSelErr) throw cfSelErr;
+                
+                      if (!cfRow) {
+                        const { error: cfInsErr } = await supabase
+                          .from('carry_fwd')
+                          .insert([{ 
+                            staff_id: paymentStaffId, 
+                            amount: remainingUnpaid, 
+                            created_at: new Date().toISOString(), 
+                            updated_at: new Date().toISOString() 
+                          }]);
+                        if (cfInsErr) throw cfInsErr;
+                      } else {
+                        const newAmount = Number(cfRow.amount || 0) + remainingUnpaid;
+                        const { error: cfUpdErr } = await supabase
+                          .from('carry_fwd')
+                          .update({ 
+                            amount: newAmount, 
+                            updated_at: new Date().toISOString() 
+                          })
+                          .eq('staff_id', paymentStaffId);
+                        if (cfUpdErr) throw cfUpdErr;
+                      }
+                    }
+                  }
+                }
+                toast({ title: 'Payment recorded', description: 'The payment has been saved', variant: 'default' });
                 setShowPaymentPanel(false);
                 setPaymentStaffId('');
                 setPaymentType('Advance');
@@ -836,8 +1006,11 @@ const StaffPage: React.FC = () => {
                 setPaymentModeSel('');
                 setPaymentNotes('');
                 setSelectedUpiAccountId('');
+                setPaymentDate(new Date().toISOString().split('T')[0]);
+                setIntendedSalary(null);
               } catch (e: any) {
-                toast({ title: 'Failed to record payment', description: e?.message, variant: 'destructive' });
+                const msg = e?.message || 'Unknown error';
+                toast({ title: 'Failed to record payment', description: msg, variant: 'destructive' });
               } finally {
                 setSavingPayment(false);
               }
