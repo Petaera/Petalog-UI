@@ -266,23 +266,28 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
       return stringValue;
     };
 
-    const rows = payLaterLogs.map((log: any) => ({
-      'Vehicle Number': escapeCSV(log.vehicle_number || log.vehicles?.number_plate),
-      'Customer Name': escapeCSV(log.workshop ? String(log.workshop) : (log.Name || '')),
-      'Phone': escapeCSV(log.Phone_no),
-      'Service': escapeCSV(log.service),
-      'Workshop': escapeCSV(log.workshop),
-      'Amount': escapeCSV(log.Amount),
-      'Discount': escapeCSV(log.discount),
-      'Net Amount': escapeCSV((Number(log.Amount)||0) - (Number(log.discount)||0)),
-      'Entry Time': escapeCSV(log.entry_time ? new Date(log.entry_time).toLocaleString() : ''),
-      'Created At': escapeCSV(log.created_at ? new Date(log.created_at).toLocaleString() : ''),
-    }));
+    const rows = payLaterLogs.map((log: any) => {
+      return {
+        'Vehicle Number': escapeCSV(log.vehicle_number || log.vehicles?.number_plate),
+        'Vehicle Model': escapeCSV(log.vehicle_model || ''),
+        'Created At': escapeCSV(log.created_at ? new Date(log.created_at).toLocaleString() : ''),
+        'Service': escapeCSV(log.service),
+        'Workshop': escapeCSV(log.workshop),
+        'Total Amount': escapeCSV(log.Amount || 0), // Amount is already final after discount
+      };
+    });
+
+    // Calculate total - Amount is already final after discount
+    const totalAmount = payLaterLogs.reduce((sum, log) => {
+      return sum + (Number(log.Amount) || 0);
+    }, 0);
 
     const headers = Object.keys(rows[0] || {});
     const csvString = [
       headers.join(','),
-      ...rows.map(row => headers.map(h => row[h as keyof typeof row]).join(','))
+      ...rows.map(row => headers.map(h => row[h as keyof typeof row]).join(',')),
+      '', // Empty row
+      ',,,,"TOTAL",' + totalAmount, // TOTAL in column E, amount in column F
     ].join('\n');
 
     const todayStr = new Date().toISOString().split('T')[0];
