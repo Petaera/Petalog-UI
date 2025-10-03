@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-// Supabase import removed
+import { supabase } from '@/lib/supabaseClient';
 import { 
   Plus, 
   Search, 
@@ -14,7 +14,6 @@ import {
   CheckCircle,
   XCircle,
   CreditCard,
-  CalendarDays,
   Upload,
   Camera,
   X
@@ -28,7 +27,6 @@ import { toast } from '@/hooks/use-toast';
 import { useUpiAccounts } from '@/hooks/useUpiAccounts';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useSelectedLocation } from '@/hooks/useSelectedLocation';
-import { supabase } from '@/lib/supabaseClient';
 
 interface Staff {
   id: string;
@@ -36,63 +34,26 @@ interface Staff {
   role: string;
   isActive: boolean;
   monthlySalary: number;
-  payableSalary: number;
-  totalAdvances: number;
-  salaryPaid?: number;
-  presentDays: number;
-  absences: number;
-  paidLeaves: number;
-  unpaidLeaves: number;
   contact: string;
   dateOfJoining: string;
   paymentMode: string;
   dp_url: string | null;
   doc_url: string[] | null;
-  carryForwardBalance?: number;
 }
-
-interface PayrollLine {
-  id: string;
-  staff_id: string;
-  base_salary: number;
-  present_days: number;
-  paid_leaves: number;
-  unpaid_leaves: number;
-  advances_total: number;
-  net_payable: number;
-  payment_status: 'pending' | 'paid';
-  paid_via?: string;
-  paid_at?: string;
-  payment_ref?: string;
-  month: string;
-  created_at: string;
-}
-
-const calculateAdjustedSalary = (baseSalary: number, unpaidLeaves: number) => {
-  return baseSalary - (baseSalary * (unpaidLeaves / 30));
-};
 
 const StaffPage: React.FC = () => {
   const { user } = useAuth();
   
   // State for staff management
   const [staff, setStaff] = useState<Staff[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [saving, setSaving] = useState(false);
   
-  // State for payroll history
-  const [payrollHistory, setPayrollHistory] = useState<PayrollLine[]>([]);
-  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
-  const [showPayrollHistory, setShowPayrollHistory] = useState(false);
-  
   // Location state
   const selectedLocationId = useSelectedLocation();
-  
-  // Payments state
-  // (Removed duplicate block, keep only the later block below)
 
   // Add Staff form state
   const [name, setName] = useState('');
@@ -108,6 +69,7 @@ const StaffPage: React.FC = () => {
   const [documents, setDocuments] = useState<File[]>([]);
   const [documentPreviews, setDocumentPreviews] = useState<string[]>([]);
   const [uploadingDocuments, setUploadingDocuments] = useState(false);
+  
   // Payments state
   const [showPaymentPanel, setShowPaymentPanel] = useState(false);
   const [paymentStaffId, setPaymentStaffId] = useState<string>('');
@@ -116,371 +78,11 @@ const StaffPage: React.FC = () => {
   const [paymentModeSel, setPaymentModeSel] = useState<'Cash' | 'UPI' | ''>('');
   const [paymentNotes, setPaymentNotes] = useState<string>('');
   const [savingPayment, setSavingPayment] = useState(false);
-  const [activities, setActivities] = useState<{ id: string; date: string; kind: 'Advance' | 'SalaryPayment'; description: string | null; amount: number; staffId?: string; staffName?: string }[]>([]);
-
-  // Effect to handle automatic salary calculation
-  useEffect(() => {
-    const calculateAndSetSalary = () => {
-      if (paymentType === 'Salary' && paymentStaffId) {
-        const selectedStaff = staff.find(s => s.id === paymentStaffId);
-        if (selectedStaff) {
-          const baseSalary = selectedStaff.monthlySalary || 0;
-          const totalLeaves = selectedStaff.unpaidLeaves || 0;
-          const adjustedSalary = baseSalary - (baseSalary * (totalLeaves/30));
-          setPaymentAmount(adjustedSalary.toFixed(2));
-        }
-      }
-    };
-    calculateAndSetSalary();
-  }, [paymentType, paymentStaffId, staff]);
-  const [activitiesPage, setActivitiesPage] = useState(0);
-  const [activitiesPageSize] = useState(10);
-  const [activitiesHasNext, setActivitiesHasNext] = useState(false);
-  const [activitiesLoading, setActivitiesLoading] = useState(false);
-  const [leaves, setLeaves] = useState<Array<{ id: string; staff_id: string; start_date: string; end_date: string; leave_type: 'Paid' | 'Unpaid'; notes: string | null }>>([]);
-  const [leavesLoading, setLeavesLoading] = useState(false);
-  const [settlementMode, setSettlementMode] = useState<'monthly' | 'carry_forward'>('monthly');
-  const [allocationPreview, setAllocationPreview] = useState<Array<{ month: string; applied: number; remaining: number }>>([]);
-  const [allocationLoading, setAllocationLoading] = useState(false);
-
 
   const { accounts: upiAccounts } = useUpiAccounts(selectedLocationId);
   const [editMemberId, setEditMemberId] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [useCustomRole, setUseCustomRole] = useState(false);
-
-  const getCurrentMonth = () => {
-    // Prefer settings current period from public.payroll_settings for selected branch
-    try {
-      const stored = localStorage.getItem('payroll_current_period_month');
-      if (stored) return stored;
-    } catch (_) {}
-    return new Date().toISOString().slice(0, 7);
-  };
-  const getMonthEndDate = (yyyyMm: string) => {
-    const [yStr, mStr] = yyyyMm.split('-');
-    const y = Number(yStr);
-    const m = Number(mStr);
-    const lastDay = new Date(y, m, 0).getDate();
-    return `${yyyyMm}-${String(lastDay).padStart(2, '0')}`;
-  };
-
-  const mergeMonthlyAggregates = async (baseStaff: Staff[]): Promise<Staff[]> => {
-    if (!baseStaff.length) return baseStaff;
-    const month = getCurrentMonth();
-    const staffIds = baseStaff.map(s => s.id);
-
-    try {
-      // Helper: select with fallback
-      const selectWithFallback = async (tables: string[], builder: (q: any) => Promise<{ data: any | null }>) => {
-        for (const t of tables) {
-          try {
-            const q = supabase.from(t).select('*');
-            const { data } = await builder(q);
-            if (data) return data;
-          } catch (_) {}
-        }
-        return null;
-      };
-
-      // Attendance aggregates (prefer public view)
-      const attData = await selectWithFallback(
-        ['v_staff_monthly_attendance', 'payroll.v_staff_monthly_attendance'],
-        async (q) => await q.eq('month', month).in('staff_id', staffIds)
-      );
-
-      // Advances aggregates (include current month window) via public.payroll_advances
-      let advData: any[] = [];
-      try {
-        const { data } = await supabase
-          .from('payroll_advances')
-          .select('staff_id, amount, date')
-          .gte('date', month + '-01')
-          .lte('date', getMonthEndDate(month))
-          .in('staff_id', staffIds as any);
-        advData = data || [];
-      } catch (_) {}
-
-      const attendanceByStaff: Record<string, { present_days: number; paid_leaves: number; unpaid_leaves: number; absent_days: number; }> = {};
-      (attData || []).forEach((row: any) => {
-        attendanceByStaff[row.staff_id] = {
-          present_days: Number(row.present_days || 0),
-          paid_leaves: Number(row.paid_leaves || 0),
-          unpaid_leaves: Number(row.unpaid_leaves || 0),
-          absent_days: Number(row.absent_days || 0),
-        };
-      });
-
-      const advancesByStaff: Record<string, number> = {};
-      (advData || []).forEach((row: any) => {
-        const sid = row.staff_id;
-        advancesByStaff[sid] = (advancesByStaff[sid] || 0) + Number(row.amount || 0);
-      });
-
-      // Salary paid aggregates via activity logs
-      const salaryPaidByStaff: Record<string, number> = {};
-      const { data: salLogs } = await supabase
-        .rpc('get_activity_logs_by_branch', {
-          branch_id_param: selectedLocationId,
-          start_date: month + '-01',
-          end_date: getMonthEndDate(month)
-        });
-      (salLogs || []).forEach((row: any) => {
-        const sid = row.ref_id;
-        if (!sid) return;
-        salaryPaidByStaff[sid] = (salaryPaidByStaff[sid] || 0) + Number(row.amount || 0);
-      });
-
-      // Carry-forward balances for current month (if available and enabled)
-      const carryForwardByStaff: Record<string, number> = {};
-      if (settlementMode === 'carry_forward') {
-        const tables = ['payroll_lines', 'payroll.payroll_lines'];
-        for (const table of tables) {
-          try {
-            // First try selecting the carry_forward_balance column
-            const { data: cfRows } = await supabase
-              .from(table)
-              .select('staff_id, carry_forward_balance, month')
-              .eq('month', month)
-              .in('staff_id', staffIds as any);
-            (cfRows || []).forEach((row: any) => {
-              carryForwardByStaff[row.staff_id] = Number(row.carry_forward_balance || 0);
-            });
-            break;
-          } catch (_) {
-            try {
-              // Fallback: select without the new column to avoid 400s on older schemas
-              const { data: cfRowsLite } = await supabase
-                .from(table)
-                .select('staff_id, month')
-                .eq('month', month)
-                .in('staff_id', staffIds as any);
-              (cfRowsLite || []).forEach((row: any) => {
-                carryForwardByStaff[row.staff_id] = 0;
-              });
-              break;
-            } catch (_) {
-              // try next table name
-            }
-          }
-        }
-      }
-
-      const merged = baseStaff.map(s => {
-        const att = attendanceByStaff[s.id] || { present_days: 0, paid_leaves: 0, unpaid_leaves: 0, absent_days: 0 };
-        const advances = advancesByStaff[s.id] || 0;
-        const paid = salaryPaidByStaff[s.id] || 0;
-        const cf = carryForwardByStaff[s.id] || 0;
-        const payableBase = (s.monthlySalary || 0) + (settlementMode === 'carry_forward' ? cf : 0);
-        const payable = Math.max(0, payableBase - advances - paid);
-        return {
-          ...s,
-          presentDays: att.present_days,
-          paidLeaves: att.paid_leaves,
-          unpaidLeaves: att.unpaid_leaves,
-          absences: att.absent_days,
-          totalAdvances: advances,
-          salaryPaid: paid,
-          payableSalary: payable,
-          dp_url: s.dp_url,
-          doc_url: s.doc_url || null,
-          carryForwardBalance: cf,
-        } as Staff;
-      });
-
-      return merged;
-    } catch (_) {
-      return baseStaff;
-    }
-  };
-
-  const loadLeavesForStaff = async (staffIds: string[]) => {
-    if (!staffIds.length) {
-      setLeaves([]);
-      return;
-    }
-    try {
-      setLeavesLoading(true);
-  const candidates = ['staff_leave_periods', 'public_staff_leave_periods'];
-      let rows: any[] | null = null;
-      for (const t of candidates) {
-        try {
-          const { data, error } = await supabase
-            .from(t)
-            .select('id, staff_id, start_date, end_date, leave_type, notes')
-            .in('staff_id', staffIds)
-            .order('start_date', { ascending: false } as any);
-          if (error) throw error;
-          rows = data || [];
-          break;
-        } catch (_) {}
-      }
-      setLeaves(rows || []);
-    } catch (_) {
-      setLeaves([]);
-    } finally {
-      setLeavesLoading(false);
-    }
-  };
-
-  // Helper to insert into public views or underlying schema tables to avoid 404s
-  const insertWithFallback = async (
-    tableNames: string[],
-    payload: any,
-    returning?: string
-  ): Promise<{ data: any[] | null; error: any | null }> => {
-    for (const table of tableNames) {
-      try {
-        if (returning) {
-          const { data, error } = await supabase.from(table).insert(payload).select(returning);
-          if (error) throw error;
-          return { data: data || null, error: null };
-        } else {
-          const { error } = await supabase.from(table).insert(payload);
-          if (error) throw error;
-          return { data: null, error: null };
-        }
-      } catch (e) {
-        // try next candidate
-      }
-    }
-    return { data: null, error: { message: 'Insert failed for all candidates' } };
-  };
-
-  const loadActivities = async (page: number) => {
-    try {
-      setActivitiesLoading(true);
-      
-      // Only load activities if we have a selected location
-      if (!selectedLocationId) {
-        setActivities([]);
-        setActivitiesHasNext(false);
-        return;
-      }
-
-      // Use RPC function to get activity logs
-      const { data: rows } = await supabase
-        .rpc('get_activity_logs_filtered', {
-          branch_id_param: selectedLocationId,
-          start_date: new Date(0).toISOString(), // Start from beginning
-          end_date: new Date().toISOString(), // End now
-          limit_param: activitiesPageSize + 1, // +1 for hasNext check
-          offset_param: page * activitiesPageSize
-        });
-
-      // If we fetched pageSize+1 for hasNext check, trim to pageSize for render
-      const trimmedRows = (rows || []).length > activitiesPageSize
-        ? (rows || []).slice(0, activitiesPageSize)
-        : (rows || []);
-
-      const baseActs = trimmedRows.map((r: any) => ({
-        id: r.id,
-        date: r.date,
-        kind: r.kind as 'Advance' | 'SalaryPayment',
-        description: r.description || null,
-        amount: Number(r.amount || 0),
-        ref_id: r.ref_id as string | null,
-        branch_id: (r as any).branch_id as string | null,
-      }));
-
-      // Resolve staff IDs for advances (need to look up advance rows)
-      const advanceIds = baseActs.filter(a => a.kind === 'Advance' && a.ref_id).map(a => a.ref_id as string);
-      let advanceMap: Record<string, string> = {};
-      if (advanceIds.length > 0) {
-        try {
-          const { data: advRows } = await supabase
-            .from('payroll_advances')
-            .select('id, staff_id')
-            .in('id', advanceIds as any);
-          (advRows || []).forEach((row: any) => { advanceMap[row.id] = row.staff_id; });
-        } catch (_) {}
-      }
-
-      // Determine staff IDs per activity
-      const withStaffIds = baseActs.map(a => ({
-        ...a,
-        staffId: a.kind === 'SalaryPayment' ? (a.ref_id || undefined) : (advanceMap[a.ref_id || ''] || undefined)
-      }));
-
-      // Build staffId -> name map from current staff state; collect missing ids
-      const staffIdToName: Record<string, string> = {};
-      staff.forEach(s => { staffIdToName[s.id] = s.name; });
-      const missingIds = withStaffIds.map(a => a.staffId).filter((id): id is string => !!id && !staffIdToName[id]);
-      const uniqueMissing = Array.from(new Set(missingIds));
-      if (uniqueMissing.length > 0) {
-        const { data: staffData } = await supabase
-          .rpc('get_staff_by_ids', { staff_ids: uniqueMissing });
-        (staffData || []).forEach((row: any) => { 
-          // Double-check that the staff is from the current location
-          if (row.branch_id === selectedLocationId) {
-            staffIdToName[row.id] = row.name; 
-          }
-        });
-      }
-
-      // Filter activities to only include those from current location staff
-      const currentStaffIds = new Set(staff.map(s => s.id));
-      let filteredActs = withStaffIds
-        .filter(a => {
-          // Only include activities that have a staff ID and that staff is from current location
-          if (!a.staffId) return false;
-          return currentStaffIds.has(a.staffId);
-        });
-      
-      // For managers, filter out salary payments
-      if (user?.role === 'manager') {
-        filteredActs = filteredActs.filter(a => a.kind !== 'SalaryPayment');
-      }
-      
-      const finalActs = filteredActs.map(a => ({
-        id: a.id,
-        date: a.date,
-        kind: a.kind,
-        description: a.description,
-        amount: a.amount,
-        staffId: a.staffId,
-        staffName: a.staffId ? (staffIdToName[a.staffId] || undefined) : undefined
-      }));
-
-      // Debug logging for payment activities
-      console.log('StaffPage Payment Activities Debug:', {
-        selectedLocationId,
-        userRole: user?.role,
-        totalActivities: withStaffIds.length,
-        currentStaffIds: Array.from(currentStaffIds),
-        filteredActivities: filteredActs.length,
-        finalActivities: finalActs.length,
-        activityTypes: finalActs.map(a => a.kind),
-        activitiesDetails: finalActs.map(a => ({ 
-          kind: a.kind, 
-          amount: a.amount, 
-          staffName: a.staffName, 
-          date: a.date 
-        }))
-      });
-
-      setActivities(finalActs);
-      // Determine if next page exists by probing one extra row
-      setActivitiesHasNext((rows || []).length > activitiesPageSize);
-      setActivitiesPage(page);
-    } catch (error) {
-      console.error('Error loading activities:', error);
-      setActivities([]);
-      setActivitiesHasNext(false);
-    } finally {
-      setActivitiesLoading(false);
-    }
-  };
-
-  // Also react to location id changes directly
-  useEffect(() => {
-    if (!user?.id || !selectedLocationId) {
-      setActivities([]);
-      setActivitiesHasNext(false);
-      return;
-    }
-    loadActivities(0);
-  }, [selectedLocationId]);
 
   const toggleActive = async (memberId: string, current: boolean) => {
     try {
@@ -510,26 +112,85 @@ const StaffPage: React.FC = () => {
   };
 
   useEffect(() => {
-    // Supabase code removed. You can add local mock data here if needed
-    setStaff([]); // Or set to local data
-    setLoading(false);
-  }, [selectedLocationId]);
+    const loadStaff = async () => {
+      try {
+        setLoading(true);
+        if (!user?.id) {
+          setStaff([]);
+          return;
+        }
+
+        // Only load staff if we have a selected location
+        if (!selectedLocationId) {
+          setStaff([]);
+          return;
+        }
+
+        // Use RPC function to get staff by branch
+        const { data: staffData, error: staffError } = await supabase
+          .rpc('get_staff_by_branch', { branch_id_param: selectedLocationId });
+        if (staffError) throw staffError;
+        
+        // Debug log to check raw data
+        console.log('Raw staff data from RPC (loadStaff):', staffData);
+        console.log('dp_url values:', staffData?.map(s => ({ name: s.name, dp_url: s.dp_url })));
+
+        const mapped: Staff[] = (staffData || []).map((row: any): Staff => ({
+          id: row.id,
+          name: row.name,
+          role: row.role_title || row.role || '',
+          isActive: typeof row.is_active === 'boolean' ? row.is_active : row.isActive,
+          monthlySalary: Number((row.monthly_salary ?? row.monthlySalary) || 0),
+          contact: row.contact || '',
+          dateOfJoining: row.date_of_joining || row.dateOfJoining,
+          paymentMode: row.default_payment_mode || row.payment_mode || row.paymentMode || '',
+          dp_url: row.dp_url || null,
+          doc_url: row.doc_url || null
+        }));
+        
+        setStaff(mapped);
+      } catch (error) {
+        console.error('Error loading staff:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load staff data",
+          variant: "destructive"
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadStaff();
+  }, [selectedLocationId, user?.id]);
 
   const refreshStaff = async () => {
-    // Supabase code removed
-    setStaff([]); // Or set to local data
-    setLoading(false);
-  };
-
-  // Load leaves whenever the visible staff list changes (e.g., location filter changes)
-  useEffect(() => {
-    if (staff.length === 0) {
-      setLeaves([]);
-      return;
+    if (!user?.id || !selectedLocationId) return;
+    setLoading(true);
+    try {
+      // Use RPC function to get staff by branch
+      const { data: staffData, error: staffError } = await supabase
+        .rpc('get_staff_by_branch', { branch_id_param: selectedLocationId });
+      if (staffError) throw staffError;
+      
+      const mapped: Staff[] = (staffData || []).map((row: any): Staff => ({
+        id: row.id,
+        name: row.name,
+        role: row.role_title || row.role || '',
+        isActive: typeof row.is_active === 'boolean' ? row.is_active : row.isActive,
+        monthlySalary: Number((row.monthly_salary ?? row.monthlySalary) || 0),
+        contact: row.contact || '',
+        dateOfJoining: row.date_of_joining || row.dateOfJoining,
+        paymentMode: row.default_payment_mode || row.payment_mode || row.paymentMode || '',
+        dp_url: row.dp_url || null,
+        doc_url: row.doc_url || null
+      }));
+      
+      setStaff(mapped);
+    } finally {
+      setLoading(false);
     }
-    const ids = staff.map(s => s.id);
-    loadLeavesForStaff(ids);
-  }, [staff.map(s => s.id).join(',')]);
+  };
 
   // Image upload functions
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -699,19 +360,7 @@ const StaffPage: React.FC = () => {
 
     setSaving(true);
     try {
-      // Do not embed UPI account into contact anymore
       const contactToSave = (contact || '').trim();
-      let lastError: any = null;
-      const payloadSnake = {
-        branch_id: selectedLocationId,
-        name: name.trim(),
-        role_title: roleTitle.trim(),
-        contact: contactToSave || null,
-        date_of_joining: dateOfJoining,
-        monthly_salary: Number(monthlySalary),
-        default_payment_mode: paymentMode,
-        is_active: true
-      } as any;
       
       // Insert staff record using RPC function
       const { data: insertedStaffId, error: insertError } = await supabase
@@ -816,32 +465,6 @@ const StaffPage: React.FC = () => {
     return `tel:${matched}`;
   };
 
-  const loadPayrollHistory = async (staffId: string) => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('payroll_lines')
-        .select('*')
-        .eq('staff_id', staffId)
-        .order('month', { ascending: false })
-        .limit(12); // Last 12 months
-      
-      if (error) throw error;
-      setPayrollHistory(data || []);
-      setSelectedStaffId(staffId);
-      setShowPayrollHistory(true);
-    } catch (error) {
-      console.error('Error loading payroll history:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load payroll history",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const renderPaymentMethod = (member: Staff) => {
     const mode = (member.paymentMode || '').trim();
     if (mode.toUpperCase() === 'UPI') {
@@ -851,22 +474,6 @@ const StaffPage: React.FC = () => {
     }
     return mode || '—';
   };
-
-  // Preview allocation for carry-forward mode
-  useEffect(() => {
-    const loadPreview = async () => {
-      if (settlementMode !== 'carry_forward') { setAllocationPreview([]); return; }
-      if (!paymentStaffId || !paymentAmount || paymentType !== 'Salary') { setAllocationPreview([]); return; }
-      try {
-        setAllocationLoading(true);
-        // Server-side preview disabled; skip RPC and show no preview
-        setAllocationPreview([]);
-      } finally {
-        setAllocationLoading(false);
-      }
-    };
-    loadPreview();
-  }, [settlementMode, paymentStaffId, paymentAmount, paymentType]);
 
   if (loading) {
     return (
@@ -883,7 +490,7 @@ const StaffPage: React.FC = () => {
         <div>
           <h1 className="text-3xl font-bold text-foreground">Staff Management</h1>
           <p className="text-muted-foreground">
-            Manage your team members, attendance, and salary information
+            Manage your team members and their information
           </p>
         </div>
 
@@ -1134,34 +741,16 @@ const StaffPage: React.FC = () => {
                 value={paymentStaffId} 
                 onValueChange={(value) => {
                   setPaymentStaffId(value);
-                  if (paymentType === 'Salary') {
-                    const selectedStaff = staff.find(s => s.id === value);
-                    if (selectedStaff) {
-                      const adjustedSalary = calculateAdjustedSalary(
-                        selectedStaff.monthlySalary || 0,
-                        selectedStaff.unpaidLeaves || 0
-                      );
-                      setPaymentAmount(adjustedSalary.toString());
-                    }
-                  }
                 }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select staff" />
                 </SelectTrigger>
                 <SelectContent>
-                  {staff.map(s => {
-                    // Calculate adjusted salary if this is a salary payment
-                    let label = `${s.name} — ${s.role}`;
-                    if (paymentType === 'Salary') {
-                      const baseSalary = s.monthlySalary || 0;
-                      const leaves = s.unpaidLeaves || 0;
-                      const adjustedSalary = baseSalary - (baseSalary * (leaves/30));
-                      label += ` (₹${adjustedSalary.toFixed(2)})`;
-                    }
-                    return (
-                      <SelectItem key={s.id} value={s.id}>{label}</SelectItem>
-                    );
-                  })}
+                  {staff.map(s => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name} — {s.role}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -1169,20 +758,9 @@ const StaffPage: React.FC = () => {
               <Label>Type</Label>
               <Select 
                 value={paymentType} 
-                onValueChange={(v: 'Advance' | 'Salary') => {
+                onValueChange={(v: 'Advance' | 'Salary' | 'Salary_Carryforward') => {
                   setPaymentType(v);
-                  // Reset amount when changing payment type
-                  if (v === 'Salary' && paymentStaffId) {
-                    const selectedStaff = staff.find(s => s.id === paymentStaffId);
-                    if (selectedStaff) {
-                      const baseSalary = selectedStaff.monthlySalary || 0;
-                      const leaves = selectedStaff.unpaidLeaves || 0;
-                      const adjustedSalary = baseSalary - (baseSalary * (leaves/30));
-                      setPaymentAmount(adjustedSalary.toFixed(2));
-                    }
-                  } else {
-                    setPaymentAmount('');
-                  }
+                  setPaymentAmount('');
                 }}>
                 <SelectTrigger>
                   <SelectValue />
@@ -1203,49 +781,8 @@ const StaffPage: React.FC = () => {
                 min="0" 
                 step="1" 
                 value={paymentAmount} 
-                onChange={(e) => {
-                  if (paymentType === 'Salary' && paymentStaffId) {
-                    const selectedStaff = staff.find(s => s.id === paymentStaffId);
-                    if (selectedStaff) {
-                      const baseSalary = selectedStaff.monthlySalary || 0;
-                      const totalLeaves = selectedStaff.unpaidLeaves || 0;
-                      const adjustedSalary = calculateAdjustedSalary(baseSalary, totalLeaves);
-                      setPaymentAmount(adjustedSalary.toFixed(2));
-                    }
-                  } else {
-                    setPaymentAmount(e.target.value);
-                  }
-                }} 
-                readOnly={paymentType === 'Salary'}
+                onChange={(e) => setPaymentAmount(e.target.value)} 
               />
-              {paymentType === 'Salary' && paymentStaffId && (
-                <div className="text-sm text-muted-foreground mt-1">
-                  {(() => {
-                    const selectedStaff = staff.find(s => s.id === paymentStaffId);
-                    if (!selectedStaff) return null;
-                    const baseSalary = selectedStaff.monthlySalary || 0;
-                    const totalLeaves = selectedStaff.unpaidLeaves || 0;
-                    const adjustedSalary = calculateAdjustedSalary(baseSalary, totalLeaves);
-                    return (
-                      <>
-                        <p>Base Salary: {new Intl.NumberFormat('en-IN', {
-                          style: 'currency',
-                          currency: 'INR'
-                        }).format(baseSalary)}</p>
-                        {totalLeaves > 0 && (
-                          <>
-                            <p>Unpaid Leaves: {totalLeaves} days</p>
-                            <p>Adjusted Salary: {new Intl.NumberFormat('en-IN', {
-                              style: 'currency',
-                              currency: 'INR'
-                            }).format(adjustedSalary)}</p>
-                          </>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-              )}
             </div>
             <div className="grid gap-2">
               <Label>Payment Mode</Label>
@@ -1281,20 +818,6 @@ const StaffPage: React.FC = () => {
               <Input value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} placeholder="Optional" />
             </div>
           </div>
-          {settlementMode === 'carry_forward' && paymentType === 'Salary' && allocationPreview.length > 0 && (
-            <div className="mt-3 text-xs text-muted-foreground">
-              {allocationLoading ? 'Calculating allocation…' : (
-                <div>
-                  Payment allocation:
-                  <ul className="list-disc pl-5 mt-1">
-                    {allocationPreview.map((p, idx) => (
-                      <li key={idx}>{`${formatCurrency(p.applied)} will settle ${new Date(p.month + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}${p.remaining > 0 ? ` (remaining ${formatCurrency(p.remaining)})` : ''}`}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
           <div className="mt-4 flex justify-end gap-2">
             <Button variant="outline" onClick={() => setShowPaymentPanel(false)}>Close</Button>
             <Button disabled={savingPayment} onClick={async () => {
@@ -1304,50 +827,8 @@ const StaffPage: React.FC = () => {
               }
               try {
                 setSavingPayment(true);
-                const amtNum = Number(paymentAmount);
-                const month = getCurrentMonth();
-                const today = new Date().toISOString().slice(0,10);
-                if (paymentType === 'Advance') {
-                  // Prefer RPC: public.insert_payroll_advance, fallback to direct insert if exposed
-                  const payload = {
-                    staff_id_param: paymentStaffId,
-                    date_param: today,
-                    amount_param: amtNum,
-                    payment_mode_param: paymentModeSel,
-                    notes_param: paymentNotes || null
-                  } as any;
-                  let inserted = false;
-                  try {
-                    const { error: rpcErr } = await supabase.rpc('insert_payroll_advance', payload);
-                    if (rpcErr) throw rpcErr;
-                    inserted = true;
-                  } catch (_) {
-                    // Fallback direct insert into payroll.advances if REST is exposed
-                    try {
-                      const { data: advRow, error: advErr } = await supabase
-                        .from('payroll.advances')
-                        .insert({
-                          staff_id: paymentStaffId,
-                          date: today,
-                          amount: amtNum,
-                          payment_mode: paymentModeSel,
-                          notes: paymentNotes || null
-                        })
-                        .select('id')
-                        .single();
-                      if (advErr) throw advErr;
-                      inserted = !!advRow?.id;
-                    } catch (e) {
-                      toast({ title: 'Advance not saved', description: 'Enable RPC insert_payroll_advance or expose payroll.advances for inserts.', variant: 'destructive' });
-                      throw e;
-                    }
-                  }
-                } else {
-                  // Salary payments are disabled in backend
-                  toast({ title: 'Salary payments disabled', description: 'Recording salary payments is currently disabled.', variant: 'destructive' });
-                  return;
-                }
-                toast({ title: 'Payment recorded' });
+                // Payment logic will be implemented by your friend
+                toast({ title: 'Payment feature', description: 'Payment logic to be implemented', variant: 'default' });
                 setShowPaymentPanel(false);
                 setPaymentStaffId('');
                 setPaymentType('Advance');
@@ -1355,9 +836,6 @@ const StaffPage: React.FC = () => {
                 setPaymentModeSel('');
                 setPaymentNotes('');
                 setSelectedUpiAccountId('');
-                await refreshStaff();
-                // Ensure aggregates reflect the new advance/salary immediately
-                await loadActivities(0);
               } catch (e: any) {
                 toast({ title: 'Failed to record payment', description: e?.message, variant: 'destructive' });
               } finally {
@@ -1683,7 +1161,7 @@ const StaffPage: React.FC = () => {
       </Card>
 
       {/* Staff Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <Card className="p-6">
           <div className="flex items-center justify-between">
             <div>
@@ -1707,31 +1185,17 @@ const StaffPage: React.FC = () => {
         </Card>
         
         {user?.role === 'owner' && (
-          <>
-            <Card className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Salaries</p>
-                  <p className="text-xl font-bold text-foreground">
-                    {formatCurrency(staff.reduce((sum, s) => sum + (s.monthlySalary || 0), 0))}
-                  </p>
-                </div>
-                <IndianRupee className="h-8 w-8 text-orange-600" />
+          <Card className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Salaries</p>
+                <p className="text-xl font-bold text-foreground">
+                  {formatCurrency(staff.reduce((sum, s) => sum + (s.monthlySalary || 0), 0))}
+                </p>
               </div>
-            </Card>
-            
-            <Card className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Payable</p>
-                  <p className="text-xl font-bold text-green-600">
-                    {formatCurrency(staff.reduce((sum, s) => sum + (s.payableSalary || 0), 0))}
-                  </p>
-                </div>
-                <Calendar className="h-8 w-8 text-green-600" />
-              </div>
-            </Card>
-          </>
+              <IndianRupee className="h-8 w-8 text-orange-600" />
+            </div>
+          </Card>
         )}
       </div>
 
@@ -1755,15 +1219,6 @@ const StaffPage: React.FC = () => {
                 <th className="text-left p-4 font-medium text-foreground">Payment Method</th>
                 {user?.role === 'owner' && (
                   <th className="text-right p-4 font-medium text-foreground">Salary</th>
-                )}
-                {user?.role === 'owner' && settlementMode === 'carry_forward' && (
-                  <th className="text-right p-4 font-medium text-foreground">Carry Fwd</th>
-                )}
-                <th className="text-center p-4 font-medium text-foreground">Attendance</th>
-                <th className="text-center p-4 font-medium text-foreground">Leaves</th>
-                <th className="text-center p-4 font-medium text-foreground">Advances</th>
-                {user?.role === 'owner' && (
-                  <th className="text-right p-4 font-medium text-foreground">Payable</th>
                 )}
                 <th className="text-center p-4 font-medium text-foreground">Status</th>
                 <th className="text-center p-4 font-medium text-foreground">Actions</th>
@@ -1799,7 +1254,6 @@ const StaffPage: React.FC = () => {
                       </div>
                       <div>
                         <p className="font-medium text-foreground">{member.name}</p>
-                        {/* removed payment mode under name */}
                       </div>
                     </div>
                   </td>
@@ -1821,40 +1275,8 @@ const StaffPage: React.FC = () => {
                   <td className="p-4 text-foreground">{renderPaymentMethod(member)}</td>
                   {user?.role === 'owner' && (
                     <td className="p-4 text-right font-medium text-foreground">
-                      <div className="flex flex-col items-end">
-                        <span>{formatCurrency(member.monthlySalary || 0)}</span>
-                        {member.salaryPaid && member.salaryPaid > 0 && (
-                          <span className={
-                            member.salaryPaid >= (member.monthlySalary || 0)
-                              ? 'text-green-600 text-xs'
-                              : 'text-amber-600 text-xs'
-                          }>
-                            {member.salaryPaid >= (member.monthlySalary || 0) ? 'Paid' : `Paid ${formatCurrency(member.salaryPaid)}`}
-                          </span>
-                        )}
-                      </div>
+                      {formatCurrency(member.monthlySalary || 0)}
                     </td>
-                  )}
-                {user?.role === 'owner' && settlementMode === 'carry_forward' && (
-                  <td className="p-4 text-right font-medium text-foreground">
-                    {formatCurrency(member.carryForwardBalance || 0)}
-                  </td>
-                )}
-                  <td className="p-4 text-center text-foreground">
-                    <div className="flex flex-col items-center">
-                      <span className="text-green-600 font-medium">{`${member.presentDays || 0}P`}</span>
-                      <span className="text-red-600 font-medium">{`${member.absences || 0}A`}</span>
-                    </div>
-                  </td>
-                  <td className="p-4 text-center text-foreground">
-                    <div className="flex flex-col items-center">
-                      <span className="text-green-600 font-medium">{`${member.paidLeaves || 0}PL`}</span>
-                      <span className="text-red-600 font-medium">{`${member.unpaidLeaves || 0}UL`}</span>
-                    </div>
-                  </td>
-                  <td className="p-4 text-center font-medium text-foreground">{formatCurrency(member.totalAdvances || 0)}</td>
-                  {user?.role === 'owner' && (
-                    <td className="p-4 text-right font-semibold text-foreground">{formatCurrency(member.payableSalary || 0)}</td>
                   )}
                   <td className="p-4 text-center">
                     {member.isActive ? (
@@ -1893,15 +1315,6 @@ const StaffPage: React.FC = () => {
                         }}
                       >
                         <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => loadPayrollHistory(member.id)}
-                        className="text-blue-600 hover:text-blue-700"
-                        title="View Payroll History"
-                      >
-                        <CalendarDays className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="ghost"
@@ -1962,203 +1375,6 @@ const StaffPage: React.FC = () => {
           </div>
         )}
       </Card>
-
-      {/* Activities pagination (Payments only) - COMMENTED OUT */}
-      {/* 
-      <Card className="mt-6">
-        <div className="p-6 border-b border-border flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-foreground">Payment Activity</h3>
-            <p className="text-sm text-muted-foreground">Advance and salary payments</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" disabled={activitiesLoading || activitiesPage === 0} onClick={() => loadActivities(Math.max(0, activitiesPage - 1))}>Previous</Button>
-            <Button variant="outline" size="sm" disabled={activitiesLoading || !activitiesHasNext} onClick={() => loadActivities(activitiesPage + 1)}>Next</Button>
-          </div>
-        </div>
-        <div className="p-4">
-          {activitiesLoading ? (
-            <div className="text-sm text-muted-foreground">Loading…</div>
-          ) : activities.length === 0 ? (
-            <div className="text-sm text-muted-foreground">No payment activity.</div>
-          ) : (
-            <ul className="divide-y divide-border">
-              {activities.map((a) => (
-                <li key={a.id} className="py-3 flex items-center justify-between">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${a.kind === 'Advance' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
-                      {a.kind === 'Advance' ? 'A' : 'S'}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-foreground truncate">
-                        {a.kind === 'Advance'
-                          ? `Advance payment of ${formatCurrency(a.amount)} to ${a.staffName || 'staff'}`
-                          : `Salary payment of ${formatCurrency(a.amount)} to ${a.staffName || 'staff'}`}
-                      </div>
-                      {a.description && (
-                        <div className="text-xs text-muted-foreground truncate">{a.description}</div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs text-muted-foreground">{new Date(a.date).toLocaleString()}</div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </Card>
-      */}
-
-      {/* Long Leaves */}
-      <Card className="mt-6">
-        <div className="p-6 border-b border-border flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-foreground">Long Leaves</h3>
-            <p className="text-sm text-muted-foreground">Approved leave periods for current staff</p>
-          </div>
-          <div className="text-sm text-muted-foreground">
-            {leavesLoading ? 'Loading…' : `${leaves.length} record${leaves.length === 1 ? '' : 's'}`}
-          </div>
-        </div>
-        {leavesLoading ? (
-          <div className="p-6 text-sm text-muted-foreground">Loading…</div>
-        ) : leaves.length === 0 ? (
-          <div className="p-6 text-sm text-muted-foreground">No long leaves found.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="text-left p-4 font-medium text-foreground">Staff</th>
-                  <th className="text-left p-4 font-medium text-foreground">Period</th>
-                  <th className="text-left p-4 font-medium text-foreground">Type</th>
-                  <th className="text-left p-4 font-medium text-foreground">Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leaves.map(l => {
-                  const s = staff.find(st => st.id === l.staff_id);
-                  const name = s ? s.name : l.staff_id.slice(0, 8);
-                  const period = `${new Date(l.start_date).toLocaleDateString('en-IN')} → ${new Date(l.end_date).toLocaleDateString('en-IN')}`;
-                  return (
-                    <tr key={l.id} className="border-b border-border hover:bg-muted/30">
-                      <td className="p-4 text-foreground">{name}</td>
-                      <td className="p-4 text-foreground">{period}</td>
-                      <td className="p-4 text-foreground">{l.leave_type}</td>
-                      <td className="p-4 text-muted-foreground">{l.notes || '—'}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-
-      {/* Payroll History Modal */}
-      {showPayrollHistory && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-background rounded-lg shadow-lg max-w-4xl w-full max-h-[80vh] overflow-hidden">
-            <div className="p-6 border-b border-border">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-foreground">
-                  Payroll History - {staff.find(s => s.id === selectedStaffId)?.name || 'Staff Member'}
-                </h3>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowPayrollHistory(false)}
-                >
-                  <XCircle className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-            
-            <div className="p-6 overflow-y-auto max-h-[60vh]">
-              {payrollHistory.length === 0 ? (
-                <div className="text-center py-8">
-                  <CalendarDays className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">No payroll records found for this staff member.</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-muted/50">
-                      <tr>
-                        <th className="text-left p-3 text-foreground">Month</th>
-                        <th className="text-right p-3 text-foreground">Base Salary</th>
-                        <th className="text-center p-3 text-foreground">Present Days</th>
-                        <th className="text-center p-3 text-foreground">Paid Leaves</th>
-                        <th className="text-center p-3 text-foreground">Unpaid Leaves</th>
-                        <th className="text-right p-3 text-foreground">Advances</th>
-                        <th className="text-right p-3 text-foreground">Net Payable</th>
-                        <th className="text-center p-3 text-foreground">Status</th>
-                        <th className="text-center p-3 text-foreground">Payment Method</th>
-                        <th className="text-center p-3 text-foreground">Paid Date</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {payrollHistory.map((line) => (
-                        <tr key={line.id} className="border-b border-border hover:bg-muted/30">
-                          <td className="p-3 text-foreground font-medium">
-                            {new Date(line.month + '-01').toLocaleDateString('en-IN', { 
-                              month: 'long', 
-                              year: 'numeric' 
-                            })}
-                          </td>
-                          <td className="p-3 text-right text-foreground">
-                            {formatCurrency(line.base_salary)}
-                          </td>
-                          <td className="p-3 text-center text-foreground">
-                            {line.present_days}
-                          </td>
-                          <td className="p-3 text-center text-foreground">
-                            {line.paid_leaves}
-                          </td>
-                          <td className="p-3 text-center text-foreground">
-                            {line.unpaid_leaves}
-                          </td>
-                          <td className="p-3 text-right text-warning">
-                            {formatCurrency(line.advances_total)}
-                          </td>
-                          <td className="p-3 text-right text-success font-semibold">
-                            {formatCurrency(line.net_payable)}
-                          </td>
-                          <td className="p-3 text-center">
-                            <span className={`px-2 py-1 rounded-full text-xs ${
-                              line.payment_status === 'paid' 
-                                ? 'bg-green-100 text-green-800' 
-                                : 'bg-yellow-100 text-yellow-800'
-                            }`}>
-                              {line.payment_status === 'paid' ? 'Paid' : 'Pending'}
-                            </span>
-                          </td>
-                          <td className="p-3 text-center text-muted-foreground">
-                            {line.paid_via || '—'}
-                          </td>
-                          <td className="p-3 text-center text-muted-foreground">
-                            {line.paid_at ? new Date(line.paid_at).toLocaleDateString('en-IN') : '—'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-            
-            <div className="p-6 border-t border-border">
-              <div className="flex justify-end">
-                <Button onClick={() => setShowPayrollHistory(false)}>
-                  Close
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
