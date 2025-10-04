@@ -99,15 +99,17 @@ const AttendancePage: React.FC = () => {
           return;
         }
 
-        // Fetch staff using RPC (matches StaffPage.tsx)
+        // Fetch staff from public schema
         const { data: staffData, error: staffError } = await supabase
-          .rpc('get_staff_by_branch', { branch_id_param: selectedLocationId });
+          .from('staff')
+          .select('id, name, role_title, is_active, dp_url')
+          .eq('branch_id', selectedLocationId);
         if (staffError) throw staffError;
 
         const mappedStaff: Staff[] = (staffData || []).map((row: any) => ({
           id: row.id,
           name: row.name,
-          role: row.role_title || row.role || '',
+          role: row.role_title || '',
           isActive: typeof row.is_active === 'boolean' ? row.is_active : row.isActive,
           dp_url: row.dp_url || null
         }));
@@ -123,7 +125,7 @@ const AttendancePage: React.FC = () => {
           };
         });
 
-        // Load any existing attendance for the selected date and overlay (with fallback)
+        // Load any existing attendance for the selected date and overlay from public schema
         const staffIdsForFilter = mappedStaff.map(s => s.id);
         const fetchAttendance = async () => {
           const { data, error } = await supabase
@@ -179,7 +181,7 @@ const AttendancePage: React.FC = () => {
 
         const staffIdsForFilter = staff.map(s => s.id);
 
-        // Attendance fetch with schema fallback
+        // Attendance fetch from public schema
         const fetchAttendance = async () => {
           const { data, error } = await supabase
             .from('attendance')
@@ -279,7 +281,7 @@ const AttendancePage: React.FC = () => {
       // We clear for all visible staff to ensure old explicit 'Present' rows are removed
       const staffIds = allRecords.map(r => r.staff_id);
 
-      // Save strictly to payroll schema; surface clear message if not exposed
+      // Save to public schema attendance table
       const { error: delErr } = await supabase
         .from('attendance')
         .delete()
