@@ -999,7 +999,7 @@ const saveWorkshopEdits = async () => {
             <h1 className="text-2xl font-bold">Price Settings</h1>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 justify-end">
           <Button 
             variant="outline" 
             size="sm" 
@@ -1007,19 +1007,19 @@ const saveWorkshopEdits = async () => {
             disabled={refreshing}
           >
             {refreshing ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              <Loader2 className="h-4 w-4 sm:mr-2 animate-spin" />
             ) : (
-              <RefreshCw className="h-4 w-4 mr-2" />
+              <RefreshCw className="h-4 w-4 sm:mr-2" />
             )}
-            Refresh
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
           
           {/* Service Import Dialog */}
           <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="secondary" size="sm">
-                <Upload className="h-4 w-4 mr-2" />
-                Import Services
+                <Upload className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Import Services</span>
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
@@ -1037,8 +1037,8 @@ const saveWorkshopEdits = async () => {
                     <p className="text-sm text-blue-700">Download our sample Excel file with matrix format</p>
                   </div>
                   <Button variant="outline" size="sm" onClick={downloadSampleFile}>
-                    <Download className="h-4 w-4 mr-2" />
-                    Download Sample
+                    <Download className="h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Download Sample</span>
                   </Button>
                 </div>
 
@@ -1130,8 +1130,8 @@ const saveWorkshopEdits = async () => {
           <Dialog open={workshopImportDialogOpen} onOpenChange={setWorkshopImportDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="secondary" size="sm" disabled={isServiceTableEmpty}>
-                <Building2 className="h-4 w-4 mr-2" />
-                Import Workshops
+                <Building2 className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Import Workshops</span>
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
@@ -1149,8 +1149,8 @@ const saveWorkshopEdits = async () => {
                     <p className="text-sm text-green-700">Download sample with matrix format</p>
                   </div>
                   <Button variant="outline" size="sm" onClick={downloadWorkshopSampleFile}>
-                    <Download className="h-4 w-4 mr-2" />
-                    Download Sample
+                    <Download className="h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Download Sample</span>
                   </Button>
                 </div>
 
@@ -1243,8 +1243,8 @@ const saveWorkshopEdits = async () => {
           }}>
             <DialogTrigger asChild>
               <Button variant="default" size="sm">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Service
+                <Plus className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Add Service</span>
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
@@ -1378,8 +1378,8 @@ const saveWorkshopEdits = async () => {
           }}>
             <DialogTrigger asChild>
               <Button variant="default" size="sm" disabled={isServiceTableEmpty}>
-                <Building2 className="h-4 w-4 mr-2" />
-                Add Workshop
+                <Building2 className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Add Workshop</span>
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
