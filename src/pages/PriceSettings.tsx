@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ArrowLeft, Settings, Plus, Edit, IndianRupee, Loader2, RefreshCw, AlertCircle, Upload, Download, FileSpreadsheet, Building2 } from "lucide-react";
+import { ArrowLeft, Settings, Plus, Edit, IndianRupee, Loader2, RefreshCw, AlertCircle, Upload, Download, FileSpreadsheet, Building2, Save, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +31,7 @@ interface ServicePrice {
   SERVICE: string;
   VEHICLE: string;
   PRICE: number;
+  type?: string;
   created_at?: string;
 }
 
@@ -43,16 +44,25 @@ interface WorkshopPrice {
   locationid?: string;
 }
 
-interface ImportRow {
+interface ServiceImportRow {
   SERVICE: string;
-  VEHICLE: string;
-  PRICE: number;
-  type?: string;
+  [key: string]: string | number; // Dynamic vehicle columns
 }
 
 interface WorkshopImportRow {
   WORKSHOP: string;
   [key: string]: string | number; // Dynamic vehicle columns
+}
+
+interface VehiclePriceInput {
+  vehicle: string;
+  price: string;
+  type?: string;
+}
+
+interface WorkshopVehicleDiscountInput {
+  vehicle: string;
+  discount: string;
 }
 
 export default function PriceSettings({ locationId }: { locationId: string }) {
@@ -64,11 +74,23 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [usingFallbackData, setUsingFallbackData] = useState(false);
   
+  // Edit mode states
+  const [serviceEditMode, setServiceEditMode] = useState(false);
+  const [workshopEditMode, setWorkshopEditMode] = useState(false);
+  const [editingService, setEditingService] = useState<string | null>(null);
+  const [editingWorkshop, setEditingWorkshop] = useState<string | null>(null);
+  const [editValues, setEditValues] = useState<Record<string, number>>({});
+  const [saving, setSaving] = useState(false);
+  
   // Service Import state
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
-  const [importPreview, setImportPreview] = useState<ImportRow[]>([]);
+  const [importPreview, setImportPreview] = useState<ServicePrice[]>([]);
+
+  // Edit dialog states
+  const [serviceEditDialogOpen, setServiceEditDialogOpen] = useState(false);
+  const [workshopEditDialogOpen, setWorkshopEditDialogOpen] = useState(false);
 
   // Workshop Import state
   const [workshopImportDialogOpen, setWorkshopImportDialogOpen] = useState(false);
@@ -76,14 +98,18 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
   const [workshopImporting, setWorkshopImporting] = useState(false);
   const [workshopImportPreview, setWorkshopImportPreview] = useState<WorkshopPrice[]>([]);
 
-  // Manual Service Entry state
+  // Enhanced Manual Service Entry state
   const [addServiceDialogOpen, setAddServiceDialogOpen] = useState(false);
-  const [newService, setNewService] = useState({ SERVICE: '', VEHICLE: '', PRICE: '', type: '' });
+  const [newServiceName, setNewServiceName] = useState('');
+  const [vehiclePrices, setVehiclePrices] = useState<VehiclePriceInput[]>([]);
+  const [newVehicleType, setNewVehicleType] = useState('');
   const [addingService, setAddingService] = useState(false);
 
-  // Manual Workshop Entry state
+  // Enhanced Manual Workshop Entry state
   const [addWorkshopDialogOpen, setAddWorkshopDialogOpen] = useState(false);
-  const [newWorkshop, setNewWorkshop] = useState({ WORKSHOP: '', VEHICLE: '', Discount: '' });
+  const [newWorkshopName, setNewWorkshopName] = useState('');
+  const [workshopVehicleDiscounts, setWorkshopVehicleDiscounts] = useState<WorkshopVehicleDiscountInput[]>([]);
+  const [newWorkshopVehicleType, setNewWorkshopVehicleType] = useState('');
   const [addingWorkshop, setAddingWorkshop] = useState(false);
 
   // Matrix data for services
@@ -97,8 +123,8 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
   const [workshopList, setWorkshopList] = useState<string[]>([]);
   const [workshopVehicleList, setWorkshopVehicleList] = useState<string[]>([]);
   const [workshopMatrix, setWorkshopMatrix] = useState<Record<string, Record<string, number>>>({});
+  const [isServiceTableEmpty, setIsServiceTableEmpty] = useState(false);
 
-  // Use locationId prop for current location
   const currentLocationId = locationId;
 
   // Helper: Normalize service name for deduplication
@@ -106,10 +132,8 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
     if (!service) return '';
     let normalized = service.trim().toUpperCase();
     
-    // Handle common variations
-    normalized = normalized.replace(/\s+/g, ' '); // Normalize multiple spaces to single space
+    normalized = normalized.replace(/\s+/g, ' ');
     
-    // More aggressive Under Body Coating detection
     const lowerService = service.toLowerCase();
     if (lowerService.includes('under') && (lowerService.includes('coating') || lowerService.includes('coatinng'))) {
       normalized = 'UNDER BODY COATING';
@@ -119,7 +143,6 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
       normalized = 'UNDER BODY COATING';
     }
     
-    // Handle Silencer Coating variations
     if (lowerService.includes('silencer') && (lowerService.includes('coating') || lowerService.includes('coatinng'))) {
       normalized = 'SILENCER COATING';
     }
@@ -145,10 +168,6 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
 
   // Process raw service price data into matrix format
   const processServicePricesToMatrix = (rawData: ServicePrice[]) => {
-    console.log('📄 Processing service prices to matrix...');
-    console.log('📊 Raw data count:', rawData.length);
-    
-    // Deduplicate: for each (normalized service, normalized vehicle) pair, keep only the latest by created_at or the first found
     const pairMap = new Map<string, ServicePrice>();
     const originalNames: Record<string, string> = {};
     const originalServiceNames: Record<string, string> = {};
@@ -158,21 +177,19 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
       const normVehicle = normalizeVehicle(item.VEHICLE);
       const key = `${normService}|||${normVehicle}`;
       
-      // Store the original names for display
       originalNames[normVehicle] = item.VEHICLE;
       originalServiceNames[normService] = item.SERVICE;
       
       if (!pairMap.has(key)) {
         pairMap.set(key, item);
       } else {
-        // If duplicate, keep the latest by created_at if available
         const existing = pairMap.get(key)!;
         
         if (item.created_at && existing.created_at) {
           if (new Date(item.created_at) > new Date(existing.created_at)) {
             pairMap.set(key, item);
-            originalNames[normVehicle] = item.VEHICLE; // Update with newer original name
-            originalServiceNames[normService] = item.SERVICE; // Update with newer original service name
+            originalNames[normVehicle] = item.VEHICLE;
+            originalServiceNames[normService] = item.SERVICE;
           }
         }
       }
@@ -184,11 +201,9 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
       return { ...item, SERVICE: normService, VEHICLE: normVehicle };
     });
     
-    // Get all unique normalized services and vehicles
     const services = Array.from(new Set(deduped.map(item => item.SERVICE)));
     const vehicles = Array.from(new Set(deduped.map(item => item.VEHICLE)));
     
-    // Build matrix: service -> vehicle -> price
     const matrix: Record<string, Record<string, number>> = {};
     services.forEach(service => {
       matrix[service] = {};
@@ -203,19 +218,13 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
     setServiceMatrix(matrix);
     setOriginalVehicleNames(originalNames);
     setOriginalServiceNames(originalServiceNames);
-    
-    console.log('✅ Matrix processing completed');
   };
 
   // Process workshop prices into matrix format
   const processWorkshopPricesToMatrix = (rawData: WorkshopPrice[]) => {
-    console.log('🏭 Processing workshop prices to matrix...');
-    
-    // Get unique workshops and vehicles
     const workshops = Array.from(new Set(rawData.map(item => item.WORKSHOP)));
     const vehicles = Array.from(new Set(rawData.map(item => item.VEHICLE)));
     
-    // Build matrix: workshop -> vehicle -> discount
     const matrix: Record<string, Record<string, number>> = {};
     workshops.forEach(workshop => {
       matrix[workshop] = {};
@@ -228,32 +237,402 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
     setWorkshopList(workshops);
     setWorkshopVehicleList(vehicles);
     setWorkshopMatrix(matrix);
-    
-    console.log('✅ Workshop matrix processing completed');
   };
 
-  // Generate sample Excel file for services
+  // Initialize vehicle prices when opening add service dialog
+  const openAddServiceDialog = () => {
+    if (vehicleList.length > 0) {
+      // Try to infer type from existing servicePrices for the first matching vehicle entry
+      setVehiclePrices(vehicleList.map(v => {
+        const match = servicePrices.find(sp => normalizeVehicle(sp.VEHICLE) === normalizeVehicle(v));
+        return { vehicle: v, price: '', type: match?.type || '' };
+      }));
+    }
+    setAddServiceDialogOpen(true);
+  };
+
+  // Initialize workshop vehicle discounts when opening add workshop dialog
+  const openAddWorkshopDialog = () => {
+    if (vehicleList.length > 0) {
+      setWorkshopVehicleDiscounts(vehicleList.map(v => ({ vehicle: v, discount: '' })));
+    }
+    setAddWorkshopDialogOpen(true);
+  };
+
+  // Add new vehicle type to service form
+  const addNewVehicleToService = () => {
+    if (!newVehicleType.trim()) {
+      toast.error("Please enter a vehicle type");
+      return;
+    }
+    
+    const normalized = normalizeVehicle(newVehicleType);
+    if (vehiclePrices.some(vp => normalizeVehicle(vp.vehicle) === normalized)) {
+      toast.error("This vehicle type already exists");
+      return;
+    }
+    
+    // If user supplied a type in the newVehicleType input using a convention like "Name|Type", support that
+    // e.g. "Hatchback|2/4" -> vehicle: 'Hatchback', type: '2/4'
+    const parts = newVehicleType.split('|').map(p => p.trim());
+    const vehicleName = parts[0];
+    const vehicleTypeValue = parts[1] || '';
+    setVehiclePrices([...vehiclePrices, { vehicle: vehicleName, price: '', type: vehicleTypeValue }]);
+    setNewVehicleType('');
+    toast.success("Vehicle type added");
+  };
+
+  // Add new vehicle type to workshop form
+  const addNewVehicleToWorkshop = () => {
+    if (!newWorkshopVehicleType.trim()) {
+      toast.error("Please enter a vehicle type");
+      return;
+    }
+    
+    const normalized = normalizeVehicle(newWorkshopVehicleType);
+    if (workshopVehicleDiscounts.some(wv => normalizeVehicle(wv.vehicle) === normalized)) {
+      toast.error("This vehicle type already exists");
+      return;
+    }
+    
+    setWorkshopVehicleDiscounts([...workshopVehicleDiscounts, { vehicle: newWorkshopVehicleType.trim(), discount: '' }]);
+    setNewWorkshopVehicleType('');
+    toast.success("Vehicle type added");
+  };
+
+  // Handle enhanced service addition
+  const handleAddService = async () => {
+    if (!newServiceName.trim()) {
+      toast.error("Please enter a service name");
+      return;
+    }
+
+    const validPrices = vehiclePrices.filter(vp => {
+      const price = parseFloat(vp.price);
+      return !isNaN(price) && price > 0;
+    });
+
+    if (validPrices.length === 0) {
+      toast.error("Please enter at least one valid price");
+      return;
+    }
+
+    if (!currentLocationId) {
+      toast.error("Location not selected");
+      return;
+    }
+
+    setAddingService(true);
+    try {
+      const dataToInsert = validPrices.map(vp => ({
+        SERVICE: newServiceName.trim().toUpperCase(),
+        VEHICLE: vp.vehicle.trim().toUpperCase(),
+        PRICE: parseFloat(vp.price),
+        type: vp.type && vp.type.trim() ? vp.type.trim() : null,
+        locationid: currentLocationId,
+        created_at: new Date().toISOString()
+      }));
+
+      const { error } = await supabase
+        .from('Service_prices')
+        .insert(dataToInsert);
+
+      if (error) {
+        console.error('Add service error:', error);
+        toast.error(`Failed to add service: ${error.message}`);
+        return;
+      }
+
+      toast.success(`Service added successfully with ${dataToInsert.length} vehicle types!`);
+      setAddServiceDialogOpen(false);
+      setNewServiceName('');
+      setVehiclePrices([]);
+      setNewVehicleType('');
+      await refreshData();
+    } catch (error) {
+      console.error('Add service error:', error);
+      toast.error("Failed to add service");
+    } finally {
+      setAddingService(false);
+    }
+  };
+
+  // Handle enhanced workshop addition
+  const handleAddWorkshop = async () => {
+    if (!newWorkshopName.trim()) {
+      toast.error("Please enter a workshop name");
+      return;
+    }
+
+    const validDiscounts = workshopVehicleDiscounts.filter(wv => {
+      const discount = parseFloat(wv.discount);
+      return !isNaN(discount);
+    });
+
+    if (validDiscounts.length === 0) {
+      toast.error("Please enter at least one valid discount");
+      return;
+    }
+
+    if (!currentLocationId) {
+      toast.error("Location not selected");
+      return;
+    }
+
+    setAddingWorkshop(true);
+    try {
+      const dataToInsert = validDiscounts.map(wv => ({
+        WORKSHOP: newWorkshopName.trim().toUpperCase(),
+        VEHICLE: wv.vehicle.trim().toUpperCase(),
+        Discount: parseFloat(wv.discount),
+        location_id: currentLocationId,
+        "Created at": new Date().toISOString()
+      }));
+
+      const { error } = await supabase
+        .from('workshop_prices')
+        .insert(dataToInsert);
+
+      if (error) {
+        console.error('Add workshop error:', error);
+        toast.error(`Failed to add workshop: ${error.message}`);
+        return;
+      }
+
+      toast.success(`Workshop added successfully with ${dataToInsert.length} vehicle types!`);
+      setAddWorkshopDialogOpen(false);
+      setNewWorkshopName('');
+      setWorkshopVehicleDiscounts([]);
+      setNewWorkshopVehicleType('');
+      await refreshData();
+    } catch (error) {
+      console.error('Add workshop error:', error);
+      toast.error("Failed to add workshop");
+    } finally {
+      setAddingWorkshop(false);
+    }
+  };
+
+  // Open edit dialog for service
+  const openServiceEdit = (service: string) => {
+    const values: Record<string, number> = {};
+    vehicleList.forEach(vehicle => {
+      values[vehicle] = serviceMatrix[service][vehicle] || 0;
+    });
+    setEditValues(values);
+    setEditingService(service);
+    setServiceEditDialogOpen(true); // Add this line
+  };
+
+  // Open edit dialog for workshop
+  const openWorkshopEdit = (workshop: string) => {
+    const values: Record<string, number> = {};
+    workshopVehicleList.forEach(vehicle => {
+      values[vehicle] = workshopMatrix[workshop][vehicle] || 0;
+    });
+    setEditValues(values);
+    setEditingWorkshop(workshop);
+    setWorkshopEditDialogOpen(true); // Add this line
+  };
+
+  // Save service edits
+  // Save service edits with proper update logic
+const saveServiceEdits = async () => {
+  if (!editingService || !currentLocationId) return;
+
+  setSaving(true);
+  try {
+    // Get existing entries
+    const { data: existingEntries } = await supabase
+      .from('Service_prices')
+      .select('*')
+      .eq('SERVICE', editingService)
+      .eq('locationid', currentLocationId);
+
+    const existingMap = new Map(
+      (existingEntries || []).map(entry => [entry.VEHICLE, entry])
+    );
+
+    // Separate into update, insert, and delete operations
+    const toUpdate: any[] = [];
+    const toInsert: any[] = [];
+    const toDelete: string[] = [];
+
+    Object.entries(editValues).forEach(([vehicle, price]) => {
+      const existing = existingMap.get(vehicle);
+      
+      if (price > 0) {
+        if (existing) {
+          // Update existing entry
+          toUpdate.push({ id: existing.id, PRICE: price });
+        } else {
+          // Insert new entry
+          toInsert.push({
+            SERVICE: editingService,
+            VEHICLE: vehicle,
+            PRICE: price,
+            locationid: currentLocationId,
+            created_at: new Date().toISOString()
+          });
+        }
+        existingMap.delete(vehicle);
+      } else if (existing) {
+        // Delete entry with price 0
+        toDelete.push(existing.id);
+      }
+    });
+
+    // Delete remaining entries (vehicles not in editValues)
+    existingMap.forEach(entry => toDelete.push(entry.id));
+
+    // Execute updates
+    if (toUpdate.length > 0) {
+      for (const item of toUpdate) {
+        const { error } = await supabase
+          .from('Service_prices')
+          .update({ PRICE: item.PRICE })
+          .eq('id', item.id);
+        if (error) throw error;
+      }
+    }
+
+    // Execute inserts
+    if (toInsert.length > 0) {
+      const { error } = await supabase
+        .from('Service_prices')
+        .insert(toInsert);
+      if (error) throw error;
+    }
+
+    // Execute deletes
+    if (toDelete.length > 0) {
+      const { error } = await supabase
+        .from('Service_prices')
+        .delete()
+        .in('id', toDelete);
+      if (error) throw error;
+    }
+
+    toast.success("Service prices updated successfully!");
+    setEditingService(null);
+    setEditValues({});
+    await refreshData();
+  } catch (error) {
+    console.error('Save error:', error);
+    toast.error("Failed to save changes");
+  } finally {
+    setSaving(false);
+  }
+};
+
+  // Save workshop edits
+  // Save workshop edits with proper update logic
+const saveWorkshopEdits = async () => {
+  if (!editingWorkshop || !currentLocationId) return;
+
+  setSaving(true);
+  try {
+    // Get existing entries
+    const { data: existingEntries } = await supabase
+      .from('workshop_prices')
+      .select('*')
+      .eq('WORKSHOP', editingWorkshop)
+      .eq('location_id', currentLocationId);
+
+    const existingMap = new Map(
+      (existingEntries || []).map(entry => [entry.VEHICLE, entry])
+    );
+
+    // Separate into update, insert, and delete operations
+    const toUpdate: any[] = [];
+    const toInsert: any[] = [];
+    const toDelete: string[] = [];
+
+    Object.entries(editValues).forEach(([vehicle, discount]) => {
+      const existing = existingMap.get(vehicle);
+      
+      if (existing) {
+        // Update existing entry (even if discount is 0, workshops can have 0 discount)
+        toUpdate.push({ id: existing.id, Discount: discount });
+        existingMap.delete(vehicle);
+      } else {
+        // Insert new entry
+        toInsert.push({
+          WORKSHOP: editingWorkshop,
+          VEHICLE: vehicle,
+          Discount: discount,
+          location_id: currentLocationId,
+          "Created at": new Date().toISOString()
+        });
+      }
+    });
+
+    // Delete remaining entries (vehicles not in editValues)
+    existingMap.forEach(entry => toDelete.push(entry.id));
+
+    // Execute updates
+    if (toUpdate.length > 0) {
+      for (const item of toUpdate) {
+        const { error } = await supabase
+          .from('workshop_prices')
+          .update({ Discount: item.Discount })
+          .eq('id', item.id);
+        if (error) throw error;
+      }
+    }
+
+    // Execute inserts
+    if (toInsert.length > 0) {
+      const { error } = await supabase
+        .from('workshop_prices')
+        .insert(toInsert);
+      if (error) throw error;
+    }
+
+    // Execute deletes
+    if (toDelete.length > 0) {
+      const { error } = await supabase
+        .from('workshop_prices')
+        .delete()
+        .in('id', toDelete);
+      if (error) throw error;
+    }
+
+    toast.success("Workshop discounts updated successfully!");
+    setEditingWorkshop(null);
+    setEditValues({});
+    await refreshData();
+  } catch (error) {
+    console.error('Save error:', error);
+    toast.error("Failed to save changes");
+  } finally {
+    setSaving(false);
+  }
+};
+
+  // Generate sample Excel file for services (matrix format)
   const downloadSampleFile = () => {
     const sampleData = [
-      { SERVICE: 'Basic Wash', VEHICLE: 'Car', PRICE: 200, type: 4 },
-      { SERVICE: 'Basic Wash', VEHICLE: 'Bike', PRICE: 100, type: 2 },
-      { SERVICE: 'Premium Wash', VEHICLE: 'Car', PRICE: 500, type: 4 },
-      { SERVICE: 'Premium Wash', VEHICLE: 'Bike', PRICE: 300, type: 2 },
-      { SERVICE: 'Full Service', VEHICLE: 'SUV', PRICE: 800, type: 4 },
-      { SERVICE: 'Under Body Coating', VEHICLE: 'Car', PRICE: 1500, type: 4 },
-      { SERVICE: 'Silencer Coating', VEHICLE: 'Bike', PRICE: 800, type: 2 }
+      { SERVICE: 'TYPE -> (2/4/other)', 'HATCH BACK': 4, 'SEDAN / MINI SUV': 4, 'SUV/ PREMIUM SEDAN': 4, 'PREMIUM SUV': 4 },
+      { SERVICE: 'FULL WASH', 'HATCH BACK': 500, 'SEDAN / MINI SUV': 600, 'SUV/ PREMIUM SEDAN': 700, 'PREMIUM SUV': 800 },
+      { SERVICE: 'BODY WASH', 'HATCH BACK': 400, 'SEDAN / MINI SUV': 500, 'SUV/ PREMIUM SEDAN': 600, 'PREMIUM SUV': 700 },
+      { SERVICE: 'PREMIUM WASH', 'HATCH BACK': 800, 'SEDAN / MINI SUV': 900, 'SUV/ PREMIUM SEDAN': 1000, 'PREMIUM SUV': 1100 },
+      { SERVICE: 'CERAMIC WASH', 'HATCH BACK': 1500, 'SEDAN / MINI SUV': 1500, 'SUV/ PREMIUM SEDAN': 1600, 'PREMIUM SUV': 1600 },
+      { SERVICE: 'INTERIOR DEEP CLEANING', 'HATCH BACK': 2000, 'SEDAN / MINI SUV': 2500, 'SUV/ PREMIUM SEDAN': 3000, 'PREMIUM SUV': 3500 },
+      { SERVICE: 'EXTERIOR DETAILING', 'HATCH BACK': 4000, 'SEDAN / MINI SUV': 5000, 'SUV/ PREMIUM SEDAN': 6000, 'PREMIUM SUV': 7000 },
+      { SERVICE: 'UNDER BODY COATING', 'HATCH BACK': 3500, 'SEDAN / MINI SUV': 4000, 'SUV/ PREMIUM SEDAN': 4500, 'PREMIUM SUV': 5000 }
     ];
 
     const worksheet = XLSX.utils.json_to_sheet(sampleData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Service Prices");
 
-    // Add column widths
     const colWidths = [
-      { wch: 20 }, // SERVICE
-      { wch: 15 }, // VEHICLE
-      { wch: 10 }, // PRICE
-      { wch: 12 }  // type
+      { wch: 25 },
+      { wch: 15 },
+      { wch: 18 },
+      { wch: 20 },
+      { wch: 15 }
     ];
     worksheet['!cols'] = colWidths;
 
@@ -263,22 +642,21 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
 
   // Generate sample Excel file for workshops
   const downloadWorkshopSampleFile = () => {
+    const vehicleTypes = vehicleList.length > 0 ? vehicleList : ['HATCHBACK', 'SEDAN', 'SUV'];
+    
     const sampleData = [
-      { WORKSHOP: 'Workshop A', 'HATCH BACK': 300, 'SEDAN': 150, 'SUV': 200 },
-      { WORKSHOP: 'Workshop B', 'HATCH BACK': 250, 'SEDAN': 180, 'SUV': 220 },
-      { WORKSHOP: 'Workshop C', 'HATCH BACK': 280, 'SEDAN': 160, 'SUV': 190 }
+      { WORKSHOP: 'Workshop A', ...Object.fromEntries(vehicleTypes.map((v, i) => [originalVehicleNames[v] || v, 200 + i * 50])) },
+      { WORKSHOP: 'Workshop B', ...Object.fromEntries(vehicleTypes.map((v, i) => [originalVehicleNames[v] || v, 250 + i * 50])) },
+      { WORKSHOP: 'Workshop C', ...Object.fromEntries(vehicleTypes.map((v, i) => [originalVehicleNames[v] || v, 180 + i * 50])) }
     ];
 
     const worksheet = XLSX.utils.json_to_sheet(sampleData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Workshop Discounts");
 
-    // Add column widths
     const colWidths = [
-      { wch: 20 }, // WORKSHOP
-      { wch: 15 }, // HATCH BACK
-      { wch: 15 }, // SEDAN
-      { wch: 15 }  // SUV
+      { wch: 20 },
+      ...vehicleTypes.map(() => ({ wch: 18 }))
     ];
     worksheet['!cols'] = colWidths;
 
@@ -311,48 +689,81 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
       const workbook = XLSX.read(data);
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet) as ImportRow[];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet) as ServiceImportRow[];
 
-      // Validate required columns
       if (jsonData.length === 0) {
         toast.error("Excel file is empty");
         return;
       }
 
-      const firstRow = jsonData[0];
-      const requiredColumns = ['SERVICE', 'VEHICLE', 'PRICE'];
-      const missingColumns = requiredColumns.filter(col => !(col in firstRow));
+      const normalizedData: ServicePrice[] = [];
+      
+      let hasTypeRow = false;
+      let typeMapping: Record<string, string> = {};
+      let startIndex = 0;
+      
+      if (jsonData.length > 0) {
+        const firstRow = jsonData[0];
+        const serviceValue = String(firstRow.SERVICE || '').toLowerCase();
+        
+        if (serviceValue.includes('type')) {
+          hasTypeRow = true;
+          startIndex = 1;
+          
+          Object.keys(firstRow).forEach(key => {
+            if (key !== 'SERVICE') {
+              const vehicleType = key;
+              const typeValue = firstRow[key];
+              typeMapping[vehicleType] = String(typeValue || '');
+            }
+          });
+        }
+      }
+      
+      jsonData.slice(startIndex).forEach((row, rowIndex) => {
+        const serviceName = row.SERVICE;
+        
+        if (!serviceName) return;
 
-      if (missingColumns.length > 0) {
-        toast.error(`Missing required columns: ${missingColumns.join(', ')}`);
+        Object.keys(row).forEach(key => {
+          if (key !== 'SERVICE') {
+            const vehicleType = key;
+            const price = row[key];
+            
+            const priceNum = typeof price === 'number' ? price : parseFloat(String(price));
+            
+            if (!isNaN(priceNum) && priceNum > 0) {
+              normalizedData.push({
+                id: `temp-${normalizedData.length}`,
+                SERVICE: String(serviceName).trim(),
+                VEHICLE: vehicleType.trim(),
+                PRICE: priceNum,
+                type: typeMapping[vehicleType] || undefined
+              });
+            }
+          }
+        });
+      });
+
+      if (normalizedData.length === 0) {
+        toast.error("No valid service-vehicle price data found");
         return;
       }
 
-      // Validate data types and clean up
-      const validData: ImportRow[] = [];
-      jsonData.forEach((row, index) => {
-        if (row.SERVICE && row.VEHICLE && row.PRICE) {
-          const price = typeof row.PRICE === 'number' ? row.PRICE : parseFloat(String(row.PRICE));
-          if (!isNaN(price)) {
-            validData.push({
-              SERVICE: String(row.SERVICE).trim(),
-              VEHICLE: String(row.VEHICLE).trim(),
-              PRICE: price,
-              type: row.type ? String(row.type).trim() : undefined
-            });
-          }
-        }
-      });
-
-      setImportPreview(validData);
-      toast.success(`Found ${validData.length} valid rows for import`);
+      setImportPreview(normalizedData);
+      
+      const message = hasTypeRow 
+        ? `Found ${normalizedData.length} valid service-vehicle combinations (TYPE row detected and processed)`
+        : `Found ${normalizedData.length} valid service-vehicle combinations for import`;
+      
+      toast.success(message);
     } catch (error) {
       console.error('Error previewing file:', error);
       toast.error("Error reading Excel file");
     }
   };
 
-  // Preview Excel file content for workshops (matrix format)
+  // Preview Excel file content for workshops
   const previewWorkshopFile = async (file: File) => {
     try {
       const data = await file.arrayBuffer();
@@ -366,24 +777,18 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
         return;
       }
 
-      // Convert matrix format to normalized format
       const normalizedData: WorkshopPrice[] = [];
       
       jsonData.forEach((row, rowIndex) => {
         const workshopName = row.WORKSHOP;
         
-        if (!workshopName) {
-          console.warn(`Row ${rowIndex + 1}: Missing WORKSHOP name, skipping`);
-          return;
-        }
+        if (!workshopName) return;
 
-        // Get all columns except WORKSHOP
         Object.keys(row).forEach(key => {
           if (key !== 'WORKSHOP') {
             const vehicleType = key;
             const discount = row[key];
             
-            // Convert discount to number
             const discountNum = typeof discount === 'number' ? discount : parseFloat(String(discount));
             
             if (!isNaN(discountNum)) {
@@ -424,12 +829,12 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
         SERVICE: row.SERVICE ? row.SERVICE.toUpperCase() : '',
         VEHICLE: row.VEHICLE ? row.VEHICLE.toUpperCase() : '',
         PRICE: row.PRICE,
-        type: row.type ? row.type.toUpperCase() : null,
+        type: row.type || null,
         locationid: currentLocationId,
         created_at: new Date().toISOString()
       }));
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('Service_prices')
         .insert(dataToInsert);
 
@@ -469,7 +874,7 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
         "Created at": new Date().toISOString()
       }));
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('workshop_prices')
         .insert(dataToInsert);
 
@@ -492,116 +897,13 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
     }
   };
 
-  // Handle manual service addition
-  const handleAddService = async () => {
-    if (!newService.SERVICE || !newService.VEHICLE || !newService.PRICE) {
-      toast.error("Please fill in all required fields");
-      return;
-    }
-
-    const price = parseFloat(newService.PRICE);
-    if (isNaN(price) || price <= 0) {
-      toast.error("Please enter a valid price");
-      return;
-    }
-
-    if (!currentLocationId) {
-      toast.error("Location not selected");
-      return;
-    }
-
-    setAddingService(true);
-    try {
-      const dataToInsert = {
-        SERVICE: newService.SERVICE.trim().toUpperCase(),
-        VEHICLE: newService.VEHICLE.trim().toUpperCase(),
-        PRICE: price,
-        type: newService.type ? newService.type.trim().toUpperCase() : null,
-        locationid: currentLocationId,
-        created_at: new Date().toISOString()
-      };
-
-      const { data, error } = await supabase
-        .from('Service_prices')
-        .insert([dataToInsert]);
-
-      if (error) {
-        console.error('Add service error:', error);
-        toast.error(`Failed to add service: ${error.message}`);
-        return;
-      }
-
-      toast.success("Service price added successfully!");
-      setAddServiceDialogOpen(false);
-      setNewService({ SERVICE: '', VEHICLE: '', PRICE: '', type: '' });
-      await refreshData();
-    } catch (error) {
-      console.error('Add service error:', error);
-      toast.error("Failed to add service");
-    } finally {
-      setAddingService(false);
-    }
-  };
-
-  // Handle manual workshop addition
-  const handleAddWorkshop = async () => {
-    if (!newWorkshop.WORKSHOP || !newWorkshop.VEHICLE || !newWorkshop.Discount) {
-      toast.error("Please fill in all required fields");
-      return;
-    }
-
-    const discount = parseFloat(newWorkshop.Discount);
-    if (isNaN(discount)) {
-      toast.error("Please enter a valid discount amount");
-      return;
-    }
-
-    if (!currentLocationId) {
-      toast.error("Location not selected");
-      return;
-    }
-
-    setAddingWorkshop(true);
-    try {
-      const dataToInsert = {
-        WORKSHOP: newWorkshop.WORKSHOP.trim().toUpperCase(),
-        VEHICLE: newWorkshop.VEHICLE.trim().toUpperCase(),
-        Discount: discount,
-        location_id: currentLocationId,
-        "Created at": new Date().toISOString()
-      };
-
-      const { data, error } = await supabase
-        .from('workshop_prices')
-        .insert([dataToInsert]);
-
-      if (error) {
-        console.error('Add workshop error:', error);
-        toast.error(`Failed to add workshop: ${error.message}`);
-        return;
-      }
-
-      toast.success("Workshop discount added successfully!");
-      setAddWorkshopDialogOpen(false);
-      setNewWorkshop({ WORKSHOP: '', VEHICLE: '', Discount: '' });
-      await refreshData();
-    } catch (error) {
-      console.error('Add workshop error:', error);
-      toast.error("Failed to add workshop");
-    } finally {
-      setAddingWorkshop(false);
-    }
-  };
-
   // Fetch all data from Supabase
   const fetchAllData = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      // Fetch service prices
       let servicePricesRes = null;
-      let workingTableName = null;
       const tableNames = [
         'Service_prices',
         'service_prices', 
@@ -616,7 +918,6 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
         try {
           const testResult = await supabase.from(tableName).select('*').limit(1);
           if (!testResult.error) {
-            workingTableName = tableName;
             servicePricesRes = await supabase.from(tableName).select('*');
             break;
           }
@@ -627,12 +928,10 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
         servicePricesRes = { data: null, error: { message: 'No service prices table found' } };
       }
       
-      // Fetch workshop prices
       const workshopPricesRes = await supabase
         .from('workshop_prices')
         .select('*');
 
-      // Handle service prices data
       if (servicePricesRes.error) {
         setError('Failed to fetch service prices');
         const fallbackServicePrices: ServicePrice[] = [
@@ -646,13 +945,15 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
         setServicePrices(fallbackServicePrices);
         processServicePricesToMatrix(fallbackServicePrices);
         setUsingFallbackData(true);
+        setIsServiceTableEmpty(false);
       } else {
-        setServicePrices(servicePricesRes.data || []);
-        processServicePricesToMatrix(servicePricesRes.data || []);
+        const rows = servicePricesRes.data || [];
+        setServicePrices(rows);
+        processServicePricesToMatrix(rows);
         setUsingFallbackData(false);
+        setIsServiceTableEmpty(Array.isArray(rows) && rows.length === 0);
       }
 
-      // Handle workshop prices data
       if (!workshopPricesRes.error && workshopPricesRes.data) {
         setWorkshopPrices(workshopPricesRes.data);
         processWorkshopPricesToMatrix(workshopPricesRes.data);
@@ -733,7 +1034,7 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
                 <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg border">
                   <div>
                     <p className="font-medium text-blue-900">Need a template?</p>
-                    <p className="text-sm text-blue-700">Download our sample Excel file with the correct format</p>
+                    <p className="text-sm text-blue-700">Download our sample Excel file with matrix format</p>
                   </div>
                   <Button variant="outline" size="sm" onClick={downloadSampleFile}>
                     <Download className="h-4 w-4 mr-2" />
@@ -750,14 +1051,14 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
                     className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Required columns: SERVICE, VEHICLE, PRICE. Optional: type
+                    Format: First column = SERVICE, Other columns = Vehicle types with price values
                   </p>
                 </div>
 
                 {importPreview.length > 0 && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <h3 className="font-medium">Preview ({importPreview.length} rows)</h3>
+                      <h3 className="font-medium">Preview ({importPreview.length} records)</h3>
                       <Badge variant="secondary">Ready to import</Badge>
                     </div>
                     
@@ -828,7 +1129,7 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
           {/* Workshop Import Dialog */}
           <Dialog open={workshopImportDialogOpen} onOpenChange={setWorkshopImportDialogOpen}>
             <DialogTrigger asChild>
-              <Button variant="secondary" size="sm">
+              <Button variant="secondary" size="sm" disabled={isServiceTableEmpty}>
                 <Building2 className="h-4 w-4 mr-2" />
                 Import Workshops
               </Button>
@@ -845,7 +1146,7 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
                 <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg border">
                   <div>
                     <p className="font-medium text-green-900">Need a template?</p>
-                    <p className="text-sm text-green-700">Download sample with matrix format (workshops as rows, vehicles as columns)</p>
+                    <p className="text-sm text-green-700">Download sample with matrix format</p>
                   </div>
                   <Button variant="outline" size="sm" onClick={downloadWorkshopSampleFile}>
                     <Download className="h-4 w-4 mr-2" />
@@ -935,74 +1236,116 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
             </DialogContent>
           </Dialog>
 
-          {/* Add Service Dialog */}
-          <Dialog open={addServiceDialogOpen} onOpenChange={setAddServiceDialogOpen}>
+          {/* Enhanced Add Service Dialog */}
+          <Dialog open={addServiceDialogOpen} onOpenChange={(open) => {
+            setAddServiceDialogOpen(open);
+            if (open) openAddServiceDialog();
+          }}>
             <DialogTrigger asChild>
               <Button variant="default" size="sm">
                 <Plus className="h-4 w-4 mr-2" />
                 Add Service
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <IndianRupee className="h-5 w-5" />
-                  Add New Service Price
+                  Add New Service
                 </DialogTitle>
               </DialogHeader>
               
-              <div className="space-y-4">
+              <div className="space-y-6">
                 <div className="space-y-2">
                   <Label htmlFor="service-name">Service Name *</Label>
                   <Input
                     id="service-name"
                     placeholder="e.g., Basic Wash, Premium Wash"
-                    value={newService.SERVICE}
-                    onChange={(e) => setNewService({ ...newService, SERVICE: e.target.value })}
+                    value={newServiceName}
+                    onChange={(e) => setNewServiceName(e.target.value)}
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="vehicle-type">Vehicle Type *</Label>
-                  <Input
-                    id="vehicle-type"
-                    placeholder="e.g., Car, Bike, SUV"
-                    value={newService.VEHICLE}
-                    onChange={(e) => setNewService({ ...newService, VEHICLE: e.target.value })}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="price">Price *</Label>
-                  <div className="relative">
-                    <IndianRupee className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <div className="space-y-3">
+                  <Label>Vehicle Types & Prices</Label>
+                  <div className="border rounded-lg p-4 space-y-3 max-h-80 overflow-y-auto">
+                    {vehiclePrices.map((vp, index) => (
+                      <div key={index} className="flex gap-3 items-center">
+                        <div className="w-1/3">
+                          <Input
+                            value={vp.vehicle}
+                            disabled
+                            className="bg-muted"
+                          />
+                        </div>
+                        <div className="w-1/3">
+                          <Input
+                            placeholder="Type (e.g., 2/4 or other)"
+                            value={vp.type || ''}
+                            onChange={(e) => {
+                              const newPrices = [...vehiclePrices];
+                              newPrices[index].type = e.target.value;
+                              setVehiclePrices(newPrices);
+                            }}
+                          />
+                        </div>
+                        <div className="flex-1 relative">
+                          <IndianRupee className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            type="number"
+                            placeholder="Price"
+                            className="pl-10"
+                            value={vp.price}
+                            onChange={(e) => {
+                              const newPrices = [...vehiclePrices];
+                              newPrices[index].price = e.target.value;
+                              setVehiclePrices(newPrices);
+                            }}
+                          />
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setVehiclePrices(vehiclePrices.filter((_, i) => i !== index));
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div className="flex gap-2">
                     <Input
-                      id="price"
-                      type="number"
-                      placeholder="0.00"
-                      className="pl-10"
-                      value={newService.PRICE}
-                      onChange={(e) => setNewService({ ...newService, PRICE: e.target.value })}
+                      placeholder="Add new vehicle type"
+                      value={newVehicleType}
+                      onChange={(e) => setNewVehicleType(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          addNewVehicleToService();
+                        }
+                      }}
                     />
+                    <Button
+                      variant="outline"
+                      onClick={addNewVehicleToService}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Vehicle
+                    </Button>
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="type">Type (Optional)</Label>
-                  <Input
-                    id="type"
-                    placeholder="e.g., 2, 4"
-                    value={newService.type}
-                    onChange={(e) => setNewService({ ...newService, type: e.target.value })}
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2 pt-4">
+                <div className="flex justify-end gap-2 pt-4 border-t">
                   <Button 
                     variant="outline" 
                     onClick={() => {
                       setAddServiceDialogOpen(false);
-                      setNewService({ SERVICE: '', VEHICLE: '', PRICE: '', type: '' });
+                      setNewServiceName('');
+                      setVehiclePrices([]);
+                      setNewVehicleType('');
                     }}
                   >
                     Cancel
@@ -1028,67 +1371,105 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
             </DialogContent>
           </Dialog>
 
-          {/* Add Workshop Dialog */}
-          <Dialog open={addWorkshopDialogOpen} onOpenChange={setAddWorkshopDialogOpen}>
+          {/* Enhanced Add Workshop Dialog */}
+          <Dialog open={addWorkshopDialogOpen} onOpenChange={(open) => {
+            setAddWorkshopDialogOpen(open);
+            if (open) openAddWorkshopDialog();
+          }}>
             <DialogTrigger asChild>
-              <Button variant="default" size="sm">
+              <Button variant="default" size="sm" disabled={isServiceTableEmpty}>
                 <Building2 className="h-4 w-4 mr-2" />
                 Add Workshop
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <Building2 className="h-5 w-5" />
-                  Add New Workshop Discount
+                  Add New Workshop
                 </DialogTitle>
               </DialogHeader>
               
-              <div className="space-y-4">
+              <div className="space-y-6">
                 <div className="space-y-2">
                   <Label htmlFor="workshop-name">Workshop Name *</Label>
                   <Input
                     id="workshop-name"
                     placeholder="e.g., Workshop A, ABC Motors"
-                    value={newWorkshop.WORKSHOP}
-                    onChange={(e) => setNewWorkshop({ ...newWorkshop, WORKSHOP: e.target.value })}
+                    value={newWorkshopName}
+                    onChange={(e) => setNewWorkshopName(e.target.value)}
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="workshop-vehicle">Vehicle Type *</Label>
-                  <Input
-                    id="workshop-vehicle"
-                    placeholder="e.g., HATCHBACK, SEDAN, SUV"
-                    value={newWorkshop.VEHICLE}
-                    onChange={(e) => setNewWorkshop({ ...newWorkshop, VEHICLE: e.target.value })}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="discount">Discount Amount *</Label>
-                  <div className="relative">
-                    <IndianRupee className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="discount"
-                      type="number"
-                      placeholder="0.00"
-                      className="pl-10"
-                      value={newWorkshop.Discount}
-                      onChange={(e) => setNewWorkshop({ ...newWorkshop, Discount: e.target.value })}
-                    />
+                <div className="space-y-3">
+                  <Label>Vehicle Types & Discounts</Label>
+                  <div className="border rounded-lg p-4 space-y-3 max-h-80 overflow-y-auto">
+                    {workshopVehicleDiscounts.map((wv, index) => (
+                      <div key={index} className="flex gap-3 items-center">
+                        <div className="flex-1">
+                          <Input
+                            value={wv.vehicle}
+                            disabled
+                            className="bg-muted"
+                          />
+                        </div>
+                        <div className="flex-1 relative">
+                          <IndianRupee className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            type="number"
+                            placeholder="Discount"
+                            className="pl-10"
+                            value={wv.discount}
+                            onChange={(e) => {
+                              const newDiscounts = [...workshopVehicleDiscounts];
+                              newDiscounts[index].discount = e.target.value;
+                              setWorkshopVehicleDiscounts(newDiscounts);
+                            }}
+                          />
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setWorkshopVehicleDiscounts(workshopVehicleDiscounts.filter((_, i) => i !== index));
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Enter the discount amount for this workshop-vehicle combination
-                  </p>
+                  
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Add new vehicle type"
+                      value={newWorkshopVehicleType}
+                      onChange={(e) => setNewWorkshopVehicleType(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          addNewVehicleToWorkshop();
+                        }
+                      }}
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={addNewVehicleToWorkshop}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Vehicle
+                    </Button>
+                  </div>
                 </div>
 
-                <div className="flex justify-end gap-2 pt-4">
+                <div className="flex justify-end gap-2 pt-4 border-t">
                   <Button 
                     variant="outline" 
                     onClick={() => {
                       setAddWorkshopDialogOpen(false);
-                      setNewWorkshop({ WORKSHOP: '', VEHICLE: '', Discount: '' });
+                      setNewWorkshopName('');
+                      setWorkshopVehicleDiscounts([]);
+                      setNewWorkshopVehicleType('');
                     }}
                   >
                     Cancel
@@ -1115,31 +1496,146 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
           </Dialog>
         </div>
       </div>
-      
-      {/* Error Display */}
-      {error && (
-        <Card className="border-destructive">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-destructive">
-              <AlertCircle className="h-4 w-4" />
-              <span>{error}</span>
+      {/* Service Edit Dialog */}
+      <Dialog open={serviceEditDialogOpen} onOpenChange={setServiceEditDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit className="h-5 w-5" />
+              Edit Service: {originalServiceNames[editingService || ''] || editingService}
+            </DialogTitle>
+          </DialogHeader>
+    
+          <div className="space-y-4">
+            <div className="border rounded-lg p-4 space-y-3 max-h-96 overflow-y-auto">
+              {editingService && vehicleList.map((vehicle) => (
+                <div key={vehicle} className="flex gap-3 items-center">
+                  <div className="flex-1">
+                    <Label className="text-sm font-medium">
+                      {originalVehicleNames[vehicle] || vehicle}
+                    </Label>
+                  </div>
+                  <div className="flex-1 relative">
+                    <IndianRupee className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      className="pl-10"
+                      value={editValues[vehicle] || ''}
+                      onChange={(e) => {
+                        const newValue = parseFloat(e.target.value) || 0;
+                        setEditValues({ ...editValues, [vehicle]: newValue });
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
-          </CardContent>
-        </Card>
-      )}
-      
-      {/* Fallback Data Notice */}
-      {usingFallbackData && (
-        <Card className="border-yellow-500 bg-yellow-50">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-yellow-700">
-              <AlertCircle className="h-4 w-4" />
-              <span>Showing fallback service prices. Service_prices table may not be accessible.</span>
+
+      <div className="flex justify-end gap-2 pt-4 border-t">
+        <Button 
+          variant="outline" 
+          onClick={() => {
+            setServiceEditDialogOpen(false);
+            setEditingService(null);
+            setEditValues({});
+          }}
+        >
+          Cancel
+        </Button>
+        <Button 
+          onClick={async () => {
+            await saveServiceEdits();
+            setServiceEditDialogOpen(false);
+          }} 
+          disabled={saving}
+        >
+          {saving ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            <>
+              <Save className="h-4 w-4 mr-2" />
+              Save Changes
+            </>
+          )}
+        </Button>
+      </div>
+    </div>
+  </DialogContent>
+</Dialog>
+{/* Workshop Edit Dialog */}
+<Dialog open={workshopEditDialogOpen} onOpenChange={setWorkshopEditDialogOpen}>
+  <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+    <DialogHeader>
+      <DialogTitle className="flex items-center gap-2">
+        <Building2 className="h-5 w-5" />
+        Edit Workshop: {editingWorkshop}
+      </DialogTitle>
+    </DialogHeader>
+    
+    <div className="space-y-4">
+      <div className="border rounded-lg p-4 space-y-3 max-h-96 overflow-y-auto">
+        {editingWorkshop && workshopVehicleList.map((vehicle) => (
+          <div key={vehicle} className="flex gap-3 items-center">
+            <div className="flex-1">
+              <Label className="text-sm font-medium">
+                {vehicle}
+              </Label>
             </div>
-          </CardContent>
-        </Card>
-      )}
-      
+            <div className="flex-1 relative">
+              <IndianRupee className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="number"
+                placeholder="0"
+                className="pl-10"
+                value={editValues[vehicle] || ''}
+                onChange={(e) => {
+                  const newValue = parseFloat(e.target.value) || 0;
+                  setEditValues({ ...editValues, [vehicle]: newValue });
+                }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex justify-end gap-2 pt-4 border-t">
+        <Button 
+          variant="outline" 
+          onClick={() => {
+            setWorkshopEditDialogOpen(false);
+            setEditingWorkshop(null);
+            setEditValues({});
+          }}
+        >
+          Cancel
+        </Button>
+        <Button 
+          onClick={async () => {
+            await saveWorkshopEdits();
+            setWorkshopEditDialogOpen(false);
+          }} 
+          disabled={saving}
+        >
+          {saving ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            <>
+              <Save className="h-4 w-4 mr-2" />
+              Save Changes
+            </>
+          )}
+        </Button>
+      </div>
+    </div>
+  </DialogContent>
+</Dialog>
       {/* Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
@@ -1195,10 +1691,29 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
       {/* Service Pricing Matrix Table */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <IndianRupee className="h-5 w-5" />
-            Service Pricing Matrix
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <IndianRupee className="h-5 w-5" />
+              Service Pricing Matrix
+            </CardTitle>
+            <Button
+              variant={serviceEditMode ? "default" : "outline"}
+              size="sm"
+              onClick={() => setServiceEditMode(!serviceEditMode)}
+            >
+              {serviceEditMode ? (
+                <>
+                  <X className="h-4 w-4 mr-2" />
+                  Cancel Edit
+                </>
+              ) : (
+                <>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit Mode
+                </>
+              )}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -1219,16 +1734,32 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    {serviceEditMode && <TableHead className="w-20">Action</TableHead>}
                     <TableHead>Service Name</TableHead>
                     {vehicleList.map(vehicle => (
-                      <TableHead key={vehicle}>{originalVehicleNames[vehicle] || vehicle}</TableHead>
+                      <TableHead key={vehicle} className="text-center">
+                        {originalVehicleNames[vehicle] || vehicle}
+                      </TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {serviceList.map(service => (
                     <TableRow key={service}>
-                      <TableCell className="font-medium">{originalServiceNames[service] || service}</TableCell>
+                      {serviceEditMode && (
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openServiceEdit(service)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      )}
+                      <TableCell className="font-medium">
+                        {originalServiceNames[service] || service}
+                      </TableCell>
                       {vehicleList.map(vehicle => (
                         <TableCell key={vehicle} className="text-center">
                           {serviceMatrix[service][vehicle] ? `₹${serviceMatrix[service][vehicle]}` : "-"}
@@ -1246,10 +1777,30 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
       {/* Workshop Discount Matrix Table */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Building2 className="h-5 w-5" />
-            Workshop Discount Matrix
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5" />
+              Workshop Discount Matrix
+            </CardTitle>
+            <Button
+              variant={workshopEditMode ? "default" : "outline"}
+              size="sm"
+              onClick={() => setWorkshopEditMode(!workshopEditMode)}
+              disabled={workshopList.length === 0}
+            >
+              {workshopEditMode ? (
+                <>
+                  <X className="h-4 w-4 mr-2" />
+                  Cancel Edit
+                </>
+              ) : (
+                <>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit Mode
+                </>
+              )}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -1268,15 +1819,29 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    {workshopEditMode && <TableHead className="w-20">Action</TableHead>}
                     <TableHead>Workshop Name</TableHead>
                     {workshopVehicleList.map(vehicle => (
-                      <TableHead key={vehicle} className="text-center">{vehicle}</TableHead>
+                      <TableHead key={vehicle} className="text-center">
+                        {vehicle}
+                      </TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {workshopList.map(workshop => (
                     <TableRow key={workshop}>
+                      {workshopEditMode && (
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openWorkshopEdit(workshop)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      )}
                       <TableCell className="font-medium">{workshop}</TableCell>
                       {workshopVehicleList.map(vehicle => (
                         <TableCell key={vehicle} className="text-center">
