@@ -80,11 +80,76 @@ const StaffPage: React.FC = () => {
   const [savingPayment, setSavingPayment] = useState(false);
   const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [intendedSalary, setIntendedSalary] = useState<number | null>(null);
+  const [selectedPaymentMonth, setSelectedPaymentMonth] = useState<string>(new Date().getMonth().toString());
+  const [selectedPaymentYear, setSelectedPaymentYear] = useState<string>(new Date().getFullYear().toString());
+  const [leaveCount, setLeaveCount] = useState<number>(0);
+  const [calculatedSalary, setCalculatedSalary] = useState<number>(0);
 
   const { accounts: upiAccounts } = useUpiAccounts(selectedLocationId);
   const [editMemberId, setEditMemberId] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [useCustomRole, setUseCustomRole] = useState(false);
+
+  // Function to calculate salary with leave deductions
+  const calculateSalaryWithLeaves = async () => {
+    if (!paymentStaffId || !selectedPaymentMonth || !selectedPaymentYear) {
+      toast({ title: 'Missing information', description: 'Select staff member, month and year', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      // Get the selected staff member
+      const selectedStaff = staff.find(s => s.id === paymentStaffId);
+      if (!selectedStaff) {
+        toast({ title: 'Staff not found', description: 'Selected staff member not found', variant: 'destructive' });
+        return;
+      }
+
+      const monthNumber = parseInt(selectedPaymentMonth) + 1; // Convert to 1-based month
+      const yearNumber = parseInt(selectedPaymentYear);
+      
+      // Create start and end date for the selected month
+      const monthStart = new Date(yearNumber, monthNumber - 1, 1).toISOString().split('T')[0];
+      const monthEnd = new Date(yearNumber, monthNumber, 0).toISOString().split('T')[0];
+
+      // Count unpaid leaves for the selected month/year
+      const { data: attendanceData, error } = await supabase
+        .from('attendance')
+        .select('status')
+        .eq('staff_id', paymentStaffId)
+        .gte('date', monthStart)
+        .lte('date', monthEnd)
+        .in('status', ['Absent', 'Unpaid Leave']);
+
+      if (error) {
+        console.error('Error fetching attendance:', error);
+        toast({ title: 'Error', description: 'Failed to fetch attendance data', variant: 'destructive' });
+        return;
+      }
+
+      const leaveDaysCount = attendanceData?.length || 0;
+      setLeaveCount(leaveDaysCount);
+
+      // Calculate salary deduction
+      const baseSalary = Math.floor(selectedStaff.monthlySalary);
+      const deductionPerLeaveDay = Math.floor(baseSalary / 30); // Assuming 30-day month
+      const totalDeduction = deductionPerLeaveDay * leaveDaysCount;
+      const finalSalary = Math.max(0, baseSalary - totalDeduction);
+
+      setCalculatedSalary(finalSalary);
+      setIntendedSalary(baseSalary);
+      setPaymentAmount(finalSalary.toString());
+
+      toast({ 
+        title: 'Salary calculated', 
+        description: `Base: ₹${baseSalary.toLocaleString('en-IN')} | Leaves: ${leaveDaysCount} days | Final: ₹${finalSalary.toLocaleString('en-IN')}`, 
+        variant: 'default' 
+      });
+    } catch (error) {
+      console.error('Error calculating salary:', error);
+      toast({ title: 'Calculation failed', description: 'Error calculating salary with leaves', variant: 'destructive' });
+    }
+  };
 
   const toggleActive = async (memberId: string, current: boolean) => {
     try {
@@ -169,6 +234,27 @@ const StaffPage: React.FC = () => {
 
     loadStaff();
   }, [selectedLocationId, user?.id]);
+
+  // Reset leave calculations when staff or payment type changes
+  useEffect(() => {
+    if (paymentType !== 'Salary') {
+      setLeaveCount(0);
+      setCalculatedSalary(0);
+      setIntendedSalary(null);
+    }
+  }, [paymentType, paymentStaffId]);
+
+  // Auto-calculate salary when month/year changes for salary payments
+  useEffect(() => {
+    if (paymentType === 'Salary' && paymentStaffId && selectedPaymentMonth && selectedPaymentYear) {
+      // Delay to debounce rapid changes
+      const timeoutId = setTimeout(() => {
+        calculateSalaryWithLeaves();
+      }, 500);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [selectedPaymentMonth, selectedPaymentYear, paymentType, paymentStaffId]);
 
   const refreshStaff = async () => {
     if (!user?.id || !selectedLocationId) return;
@@ -788,20 +874,53 @@ const StaffPage: React.FC = () => {
               </Select>
             </div>
             {paymentType === 'Salary' && paymentStaffId && (
-              <div className="grid gap-2">
-                <Label>Suggested Salary</Label>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    const st = staff.find(s => s.id === paymentStaffId);
-                    const sal = st ? Number(st.monthlySalary || 0) : 0;
-                    setIntendedSalary(sal);
-                    setPaymentAmount(String(sal || ''));
-                  }}
-                >
-                  Use Staff Salary
-                </Button>
-              </div>
+              <>
+                <div className="grid gap-2">
+                  <Label>Payment Month</Label>
+                  <select
+                    value={selectedPaymentMonth}
+                    onChange={(e) => setSelectedPaymentMonth(e.target.value)}
+                    className="form-input"
+                  >
+                    <option value="0">January</option>
+                    <option value="1">February</option>
+                    <option value="2">March</option>
+                    <option value="3">April</option>
+                    <option value="4">May</option>
+                    <option value="5">June</option>
+                    <option value="6">July</option>
+                    <option value="7">August</option>
+                    <option value="8">September</option>
+                    <option value="9">October</option>
+                    <option value="10">November</option>
+                    <option value="11">December</option>
+                  </select>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Payment Year</Label>
+                  <select
+                    value={selectedPaymentYear}
+                    onChange={(e) => setSelectedPaymentYear(e.target.value)}
+                    className="form-input"
+                  >
+                    {Array.from({length: 10}, (_, i) => {
+          const year = new Date().getFullYear() - 2 + i;
+                      return <option key={year} value={year.toString()}>{year}</option>;
+})}
+                  </select>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Calculate Salary with Leave Deduction</Label>
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      await calculateSalaryWithLeaves();
+                    }}
+                  >
+                    Calculate Salary
+                  </Button>
+                </div>
+              </>
             )}
             {user?.role === 'owner' && (
               <div className="grid gap-2">
@@ -824,6 +943,17 @@ const StaffPage: React.FC = () => {
               />
               {paymentType === 'Salary' && intendedSalary != null && (
                 <p className="text-xs text-muted-foreground">Suggested salary: ₹{Number(intendedSalary || 0).toLocaleString('en-IN')}</p>
+              )}
+              {paymentType === 'Salary' && paymentStaffId && leaveCount > 0 && (
+                <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                  <p className="text-sm font-medium text-yellow-800">Leave Deduction Calculation</p>
+                    <p className="text-xs text-yellow-700">
+                      Leaves taken: {leaveCount} days<br/>
+                      Base Salary: ₹{(intendedSalary || 0).toLocaleString('en-IN')}<br/>
+                      Deduction: ₹{Math.floor((intendedSalary || 0) * leaveCount / 30).toLocaleString('en-IN')}<br/>
+                      Final Salary: ₹{calculatedSalary.toLocaleString('en-IN')}
+                    </p>
+                </div>
               )}
             </div>
             <div className="grid gap-2">
@@ -933,19 +1063,46 @@ const StaffPage: React.FC = () => {
                   }
                 }
                 if (paymentType === 'Salary') {
-                  // Get staff's full salary
-                  let fullSalary = intendedSalary;
-                  if (fullSalary == null) {
+                  // Use calculated salary (after leave deductions) instead of original salary
+                  let fullSalary = calculatedSalary > 0 ? calculatedSalary : intendedSalary;
+                  
+                  // If we don't have a valid salary, calculate it properly
+                  if (!fullSalary || fullSalary <= 0) {
                     const st = staff.find(s => s.id === paymentStaffId);
-                    fullSalary = st ? Number(st.monthlySalary || 0) : null;
-                  }
-                  if (fullSalary == null) {
-                    const { data: staffRow } = await supabase
-                      .from('staff')
-                      .select('monthly_salary')
-                      .eq('id', paymentStaffId)
-                      .maybeSingle();
-                    fullSalary = staffRow ? Number(staffRow.monthly_salary || 0) : 0;
+                    const baseSalary = st ? Math.floor(st.monthlySalary || 0) : 0;
+                    
+                    if (baseSalary <= 0) {
+                      throw new Error('No valid base salary found for staff');
+                    }
+                    
+                    // If we haven't calculated leave deductions, do it now
+                    if (calculatedSalary <= 0) {
+                      // Calculate leave deductions on the fly
+                      const monthNumber = parseInt(selectedPaymentMonth) + 1;
+                      const yearNumber = parseInt(selectedPaymentYear);
+                      const monthStart = new Date(yearNumber, monthNumber - 1, 1).toISOString().split('T')[0];
+                      const monthEnd = new Date(yearNumber, monthNumber, 0).toISOString().split('T')[0];
+                      
+                      try {
+                        const { data: attendanceData } = await supabase
+                          .from('attendance')
+                          .select('status')
+                          .eq('staff_id', paymentStaffId)
+                          .gte('date', monthStart)
+                          .lte('date', monthEnd)
+                          .in('status', ['Absent', 'Unpaid Leave']);
+                        
+                        const leaveDaysCount = attendanceData?.length || 0;
+                        const deductionPerLeaveDay = Math.floor(baseSalary / 30);
+                        const totalDeduction = deductionPerLeaveDay * leaveDaysCount;
+                        fullSalary = Math.max(0, baseSalary - totalDeduction);
+                      } catch (e) {
+                        console.error('Error calculating salary:', e);
+                        fullSalary = baseSalary;
+                      }
+                    } else {
+                      fullSalary = calculatedSalary;
+                    }
                   }
                 
                   // Calculate unpaid vs overpaid amounts
@@ -953,7 +1110,7 @@ const StaffPage: React.FC = () => {
                   const overpay = Math.max(amountNum - fullSalary, 0);
                   
                   if (unpaidSalary > 0) {
-                    // First, try to cover unpaid salary from advance
+                    // Get current advance in a single transaction if possible
                     const { data: advRow, error: advSelErr } = await supabase
                       .from('advance')
                       .select('staff_id, advance')
@@ -1008,7 +1165,7 @@ const StaffPage: React.FC = () => {
                       }
                     }
                   }
-
+                
                   // If overpaid, the extra becomes advance
                   if (overpay > 0) {
                     const { data: advRow2, error: advSelErr2 } = await supabase
@@ -1043,6 +1200,8 @@ const StaffPage: React.FC = () => {
                 setSelectedUpiAccountId('');
                 setPaymentDate(new Date().toISOString().split('T')[0]);
                 setIntendedSalary(null);
+                setLeaveCount(0);
+                setCalculatedSalary(0);
               } catch (e: any) {
                 const msg = e?.message || 'Unknown error';
                 toast({ title: 'Failed to record payment', description: msg, variant: 'destructive' });
