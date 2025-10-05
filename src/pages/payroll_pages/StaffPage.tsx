@@ -16,7 +16,10 @@ import {
   CreditCard,
   Upload,
   Camera,
-  X
+  X,
+  FileText,
+  Download,
+  ChevronRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,7 +42,226 @@ interface Staff {
   paymentMode: string;
   dp_url: string | null;
   doc_url: string[] | null;
+  advance?: number;
+  carryFwd?: number;
 }
+
+// Document Viewer Modal Component
+const DocumentViewerModal = ({ isOpen, onClose, documents, staffName }: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  documents: string[] | null; 
+  staffName: string;
+}) => {
+  const [selectedDocIndex, setSelectedDocIndex] = useState(0);
+
+  if (!isOpen) return null;
+
+  const docs = documents || [];
+  const currentDoc = docs[selectedDocIndex];
+
+  const getFileNameFromUrl = (url: string) => {
+    try {
+      const urlParts = url.split('/');
+      const filename = urlParts[urlParts.length - 1];
+      return decodeURIComponent(filename);
+    } catch {
+      return 'Document';
+    }
+  };
+
+  const getFileExtension = (url: string) => {
+    const filename = getFileNameFromUrl(url);
+    const ext = filename.split('.').pop()?.toLowerCase();
+    return ext || '';
+  };
+
+  const isImage = (url: string) => {
+    const ext = getFileExtension(url);
+    return ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext);
+  };
+
+  const isPdf = (url: string) => {
+    return getFileExtension(url) === 'pdf';
+  };
+
+  const handleDownload = async (url: string) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = getFileNameFromUrl(url);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+      toast({ title: 'Download started', description: 'Your document is being downloaded' });
+    } catch (error) {
+      toast({ title: 'Download failed', description: 'Failed to download document', variant: 'destructive' });
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b">
+          <div>
+            <h2 className="text-xl font-semibold">{staffName}'s Documents</h2>
+            <p className="text-sm text-gray-500">{docs.length} document{docs.length !== 1 ? 's' : ''}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {docs.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center p-8">
+            <div className="text-center">
+              <FileText className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-500">No documents uploaded</p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+            {/* Sidebar - Document List */}
+            <div className="w-full md:w-64 border-b md:border-b-0 md:border-r bg-gray-50 overflow-y-auto max-h-48 md:max-h-full">
+              <div className="p-4">
+                <h3 className="text-sm font-medium text-gray-700 mb-3">Documents</h3>
+                <div className="space-y-2">
+                  {docs.map((doc, index) => (
+                    <button
+                      key={index}
+                      onClick={() => setSelectedDocIndex(index)}
+                      className={`w-full text-left p-3 rounded-lg transition-colors ${
+                        selectedDocIndex === index
+                          ? 'bg-blue-100 border-blue-300 border'
+                          : 'bg-white hover:bg-gray-100 border border-gray-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <FileText className={`h-4 w-4 flex-shrink-0 ${
+                          selectedDocIndex === index ? 'text-blue-600' : 'text-gray-400'
+                        }`} />
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-sm font-medium truncate ${
+                            selectedDocIndex === index ? 'text-blue-900' : 'text-gray-900'
+                          }`}>
+                            Document {index + 1}
+                          </p>
+                          <p className="text-xs text-gray-500 truncate">
+                            {getFileNameFromUrl(doc)}
+                          </p>
+                        </div>
+                        {selectedDocIndex === index && (
+                          <ChevronRight className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Main Content - Document Viewer */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* Document Actions */}
+              <div className="p-4 border-b bg-gray-50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-900 truncate">
+                    {getFileNameFromUrl(currentDoc)}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Document {selectedDocIndex + 1} of {docs.length}
+                  </p>
+                </div>
+                <div className="flex gap-2 w-full sm:w-auto">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => window.open(currentDoc, '_blank')}
+                    className="whitespace-nowrap flex-1 sm:flex-none"
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    Open
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => handleDownload(currentDoc)}
+                    className="whitespace-nowrap flex-1 sm:flex-none"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download
+                  </Button>
+                </div>
+              </div>
+
+              {/* Document Preview */}
+              <div className="flex-1 overflow-auto bg-gray-100 p-4">
+                <div className="max-w-4xl mx-auto">
+                  {isImage(currentDoc) ? (
+                    <img
+                      src={currentDoc}
+                      alt={`Document ${selectedDocIndex + 1}`}
+                      className="w-full h-auto rounded-lg shadow-lg bg-white"
+                    />
+                  ) : isPdf(currentDoc) ? (
+                    <iframe
+                      src={currentDoc}
+                      className="w-full h-[400px] md:h-[600px] rounded-lg shadow-lg bg-white"
+                      title={`Document ${selectedDocIndex + 1}`}
+                    />
+                  ) : (
+                    <div className="bg-white rounded-lg shadow-lg p-8 text-center">
+                      <FileText className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                      <p className="text-gray-600 mb-4">
+                        Preview not available for this file type
+                      </p>
+                      <Button onClick={() => handleDownload(currentDoc)}>
+                        <Download className="h-4 w-4 mr-2" />
+                        Download to View
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Navigation */}
+              {docs.length > 1 && (
+                <div className="p-4 border-t bg-gray-50 flex items-center justify-between">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setSelectedDocIndex(Math.max(0, selectedDocIndex - 1))}
+                    disabled={selectedDocIndex === 0}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm text-gray-600">
+                    {selectedDocIndex + 1} / {docs.length}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setSelectedDocIndex(Math.min(docs.length - 1, selectedDocIndex + 1))}
+                    disabled={selectedDocIndex === docs.length - 1}
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const StaffPage: React.FC = () => {
   const { user } = useAuth();
@@ -69,6 +291,10 @@ const StaffPage: React.FC = () => {
   const [documents, setDocuments] = useState<File[]>([]);
   const [documentPreviews, setDocumentPreviews] = useState<string[]>([]);
   const [uploadingDocuments, setUploadingDocuments] = useState(false);
+
+  // Document viewer state
+  const [documentViewerOpen, setDocumentViewerOpen] = useState(false);
+  const [selectedStaffDocs, setSelectedStaffDocs] = useState<{ name: string; docs: string[] | null }>({ name: '', docs: null });
   
   // Payments state
   const [showPaymentPanel, setShowPaymentPanel] = useState(false);
@@ -206,6 +432,32 @@ const StaffPage: React.FC = () => {
         console.log('Raw staff data from RPC (loadStaff):', staffData);
         console.log('dp_url values:', staffData?.map(s => ({ name: s.name, dp_url: s.dp_url })));
 
+        // Fetch advance and carry_fwd for the loaded staff members
+        const staffIds = (staffData || []).map((r: any) => r.id).filter(Boolean);
+        let advanceMap: Record<string, number> = {};
+        let carryMap: Record<string, number> = {};
+        if (staffIds.length > 0) {
+          try {
+            const { data: advRows } = await supabase
+              .from('advance')
+              .select('staff_id, advance')
+              .in('staff_id', staffIds);
+            (advRows || []).forEach((a: any) => { advanceMap[a.staff_id] = Number(a.advance || 0); });
+          } catch (e) {
+            console.warn('Failed to load advance rows', e);
+          }
+
+          try {
+            const { data: cfRows } = await supabase
+              .from('carry_fwd')
+              .select('staff_id, amount')
+              .in('staff_id', staffIds);
+            (cfRows || []).forEach((c: any) => { carryMap[c.staff_id] = Number(c.amount || 0); });
+          } catch (e) {
+            console.warn('Failed to load carry_fwd rows', e);
+          }
+        }
+
         const mapped: Staff[] = (staffData || []).map((row: any): Staff => ({
           id: row.id,
           name: row.name,
@@ -216,7 +468,9 @@ const StaffPage: React.FC = () => {
           dateOfJoining: row.date_of_joining || row.dateOfJoining,
           paymentMode: row.default_payment_mode || row.payment_mode || row.paymentMode || '',
           dp_url: row.dp_url || null,
-          doc_url: row.doc_url || null
+          doc_url: row.doc_url || null,
+          advance: advanceMap[row.id] || 0,
+          carryFwd: carryMap[row.id] || 0
         }));
         
         setStaff(mapped);
@@ -267,6 +521,32 @@ const StaffPage: React.FC = () => {
         .order('name', { ascending: true });
       if (staffError) throw staffError;
       
+      // Fetch advance and carry_fwd for the refreshed staff members
+      const staffIds = (staffData || []).map((r: any) => r.id).filter(Boolean);
+      let advanceMap: Record<string, number> = {};
+      let carryMap: Record<string, number> = {};
+      if (staffIds.length > 0) {
+        try {
+          const { data: advRows } = await supabase
+            .from('advance')
+            .select('staff_id, advance')
+            .in('staff_id', staffIds);
+          (advRows || []).forEach((a: any) => { advanceMap[a.staff_id] = Number(a.advance || 0); });
+        } catch (e) {
+          console.warn('Failed to load advance rows', e);
+        }
+
+        try {
+          const { data: cfRows } = await supabase
+            .from('carry_fwd')
+            .select('staff_id, amount')
+            .in('staff_id', staffIds);
+          (cfRows || []).forEach((c: any) => { carryMap[c.staff_id] = Number(c.amount || 0); });
+        } catch (e) {
+          console.warn('Failed to load carry_fwd rows', e);
+        }
+      }
+
       const mapped: Staff[] = (staffData || []).map((row: any): Staff => ({
         id: row.id,
         name: row.name,
@@ -277,7 +557,9 @@ const StaffPage: React.FC = () => {
         dateOfJoining: row.date_of_joining || row.dateOfJoining,
         paymentMode: row.default_payment_mode || row.payment_mode || row.paymentMode || '',
         dp_url: row.dp_url || null,
-        doc_url: row.doc_url || null
+        doc_url: row.doc_url || null,
+        advance: advanceMap[row.id] || 0,
+        carryFwd: carryMap[row.id] || 0
       }));
       
       setStaff(mapped);
@@ -356,6 +638,12 @@ const StaffPage: React.FC = () => {
       const newPreviews = validFiles.map(file => URL.createObjectURL(file));
       setDocumentPreviews(prev => [...prev, ...newPreviews]);
     }
+  };
+
+  // Function to open document viewer
+  const openDocumentViewer = (staffMember: Staff) => {
+    setSelectedStaffDocs({ name: staffMember.name, docs: staffMember.doc_url });
+    setDocumentViewerOpen(true);
   };
 
   const removeDocument = (index: number) => {
@@ -583,6 +871,13 @@ const StaffPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Document Viewer Modal */}
+      <DocumentViewerModal
+        isOpen={documentViewerOpen}
+        onClose={() => setDocumentViewerOpen(false)}
+        documents={selectedStaffDocs.docs}
+        staffName={selectedStaffDocs.name}
+      />
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
@@ -1618,6 +1913,13 @@ const StaffPage: React.FC = () => {
                 {user?.role === 'owner' && (
                   <th className="text-right p-4 font-medium text-foreground">Salary</th>
                 )}
+                {user?.role === 'owner' && (
+                  <th className="text-right p-4 font-medium text-foreground">Carry Fwd</th>
+                )}
+                {user?.role === 'owner' && (
+                  <th className="text-right p-4 font-medium text-foreground">Advance</th>
+                )}
+                <th className="text-center p-4 font-medium text-foreground">Documents</th>
                 <th className="text-center p-4 font-medium text-foreground">Status</th>
                 <th className="text-center p-4 font-medium text-foreground">Actions</th>
               </tr>
@@ -1676,6 +1978,38 @@ const StaffPage: React.FC = () => {
                       {formatCurrency(member.monthlySalary || 0)}
                     </td>
                   )}
+                  {user?.role === 'owner' && (
+                    <td className="p-4 text-right font-medium text-foreground">
+                      {formatCurrency(Number(member.carryFwd || 0))}
+                    </td>
+                  )}
+                  {user?.role === 'owner' && (
+                    <td className="p-4 text-right font-medium text-foreground">
+                      {formatCurrency(Number(member.advance || 0))}
+                    </td>
+                  )}
+                  <td className="p-4 text-center">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openDocumentViewer(member)}
+                        className={`${
+                          member.doc_url && member.doc_url.length > 0
+                            ? 'text-blue-600 hover:text-blue-700 hover:bg-blue-50'
+                            : 'text-gray-400 hover:text-gray-500'
+                        }`}
+                        title={member.doc_url && member.doc_url.length > 0
+                          ? `View ${member.doc_url.length} document(s)`
+                          : 'No documents'}
+                      >
+                        <FileText className="h-4 w-4 mr-1" />
+                        {member.doc_url && member.doc_url.length > 0 ? (
+                          <span className="text-xs">({member.doc_url.length})</span>
+                        ) : (
+                          <span className="text-xs">(0)</span>
+                       )}
+                    </Button>
+                  </td>
                   <td className="p-4 text-center">
                     {member.isActive ? (
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
