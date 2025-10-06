@@ -850,7 +850,7 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
                           </PopoverContent>
                         </Popover>
                       </th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
                           <PopoverTrigger asChild>
                             <Button variant="ghost" className="h-auto p-0 font-medium text-gray-500 uppercase tracking-wider hover:text-gray-700 group">
@@ -954,7 +954,7 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
                             <Badge variant="outline">{log.vehicle_model || 'N/A'}</Badge>
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.workshop ? String(log.workshop) : (log.Name || "-")}</td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
                             {log.entry_time ? new Date(log.entry_time).toLocaleDateString('en-GB') :
                               log.created_at ? new Date(log.created_at).toLocaleDateString('en-GB') : "-"}
                           </td>
