@@ -611,12 +611,11 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle No</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Name</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Date</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Service</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Workshop</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Entry Time</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Exit Time</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Date</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -624,9 +623,9 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {loading ? (
-                      <tr><td colSpan={12} className="text-center py-4">Loading...</td></tr>
+                      <tr><td colSpan={11} className="text-center py-4">Loading...</td></tr>
                     ) : payLaterLogs.length === 0 ? (
-                      <tr><td colSpan={12} className="text-center py-4 text-muted-foreground">
+                      <tr><td colSpan={11} className="text-center py-4 text-muted-foreground">
                         {useDateRange ? (
                           (fromDate || toDate) ? 
                             `No pay later tickets for date range` : 
@@ -645,6 +644,10 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
                             <Badge variant="outline">{log.vehicle_model || 'N/A'}</Badge>
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.workshop ? String(log.workshop) : (log.Name || "-")}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
+                            {log.entry_time ? new Date(log.entry_time).toLocaleDateString('en-GB') :
+                              log.created_at ? new Date(log.created_at).toLocaleDateString('en-GB') : "-"}
+                          </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
                             {log.Phone_no ? (
                               <a
@@ -663,14 +666,6 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{String(log.workshop ?? '-') }</td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
-                            {log.entry_time ? new Date(log.entry_time).toLocaleString() :
-                              log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
-                          </td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {log.exit_time ? new Date(log.exit_time).toLocaleString() :
-                              log.approved_at ? new Date(log.approved_at).toLocaleString() : "-"}
-                          </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
                             <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100 text-xs">Pay Later</Badge>
                           </td>

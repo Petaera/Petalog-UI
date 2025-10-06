@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { ArrowLeft, BarChart3, Download, FileSpreadsheet, Calendar, Filter, MapPin, Car, Wrench, Users, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -107,6 +107,10 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
   const [page, setPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
+
+  // Vehicle records table search state
+  const [vehicleRecordsSearch, setVehicleRecordsSearch] = useState("");
+  const totalCountRef = useRef<number>(0);
 
 
 
@@ -398,7 +402,7 @@ useEffect(() => {
   // Reset page when filters change
   useEffect(() => {
     setPage(1);
-  }, [dateRange, vehicleType, service, entryType, manager, customFromDate, customToDate]);
+  }, [dateRange, vehicleType, service, entryType, manager, customFromDate, customToDate, vehicleRecordsSearch]);
 
   // Get filtered data (now logs are already filtered at database level)
   const getFilteredData = () => {
@@ -2857,19 +2861,51 @@ useEffect(() => {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>Vehicle Records ({filteredData.filteredVehicles.length} records)</CardTitle>
+            <CardTitle>Vehicle Records ({loading ? filteredData.filteredVehicles.length : totalCountRef.current} records)</CardTitle>
             <Badge variant="secondary">
-              {loading ? "Loading..." : `${filteredData.filteredVehicles.length} filtered records`}
+              {loading ? "Loading..." : `${totalCountRef.current} ${vehicleRecordsSearch ? 'filtered' : 'total'} records`}
             </Badge>
           </div>
         </CardHeader>
         <CardContent>
+          {/* Vehicle Records Search */}
+          <div className="mb-4">
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="Search vehicle number or model..."
+                value={vehicleRecordsSearch}
+                onChange={(e) => setVehicleRecordsSearch(e.target.value)}
+                className="max-w-sm"
+              />
+              {vehicleRecordsSearch && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setVehicleRecordsSearch("")}
+                >
+                  Clear
+                </Button>
+              )}
+            </div>
+          </div>
+
           {/* Pagination State */}
           {(() => {
+            // Filter vehicles based on search term
+            const filteredVehicles = vehicleRecordsSearch
+              ? filteredData.filteredVehicles.filter(vehicle =>
+                  (vehicle.vehicle_number || '').toLowerCase().includes(vehicleRecordsSearch.toLowerCase()) ||
+                  (vehicle.vehicle_model || '').toLowerCase().includes(vehicleRecordsSearch.toLowerCase())
+                )
+              : filteredData.filteredVehicles;
+
             const rowsPerPage = 25;
-            const total = filteredData.filteredVehicles.length;
+            const total = filteredVehicles.length;
             const totalPages = Math.ceil(total / rowsPerPage);
-            const pagedVehicles = filteredData.filteredVehicles.slice((page - 1) * rowsPerPage, page * rowsPerPage);
+            const pagedVehicles = filteredVehicles.slice((page - 1) * rowsPerPage, page * rowsPerPage);
+
+            // Update the total count ref
+            totalCountRef.current = total;
 
             // Reset page if it's out of range
             if (page > totalPages && totalPages > 0) {
