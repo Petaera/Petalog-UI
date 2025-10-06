@@ -41,11 +41,25 @@ import {
   Textarea 
 } from '@/components/ui/textarea';
 import { 
+  Popover,
+  PopoverContent,
+  PopoverTrigger
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList
+} from '@/components/ui/command';
+import {
   Clock, 
   Calendar, 
   Edit, 
   Check,
-  Download
+  Download,
+  Filter
 } from 'lucide-react';
 
 interface PayLaterProps {
@@ -82,6 +96,21 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
   const [selectedUpiAccount, setSelectedUpiAccount] = useState<string>('');
   const { accounts: upiAccounts, loading: upiAccountsLoading } = useUpiAccounts(selectedLocation);
 
+  // Table filter states
+  const [selectedVehicle, setSelectedVehicle] = useState<string>('');
+  const [selectedModel, setSelectedModel] = useState<string>('');
+  const [selectedCustomer, setSelectedCustomer] = useState<string>('');
+  const [tableDateRange, setTableDateRange] = useState<string>('all');
+  const [tableFromDate, setTableFromDate] = useState<string>('');
+  const [tableToDate, setTableToDate] = useState<string>('');
+
+  // Popover open states
+  const [vehiclePopoverOpen, setVehiclePopoverOpen] = useState(false);
+  const [modelPopoverOpen, setModelPopoverOpen] = useState(false);
+  const [customerPopoverOpen, setCustomerPopoverOpen] = useState(false);
+  const [datePopoverOpen, setDatePopoverOpen] = useState(false);
+  const [legacyFiltersOpen, setLegacyFiltersOpen] = useState(false);
+
   // Reset UPI account selection when selectedLocation changes
   useEffect(() => {
     if (selectedLocation) {
@@ -115,12 +144,45 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
     }
   };
 
-  // Apply client-side filters for workshop and search
+  // Get unique values for dropdowns from current filtered data
+  const getUniqueModels = (): string[] => {
+    const models = new Set<string>();
+    payLaterLogs.forEach(log => {
+      if (log.vehicle_model) models.add(log.vehicle_model);
+    });
+    return Array.from(models).sort();
+  };
+
+  const getUniqueCustomers = (): string[] => {
+    const customers = new Set<string>();
+    payLaterLogs.forEach(log => {
+      // The customer name column contains either customer names or workshop names
+      const customerValue = log.workshop ? String(log.workshop) : (log.Name || '');
+      if (customerValue.trim()) customers.add(customerValue);
+    });
+    return Array.from(customers).sort();
+  };
+
+  const getUniqueVehicles = (): string[] => {
+    const vehicles = new Set<string>();
+    payLaterLogs.forEach(log => {
+      if (log.vehicle_number || log.vehicles?.number_plate) {
+        vehicles.add(log.vehicle_number || log.vehicles?.number_plate);
+      }
+    });
+    return Array.from(vehicles).sort();
+  };
+
+  // Apply client-side filters for all filter types
   const applyFilters = (list: any[]) => {
     let filtered = [...list];
+
+    // Apply workshop filter
     if (selectedWorkshop && selectedWorkshop !== 'all') {
       filtered = filtered.filter((l) => String(l.workshop ?? '') === selectedWorkshop);
     }
+
+    // Apply search term filter (for backward compatibility)
     if (searchTerm.trim()) {
       const term = searchTerm.trim().toLowerCase();
       filtered = filtered.filter((log) => {
@@ -130,6 +192,51 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
         return name.includes(term) || phone.includes(term) || vehicle.includes(term);
       });
     }
+
+    // Apply table-specific filters
+    if (selectedVehicle) {
+      filtered = filtered.filter((log) =>
+        (log.vehicle_number || log.vehicles?.number_plate || '').toLowerCase().includes(selectedVehicle.toLowerCase())
+      );
+    }
+
+    if (selectedModel) {
+      filtered = filtered.filter((log) =>
+        (log.vehicle_model || '').toLowerCase().includes(selectedModel.toLowerCase())
+      );
+    }
+
+    if (selectedCustomer) {
+      filtered = filtered.filter((log) =>
+        (log.Name || '').toLowerCase().includes(selectedCustomer.toLowerCase())
+      );
+    }
+
+    // Apply table date range filter
+    if (tableDateRange === 'single' && tableFromDate) {
+      const filterDate = new Date(tableFromDate);
+      const startOfDay = new Date(filterDate.getFullYear(), filterDate.getMonth(), filterDate.getDate());
+      const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+
+      filtered = filtered.filter((log) => {
+        const logDate = new Date(log.entry_time || log.created_at);
+        return logDate >= startOfDay && logDate < endOfDay;
+      });
+    } else if (tableDateRange === 'range' && (tableFromDate || tableToDate)) {
+      const fromDate = tableFromDate ? new Date(tableFromDate) : null;
+      const toDate = tableToDate ? new Date(tableToDate) : null;
+
+      filtered = filtered.filter((log) => {
+        const logDate = new Date(log.entry_time || log.created_at);
+        if (fromDate && logDate < fromDate) return false;
+        if (toDate) {
+          const endOfDay = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate() + 1);
+          if (logDate >= endOfDay) return false;
+        }
+        return true;
+      });
+    }
+
     return filtered;
   };
 
@@ -362,6 +469,21 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
     toast({ title: 'Info', description: 'Edit functionality will be implemented' });
   };
 
+  // Clear all table filters
+  const clearAllTableFilters = () => {
+    setSelectedVehicle('');
+    setSelectedModel('');
+    setSelectedCustomer('');
+    setTableDateRange('all');
+    setTableFromDate('');
+    setTableToDate('');
+    setVehiclePopoverOpen(false);
+    setModelPopoverOpen(false);
+    setCustomerPopoverOpen(false);
+    setDatePopoverOpen(false);
+    setLegacyFiltersOpen(false);
+  };
+
   // CSV export (UTF-8 CSV for Excel)
   const exportCsv = () => {
     const escapeCSV = (value: any) => {
@@ -423,7 +545,7 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
   useEffect(() => {
     setPayLaterLogs(applyFilters(allPayLaterLogs));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedWorkshop, searchTerm, allPayLaterLogs]);
+  }, [selectedWorkshop, searchTerm, selectedVehicle, selectedModel, selectedCustomer, tableDateRange, tableFromDate, tableToDate, allPayLaterLogs]);
 
   if (!selectedLocation) {
     return (
@@ -438,71 +560,75 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
 
   return (
     <div className="space-y-6">
-      {/* Header with Date & Workshop Filter */}
-      <Card>
-        <CardContent className="p-4 space-y-4">
-          {/* Date Filter Section */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-5 w-5 text-muted-foreground" />
-              <Label className="text-sm font-medium">Filter by Date:</Label>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {/* Date Input Group */}
-              <div className="md:col-span-2 lg:col-span-2">
-                {!useDateRange ? (
+      {/* Action Buttons Bar */}
+      <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
+        <div className="flex items-center gap-3">
+          <h2 className="text-xl font-semibold">Pay Later Management</h2>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button
+              onClick={exportCsv}
+              className="text-sm px-3 py-2"
+              disabled={payLaterLogs.length === 0}
+            >
+              <Download className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Export CSV</span>
+              <span className="sm:hidden">CSV</span>
+            </Button>
+            <Button
+              onClick={openMassCheckout}
+              className="bg-red-600 hover:bg-red-700 text-white text-sm px-3 py-2"
+              disabled={payLaterLogs.length === 0}
+            >
+              <Check className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Mass Checkout</span>
+              <span className="sm:hidden">Checkout</span>
+            </Button>
+            <Popover open={legacyFiltersOpen} onOpenChange={setLegacyFiltersOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="text-sm px-3 py-2">
+                  <Filter className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">Filters</span>
+                  <span className="sm:hidden">More</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 sm:w-96">
+                <div className="space-y-4">
+                  <h4 className="font-medium leading-none">Legacy Filters</h4>
+                  <div className="space-y-4">
+                    {/* Date Filter */}
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Legacy Date Filter:</Label>
+                      <div className="grid grid-cols-2 gap-2">
                   <Input
                     type="date"
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value)}
                     className="w-full"
-                    placeholder="Select single date"
-                  />
-                ) : (
-                  <div className="grid grid-cols-2 gap-2">
-                    <Input
-                      type="date"
-                      value={fromDate}
-                      onChange={(e) => setFromDate(e.target.value)}
-                      className="w-full"
-                      placeholder="From date"
-                    />
-                    <Input
-                      type="date"
-                      value={toDate}
-                      onChange={(e) => setToDate(e.target.value)}
-                      className="w-full"
-                      placeholder="To date"
-                    />
-                  </div>
-                )}
-              </div>
-              
-              {/* Mode Toggle */}
-              <div>
+                          placeholder="Select date"
+                        />
                 <Button
                   variant="outline"
-                  onClick={() => setUseDateRange(!useDateRange)}
+                          onClick={() => {
+                            setSelectedDate('');
+                            setFromDate('');
+                            setToDate('');
+                          }}
                   className="w-full"
                 >
-                  {useDateRange ? 'Single Date' : 'Date Range'}
+                          Clear
                 </Button>
               </div>
             </div>
 
             {/* Workshop Filter */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              <div className="md:col-span-1">
-                <div className="flex flex-col">
-                  <Label htmlFor="workshop-filter" className="text-sm font-medium mb-1">Workshop:</Label>
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Workshop:</Label>
                   <Select value={selectedWorkshop} onValueChange={setSelectedWorkshop}>
-                    <SelectTrigger id="workshop-filter" className="w-full">
+                        <SelectTrigger className="w-full">
                       <SelectValue placeholder="All Workshops" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Workshops</SelectItem>
-                      {/* Dynamic workshops from base logs for switching */}
                       {Array.from(new Set(allPayLaterLogs.map((l: any) => String(l.workshop ?? '').trim()).filter((s) => !!s && s !== 'null' && s !== 'undefined')))
                         .sort()
                         .map((wk: string) => (
@@ -510,13 +636,11 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
                         ))}
                     </SelectContent>
                   </Select>
-                </div>
               </div>
 
               {/* Search */}
-              <div className="md:col-span-2 lg:col-span-2">
-                <div className="flex flex-col">
-                  <Label className="text-sm font-medium mb-1">Search:</Label>
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Search:</Label>
                   <Input
                     placeholder="Search name, phone, vehicle..."
                     value={searchTerm}
@@ -526,39 +650,12 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
                 </div>
               </div>
             </div>
-
-            {/* Action Buttons */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setSelectedDate('');
-                  setFromDate('');
-                  setToDate('');
-                }}
-                className="w-full"
-              >
-                Clear Date
-              </Button>
-              <Button
-                onClick={exportCsv}
-                className="w-full"
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Export CSV
-              </Button>
-              <Button
-                onClick={openMassCheckout}
-                className="w-full bg-red-600 hover:bg-red-700 text-white sm:col-span-2 lg:col-span-1"
-                disabled={payLaterLogs.length === 0}
-              >
-                <Check className="h-4 w-4 mr-2" />
-                Mass Checkout
-              </Button>
+              </PopoverContent>
+            </Popover>
             </div>
           </div>
-        </CardContent>
-      </Card>
+      </div>
+
 
       {/* Pay Later Section */}
       <Card>
@@ -569,34 +666,60 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
               <span>Pay Later</span>
               <Badge variant="secondary">{payLaterLogs.length}</Badge>
             </div>
+
+            {/* Filter Badges */}
             <div className="flex flex-wrap gap-2">
+              {/* Table-specific filter badges */}
+              {selectedVehicle && (
+                <Badge variant="outline" className="cursor-pointer hover:bg-accent" onClick={() => setSelectedVehicle('')}>
+                  Vehicle: {selectedVehicle} ×
+                </Badge>
+              )}
+              {selectedModel && (
+                <Badge variant="outline" className="cursor-pointer hover:bg-accent" onClick={() => setSelectedModel('')}>
+                  Model: {selectedModel} ×
+                </Badge>
+              )}
+              {selectedCustomer && (
+                <Badge variant="outline" className="cursor-pointer hover:bg-accent" onClick={() => setSelectedCustomer('')}>
+                  Customer: {selectedCustomer} ×
+                </Badge>
+              )}
+              {tableDateRange !== 'all' && (
+                <Badge variant="outline" className="cursor-pointer hover:bg-accent" onClick={() => {
+                  setTableDateRange('all');
+                  setTableFromDate('');
+                  setTableToDate('');
+                }}>
+                  Date: {tableDateRange === 'single' && tableFromDate ? tableFromDate :
+                         tableDateRange === 'range' && (tableFromDate || tableToDate) ?
+                           `${tableFromDate || 'Start'} - ${tableToDate || 'End'}` : tableDateRange} ×
+                </Badge>
+              )}
+
+              {/* Legacy filter badges */}
               {useDateRange ? (
                 (fromDate || toDate) ? (
                   <Badge variant="outline">
                     {fromDate && toDate ? 
-                      `${new Date(fromDate).toLocaleDateString()} - ${new Date(toDate).toLocaleDateString()}` :
-                      fromDate ? `From ${new Date(fromDate).toLocaleDateString()}` :
-                      `Until ${new Date(toDate).toLocaleDateString()}`
+                      `Legacy: ${new Date(fromDate).toLocaleDateString()} - ${new Date(toDate).toLocaleDateString()}` :
+                      fromDate ? `Legacy From: ${new Date(fromDate).toLocaleDateString()}` :
+                      `Legacy Until: ${new Date(toDate).toLocaleDateString()}`
                     }
                   </Badge>
-                ) : (
-                  <Badge variant="secondary">
-                    All Records
-                  </Badge>
-                )
+                ) : null
               ) : (
                 selectedDate && selectedDate.trim() !== '' ? (
                   <Badge variant="outline">
-                    {new Date(selectedDate).toLocaleDateString()}
+                    Legacy: {new Date(selectedDate).toLocaleDateString()}
                   </Badge>
-                ) : (
-                  <Badge variant="secondary">
-                    All Records
-                  </Badge>
-                )
+                ) : null
                 )}
               {selectedWorkshop && selectedWorkshop !== 'all' && (
                 <Badge variant="outline">{selectedWorkshop}</Badge>
+              )}
+              {searchTerm && (
+                <Badge variant="outline">Search: {searchTerm}</Badge>
               )}
             </div>
           </CardTitle>
@@ -608,13 +731,200 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-muted/50">
                     <tr>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle No</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Name</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Date</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <Popover open={vehiclePopoverOpen} onOpenChange={setVehiclePopoverOpen}>
+                          <PopoverTrigger asChild>
+                            <Button variant="ghost" className="h-auto p-0 font-medium text-gray-500 uppercase tracking-wider hover:text-gray-700 group">
+                              <span className="flex items-center gap-1">
+                                Vehicle No
+                                <kbd className="hidden sm:inline-block px-1 py-0.5 text-xs bg-gray-100 border rounded opacity-60 group-hover:opacity-100 transition-opacity">
+                                  ↓
+                                </kbd>
+                              </span>
+                              {(selectedVehicle || tableDateRange !== 'all' || tableFromDate || tableToDate) && (
+                                <Badge variant="secondary" className="ml-2 text-xs">Filtered</Badge>
+                              )}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-80 sm:w-96">
+                            <div className="space-y-4">
+                              <h4 className="font-medium leading-none">Filter by Vehicle</h4>
+                              <Command>
+                                <CommandInput placeholder="Search vehicle number..." />
+                                <CommandList>
+                                  <CommandEmpty>No vehicle found.</CommandEmpty>
+                                  <CommandGroup className="max-h-64 overflow-y-auto">
+                                    {getUniqueVehicles().map((vehicle: string) => (
+                                      <CommandItem
+                                        key={vehicle}
+                                        onSelect={() => {
+                                          setSelectedVehicle(vehicle);
+                                          setVehiclePopoverOpen(false);
+                                        }}
+                                      >
+                                        {vehicle}
+                                      </CommandItem>
+                                    ))}
+                                  </CommandGroup>
+                                </CommandList>
+                              </Command>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <Popover open={modelPopoverOpen} onOpenChange={setModelPopoverOpen}>
+                          <PopoverTrigger asChild>
+                            <Button variant="ghost" className="h-auto p-0 font-medium text-gray-500 uppercase tracking-wider hover:text-gray-700 group">
+                              <span className="flex items-center gap-1">
+                                Model
+                                <kbd className="hidden sm:inline-block px-1 py-0.5 text-xs bg-gray-100 border rounded opacity-60 group-hover:opacity-100 transition-opacity">
+                                  ↓
+                                </kbd>
+                              </span>
+                              {selectedModel && <Badge variant="secondary" className="ml-2 text-xs">Filtered</Badge>}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-80 sm:w-96">
+                            <div className="space-y-4">
+                              <h4 className="font-medium leading-none">Filter by Model</h4>
+                              <Command>
+                                <CommandInput placeholder="Search model..." />
+                                <CommandList>
+                                  <CommandEmpty>No model found.</CommandEmpty>
+                                  <CommandGroup className="max-h-64 overflow-y-auto">
+                                    {getUniqueModels().map((model: string) => (
+                                      <CommandItem
+                                        key={model}
+                                        onSelect={() => {
+                                          setSelectedModel(model);
+                                          setModelPopoverOpen(false);
+                                        }}
+                                      >
+                                        {model}
+                                      </CommandItem>
+                                    ))}
+                                  </CommandGroup>
+                                </CommandList>
+                              </Command>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <Popover open={customerPopoverOpen} onOpenChange={setCustomerPopoverOpen}>
+                          <PopoverTrigger asChild>
+                            <Button variant="ghost" className="h-auto p-0 font-medium text-gray-500 uppercase tracking-wider hover:text-gray-700 group">
+                              <span className="flex items-center gap-1">
+                                Customer Name
+                                <kbd className="hidden sm:inline-block px-1 py-0.5 text-xs bg-gray-100 border rounded opacity-60 group-hover:opacity-100 transition-opacity">
+                                  ↓
+                                </kbd>
+                              </span>
+                              {selectedCustomer && <Badge variant="secondary" className="ml-2 text-xs">Filtered</Badge>}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-80 sm:w-96">
+                            <div className="space-y-4">
+                              <h4 className="font-medium leading-none">Filter by Customer</h4>
+                              <Command>
+                                <CommandInput placeholder="Search customer..." />
+                                <CommandList>
+                                  <CommandEmpty>No customer found.</CommandEmpty>
+                                  <CommandGroup className="max-h-64 overflow-y-auto">
+                                    {getUniqueCustomers().map((customer: string) => (
+                                      <CommandItem
+                                        key={customer}
+                                        onSelect={() => {
+                                          setSelectedCustomer(customer);
+                                          setCustomerPopoverOpen(false);
+                                        }}
+                                      >
+                                        {customer}
+                                      </CommandItem>
+                                    ))}
+                                  </CommandGroup>
+                                </CommandList>
+                              </Command>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
+                        <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
+                          <PopoverTrigger asChild>
+                            <Button variant="ghost" className="h-auto p-0 font-medium text-gray-500 uppercase tracking-wider hover:text-gray-700 group">
+                              <span className="flex items-center gap-1">
+                                Date
+                                <kbd className="hidden sm:inline-block px-1 py-0.5 text-xs bg-gray-100 border rounded opacity-60 group-hover:opacity-100 transition-opacity">
+                                  ↓
+                                </kbd>
+                              </span>
+                              {tableDateRange !== 'all' && <Badge variant="secondary" className="ml-2 text-xs">Filtered</Badge>}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-64 sm:w-80">
+                            <div className="space-y-4">
+                              <h4 className="font-medium leading-none">Filter by Date</h4>
+                              <div className="space-y-2">
+                                <Select value={tableDateRange} onValueChange={(value) => {
+                                  setTableDateRange(value);
+                                  if (value === 'all') {
+                                    setTableFromDate('');
+                                    setTableToDate('');
+                                  }
+                                  // Don't close popover here - let user select dates first
+                                }}>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select date range" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="all">All Dates</SelectItem>
+                                    <SelectItem value="single">Single Day</SelectItem>
+                                    <SelectItem value="range">Date Range</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                {tableDateRange === 'single' && (
+                                  <Input
+                                    type="date"
+                                    value={tableFromDate}
+                                    onChange={(e) => {
+                                      setTableFromDate(e.target.value);
+                                      setDatePopoverOpen(false);
+                                    }}
+                                    className="w-full"
+                                  />
+                                )}
+                                {tableDateRange === 'range' && (
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <Input
+                                      type="date"
+                                      value={tableFromDate}
+                                      onChange={(e) => {
+                                        setTableFromDate(e.target.value);
+                                        setDatePopoverOpen(false);
+                                      }}
+                                      placeholder="From date"
+                                    />
+                                    <Input
+                                      type="date"
+                                      value={tableToDate}
+                                      onChange={(e) => {
+                                        setTableToDate(e.target.value);
+                                        setDatePopoverOpen(false);
+                                      }}
+                                      placeholder="To date"
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Service</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Service</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Workshop</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Date</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
@@ -664,7 +974,7 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
                           <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600">
                             {log.Amount ? formatCurrency(log.Amount) : "-"}
                           </td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{log.service || "-"}</td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{String(log.workshop ?? '-') }</td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
                             <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100 text-xs">Pay Later</Badge>
