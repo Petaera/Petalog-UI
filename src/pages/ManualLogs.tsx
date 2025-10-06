@@ -149,7 +149,8 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
     const originalAmount = currentAmount - discountAmount;
     setCheckoutAmount(currentAmount > 0 ? String(currentAmount) : '');
     
-    setSelectedUpiAccount(''); // Reset UPI account selection
+  // Default selected UPI account: If the log already has an associated upi_account_id, select it
+  setSelectedUpiAccount(log?.upi_account_id || '');
     setCheckoutRemarks(''); // Reset remarks
     if (opts && typeof opts.loyaltyAmount === 'number') {
       setCheckoutLoyaltyAmount(Number(opts.loyaltyAmount) || 0);
@@ -221,7 +222,8 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
     setSettleLog(log);
     // default to cash when settling
     setSettlePaymentMode('cash');
-    setSelectedUpiAccount(''); // Reset UPI account selection
+    // If the log already has an associated upi account, default-select it
+    setSelectedUpiAccount(log?.upi_account_id || '');
     setSettleOpen(true);
   };
 
@@ -288,7 +290,8 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
     setEditVehicleModel(log.vehicle_model || '');
     setEditWorkshop(log.workshop || '');
     setEditWheelType(log.wheel_type || '');
-    setEditSelectedUpiAccount('');
+    // Pre-select UPI account if present on the log
+    setEditSelectedUpiAccount(log?.upi_account_id || '');
     setEditOpen(true);
   };
 
@@ -1104,24 +1107,34 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
               {checkoutPaymentMode === 'upi' && (
                 <div>
                   <Label>Select UPI Account</Label>
-                  <Select value={selectedUpiAccount} onValueChange={setSelectedUpiAccount}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder={upiAccountsLoading ? "Loading accounts..." : "Select UPI account"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {upiAccounts.map((account) => (
-                        <SelectItem key={account.id} value={account.id}>
-                          {account.account_name} - {account.upi_id} ({account.location_name || 'N/A'})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {upiAccounts.length === 0 && !upiAccountsLoading && (
-                    <p className="text-sm text-muted-foreground mt-1">
-                      No UPI accounts found. Please add UPI accounts in the settings.
-                    </p>
-                  )}
-                  
+                  <div className="mt-2 grid gap-2">
+                    {upiAccountsLoading ? (
+                      <div className="text-sm text-muted-foreground">Loading accounts...</div>
+                    ) : upiAccounts.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No UPI accounts found. Please add UPI accounts in the settings.</p>
+                    ) : (
+                      upiAccounts.map((acc) => (
+                        <label key={acc.id} className={`flex items-start gap-3 p-3 rounded-lg border ${selectedUpiAccount === acc.id ? 'border-primary bg-primary/5' : 'border-transparent bg-muted/30 hover:border-border'} cursor-pointer`}>
+                          <input
+                            type="radio"
+                            name="checkout-upi"
+                            value={acc.id}
+                            checked={selectedUpiAccount === acc.id}
+                            onChange={() => setSelectedUpiAccount(acc.id)}
+                            className="mt-1 h-4 w-4 text-primary"
+                          />
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <div className="font-medium">{acc.account_name}</div>
+                              <div className="text-xs text-muted-foreground">{acc.location_name}</div>
+                            </div>
+                            <div className="text-sm text-muted-foreground">{acc.upi_id}</div>
+                          </div>
+                        </label>
+                      ))
+                    )}
+                  </div>
+
                   {/* QR Code Display */}
                   {selectedUpiAccount && (
                     <div className="mt-4 space-y-2">
@@ -1205,24 +1218,34 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
               {settlePaymentMode === 'upi' && (
                 <div>
                   <Label>Select UPI Account</Label>
-                  <Select value={selectedUpiAccount} onValueChange={setSelectedUpiAccount}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder={upiAccountsLoading ? "Loading accounts..." : "Select UPI account"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {upiAccounts.map((account) => (
-                        <SelectItem key={account.id} value={account.id}>
-                          {account.account_name} - {account.upi_id} ({account.location_name || 'N/A'})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {upiAccounts.length === 0 && !upiAccountsLoading && (
-                    <p className="text-sm text-muted-foreground mt-1">
-                      No UPI accounts found. Please add UPI accounts in the settings.
-                    </p>
-                  )}
-                  
+                  <div className="mt-2 grid gap-2">
+                    {upiAccountsLoading ? (
+                      <div className="text-sm text-muted-foreground">Loading accounts...</div>
+                    ) : upiAccounts.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No UPI accounts found. Please add UPI accounts in the settings.</p>
+                    ) : (
+                      upiAccounts.map((acc) => (
+                        <label key={acc.id} className={`flex items-start gap-3 p-3 rounded-lg border ${selectedUpiAccount === acc.id ? 'border-primary bg-primary/5' : 'border-transparent bg-muted/30 hover:border-border'} cursor-pointer`}>
+                          <input
+                            type="radio"
+                            name="settle-upi"
+                            value={acc.id}
+                            checked={selectedUpiAccount === acc.id}
+                            onChange={() => setSelectedUpiAccount(acc.id)}
+                            className="mt-1 h-4 w-4 text-primary"
+                          />
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <div className="font-medium">{acc.account_name}</div>
+                              <div className="text-xs text-muted-foreground">{acc.location_name}</div>
+                            </div>
+                            <div className="text-sm text-muted-foreground">{acc.upi_id}</div>
+                          </div>
+                        </label>
+                      ))
+                    )}
+                  </div>
+
                   {/* QR Code Display for Settle */}
                   {selectedUpiAccount && (
                     <div className="mt-4 space-y-2">
@@ -1326,18 +1349,33 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
             {editPaymentMode === 'upi' && (
               <div>
                 <Label>Select UPI Account</Label>
-                <Select value={editSelectedUpiAccount} onValueChange={setEditSelectedUpiAccount}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder={upiAccountsLoading ? "Loading accounts..." : "Select UPI account"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {upiAccounts.map((account) => (
-                      <SelectItem key={account.id} value={account.id}>
-                        {account.account_name} - {account.upi_id} ({account.location_name || 'N/A'})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="mt-2 grid gap-2">
+                  {upiAccountsLoading ? (
+                    <div className="text-sm text-muted-foreground">Loading accounts...</div>
+                  ) : upiAccounts.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No UPI accounts found. Please add UPI accounts in the settings.</p>
+                  ) : (
+                    upiAccounts.map((acc) => (
+                      <label key={acc.id} className={`flex items-start gap-3 p-3 rounded-lg border ${editSelectedUpiAccount === acc.id ? 'border-primary bg-primary/5' : 'border-transparent bg-muted/30 hover:border-border'} cursor-pointer`}>
+                        <input
+                          type="radio"
+                          name="edit-upi"
+                          value={acc.id}
+                          checked={editSelectedUpiAccount === acc.id}
+                          onChange={() => setEditSelectedUpiAccount(acc.id)}
+                          className="mt-1 h-4 w-4 text-primary"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                            <div className="font-medium">{acc.account_name}</div>
+                            <div className="text-xs text-muted-foreground">{acc.location_name}</div>
+                          </div>
+                          <div className="text-sm text-muted-foreground">{acc.upi_id}</div>
+                        </div>
+                      </label>
+                    ))
+                  )}
+                </div>
               </div>
             )}
             <div className="grid grid-cols-2 gap-4">

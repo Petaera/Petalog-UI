@@ -236,6 +236,10 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
   // Button disable state for 5 seconds after submit
   const [isSubmitDisabled, setIsSubmitDisabled] = useState(false);
   const [visitCount, setVisitCount] = useState<number>(0);
+  // Latest visits summary and expanded list
+  const [latestVisitSummary, setLatestVisitSummary] = useState<any | null>(null);
+  const [latestVisits, setLatestVisits] = useState<any[]>([]);
+  const [visitsExpanded, setVisitsExpanded] = useState(false);
 
   // Custom entry date and time
   const [customEntryDate, setCustomEntryDate] = useState(() => {
@@ -870,6 +874,32 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
         }
 
         if (!cancelled) setVisitCount(manualCount);
+        // Also fetch latest visit summary and latest 5 visits
+        try {
+          // Query latest single visit for summary
+          const { data: latestSingle, error: singleErr } = await withLocation(
+            supabase.from('logs-man').select('created_at, service, Amount').ilike('vehicle_number', `%${plate}%`).order('created_at', { ascending: false }).limit(1)
+          );
+          if (!singleErr && latestSingle && Array.isArray(latestSingle) && latestSingle.length > 0) {
+            setLatestVisitSummary(latestSingle[0]);
+          } else {
+            setLatestVisitSummary(null);
+          }
+
+          // Query latest 5 visits
+          const { data: latestFive, error: fiveErr } = await withLocation(
+            supabase.from('logs-man').select('id, created_at, service, Amount, payment_mode, Location').ilike('vehicle_number', `%${plate}%`).order('created_at', { ascending: false }).limit(5)
+          );
+          if (!fiveErr && latestFive) {
+            setLatestVisits(latestFive);
+          } else {
+            setLatestVisits([]);
+          }
+        } catch (e) {
+          console.warn('Error fetching latest visits details:', e);
+          setLatestVisitSummary(null);
+          setLatestVisits([]);
+        }
       } catch (e) {
         console.warn('Visit count error:', e);
         if (!cancelled) setVisitCount(0);
@@ -2315,6 +2345,61 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                   <span className="text-muted-foreground font-medium">
                     {visitCount > 0 ? `Previous Visits: ${visitCount} ${visitCount === 1 ? 'time' : 'times'}` : 'New Customer'}
                   </span>
+                </div>
+              )}
+              {/* Latest visit summary and expandable list */}
+              {vehicleNumber && (
+                <div className="mt-2">
+                  {latestVisitSummary ? (
+                    <div className="p-3 bg-background border rounded-md shadow-sm">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="text-sm text-muted-foreground">Latest visit</div>
+                          <div className="text-sm font-medium text-foreground">
+                            {new Date(latestVisitSummary.created_at).toLocaleString()}
+                          </div>
+                          <div className="text-sm text-muted-foreground mt-1">
+                            Service: <span className="text-foreground font-medium">{latestVisitSummary.service || '—'}</span>
+                          </div>
+                        </div>
+                        <div className="flex-shrink-0 text-right">
+                          <div className="text-sm text-muted-foreground">Amount</div>
+                          <div className="text-lg font-semibold">{typeof latestVisitSummary.Amount === 'number' ? `₹${latestVisitSummary.Amount}` : (latestVisitSummary.Amount ? `₹${latestVisitSummary.Amount}` : '—')}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground mt-1">No recent visit details available</div>
+                  )}
+
+                  {/* Expand button and list */}
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setVisitsExpanded(v => !v)}
+                      className="text-sm text-primary underline"
+                    >
+                      {visitsExpanded ? 'Hide recent visits' : `View latest ${latestVisits.length > 0 ? Math.min(5, latestVisits.length) : 5} visits`}
+                    </button>
+
+                    {visitsExpanded && latestVisits.length > 0 && (
+                      <div className="mt-2 space-y-2">
+                        {latestVisits.map((v) => (
+                          <div key={v.id} className="p-2 bg-muted/10 border rounded-md flex items-center justify-between">
+                            <div className="text-sm">
+                              <div className="font-medium text-foreground">{new Date(v.created_at).toLocaleString()}</div>
+                              <div className="text-xs text-muted-foreground">{v.service || 'Service not recorded'}</div>
+                              {v.Location && <div className="text-xs text-muted-foreground">Location: {v.Location}</div>}
+                            </div>
+                            <div className="text-right">
+                              <div className="text-sm font-semibold">{typeof v.Amount === 'number' ? `₹${v.Amount}` : (v.Amount ? `₹${v.Amount}` : '—')}</div>
+                              <div className="text-xs text-muted-foreground">{v.payment_mode ? v.payment_mode : ''}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
