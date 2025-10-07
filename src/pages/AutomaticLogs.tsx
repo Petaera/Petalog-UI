@@ -25,6 +25,7 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState("");
+  const [showZeroDuration, setShowZeroDuration] = useState(false);
 
 
 
@@ -316,6 +317,15 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
     );
   }
 
+  // Split logs by duration (non-zero first)
+  const nonZeroDurationLogs = (logs || []).filter((l: any) => {
+    const entry = l?.entry_time ? new Date(l.entry_time).getTime() : NaN;
+    const exit = l?.exit_time ? new Date(l.exit_time).getTime() : NaN;
+    return !Number.isNaN(entry) && !Number.isNaN(exit) && exit - entry > 0;
+  });
+  const zeroDurationLogs = (logs || []).filter((l: any) => !nonZeroDurationLogs.includes(l));
+  const rowsToRender = showZeroDuration ? [...nonZeroDurationLogs, ...zeroDurationLogs] : nonZeroDurationLogs;
+
   return (
     <div className="flex-1 p-6 space-y-6">
       <div className="flex items-center gap-4">
@@ -370,12 +380,23 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
               <div className="flex items-center gap-2">
                 <Database className="h-5 w-5 text-blue-500" />
                 <span>Automatic Logs</span>
-                <span className="text-sm text-muted-foreground">({logs.length} entries)</span>
+                <span className="text-sm text-muted-foreground">({rowsToRender.length}{zeroDurationLogs.length > 0 && !showZeroDuration ? ` of ${logs.length}` : ''} entries)</span>
               </div>
               {selectedDate && (
                 <Badge variant="outline" className="sm:ml-2">
                   {new Date(selectedDate).toLocaleDateString()}
                 </Badge>
+              )}
+              {zeroDurationLogs.length > 0 && (
+                <div className="sm:ml-auto mt-2 sm:mt-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowZeroDuration(v => !v)}
+                  >
+                    {showZeroDuration ? 'Hide 0-minute readings' : `Show ${zeroDurationLogs.length} zero-minute readings`}
+                  </Button>
+                </div>
               )}
             </CardTitle>
           </CardHeader>
@@ -397,12 +418,12 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
               <tbody>
                 {loading ? (
                   <tr><td colSpan={8} className="text-center py-4">Loading...</td></tr>
-                ) : logs.length === 0 ? (
+                ) : rowsToRender.length === 0 ? (
                   <tr><td colSpan={8} className="text-center py-4">
                     {selectedDate ? `No logs found for ${new Date(selectedDate).toLocaleDateString()}` : 'No logs found for this location.'}
                   </td></tr>
                 ) : (
-                  logs.map((log, idx) => (
+                  rowsToRender.map((log, idx) => (
                     <tr key={log.id || idx}>
                       <td className="border px-4 py-2">{log.vehicles?.number_plate || "-"}</td>
                       <td className="border px-4 py-2">{log.vehicles?.type || "-"}</td>
@@ -470,13 +491,15 @@ export default function AutomaticLogs({ selectedLocation }: AutomaticLogsProps) 
           onClick={closeImageModal}
         >
           <div className="relative max-w-4xl max-h-4xl p-4">
-            <button
+            <Button
               onClick={closeImageModal}
               className="absolute top-2 right-2 bg-white rounded-full p-2 hover:bg-gray-100 transition-colors z-10"
               title="Close (Esc)"
+              variant="ghost"
+              size="icon"
             >
               <X className="h-6 w-6 text-gray-600" />
-            </button>
+            </Button>
             <img
               src={selectedImage}
               alt="Full size image"
