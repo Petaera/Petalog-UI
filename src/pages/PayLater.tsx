@@ -156,8 +156,8 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
   const getUniqueCustomers = (): string[] => {
     const customers = new Set<string>();
     payLaterLogs.forEach(log => {
-      // The customer name column contains either customer names or workshop names
-      const customerValue = log.workshop ? String(log.workshop) : (log.Name || '');
+      // The customer name column contains either customer names or workshop names or phone numbers
+      const customerValue = log.workshop ? String(log.workshop) : (log.Name || log.Phone_no || '');
       if (customerValue.trim()) customers.add(customerValue);
     });
     return Array.from(customers).sort();
@@ -208,7 +208,7 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
 
     if (selectedCustomer) {
       filtered = filtered.filter((log) =>
-        (log.Name || '').toLowerCase().includes(selectedCustomer.toLowerCase())
+        (log.Name || log.workshop || log.Phone_no || '').toLowerCase().includes(selectedCustomer.toLowerCase())
       );
     }
 
@@ -953,7 +953,7 @@ export default function PayLater({ selectedLocation: propSelectedLocation }: Pay
                           <td className="p-2">
                             <Badge variant="outline">{log.vehicle_model || 'N/A'}</Badge>
                           </td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.workshop ? String(log.workshop) : (log.Name || "-")}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.workshop ? String(log.workshop) : (log.Name || log.Phone_no || "No ID")}</td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
                             {log.entry_time ? new Date(log.entry_time).toLocaleDateString('en-GB') :
                               log.created_at ? new Date(log.created_at).toLocaleDateString('en-GB') : "-"}

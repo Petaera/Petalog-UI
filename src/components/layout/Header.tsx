@@ -66,17 +66,13 @@ export function Header({ locations, selectedLocation, onLocationChange }: Header
 
         // Filter by role and location selection
         if (user.role === 'owner') {
+          // Align with Pay Later page: only show for selected location; if none selected, show 0
           if (selectedLocation && selectedLocation.trim() !== '') {
             query = query.eq('location_id', selectedLocation);
           } else {
-            const locationIds = locations.map(l => l.id);
-            if (locationIds.length > 0) {
-              query = query.in('location_id', locationIds);
-            } else {
-              setPayLaterDue(0);
-              setIsPayLaterLoading(false);
-              return;
-            }
+            setPayLaterDue(0);
+            setIsPayLaterLoading(false);
+            return;
           }
         } else if ((user.role === 'manager' || user.role === 'worker') && user.assigned_location) {
           query = query.eq('location_id', user.assigned_location);
@@ -96,11 +92,10 @@ export function Header({ locations, selectedLocation, onLocationChange }: Header
           return;
         }
 
+        // In Pay Later page, Amount is already final after discount. Sum Amount directly.
         const total = (data || []).reduce((sum: number, row: any) => {
           const amount = Number(row?.Amount) || 0;
-          const discount = Number(row?.discount) || 0;
-          const net = amount - discount;
-          return sum + (net > 0 ? net : 0);
+          return sum + (amount > 0 ? amount : 0);
         }, 0);
         setPayLaterDue(total);
       } finally {

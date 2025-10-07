@@ -102,6 +102,12 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
   const [servicePriceOptions, setServicePriceOptions] = useState<any[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  // All-time Pay Later outstanding (independent of date filters)
+  const [outstandingLoading, setOutstandingLoading] = useState(false);
+  const [outstandingTotal, setOutstandingTotal] = useState(0);
+  const [outstandingCount, setOutstandingCount] = useState(0);
+  const [outstandingCustomer, setOutstandingCustomer] = useState<{ amount: number; count: number }>({ amount: 0, count: 0 });
+  const [outstandingWorkshop, setOutstandingWorkshop] = useState<{ amount: number; count: number }>({ amount: 0, count: 0 });
   
   // Pagination state
   const [page, setPage] = useState(1);
@@ -290,6 +296,57 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
       fetchFilteredData();
     }
   }, [authLoading, selectedLocation, dateRange, vehicleType, service, entryType, manager, customFromDate, customToDate, debouncedSearchTerm, user?.assigned_location, user?.role]);
+
+  // Fetch all-time outstanding Pay Later for current location (approved credit only)
+  useEffect(() => {
+    const fetchOutstanding = async () => {
+      if (authLoading) return;
+      // Determine location context
+      const currentLocation = user?.role === 'manager' ? user?.assigned_location : (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
+      if (!currentLocation) {
+        setOutstandingLoading(false);
+        setOutstandingTotal(0);
+        setOutstandingCount(0);
+        setOutstandingCustomer({ amount: 0, count: 0 });
+        setOutstandingWorkshop({ amount: 0, count: 0 });
+        return;
+      }
+      try {
+        setOutstandingLoading(true);
+        let query = supabase
+          .from('logs-man')
+          .select('Amount, entry_type')
+          .eq('approval_status', 'approved')
+          .eq('payment_mode', 'credit')
+          .eq('location_id', currentLocation);
+
+        const { data, error } = await query;
+        if (error) {
+          setOutstandingTotal(0);
+          setOutstandingCount(0);
+          setOutstandingCustomer({ amount: 0, count: 0 });
+          setOutstandingWorkshop({ amount: 0, count: 0 });
+          return;
+        }
+        const rows = data || [];
+        const total = rows.reduce((sum: number, r: any) => sum + (Number(r?.Amount) || 0), 0);
+        const split = rows.reduce((acc: Record<string, { amount: number; count: number }>, r: any) => {
+          const key = ((r?.entry_type || 'Customer').toString().trim().toLowerCase() === 'workshop') ? 'Workshop' : 'Customer';
+          if (!acc[key]) acc[key] = { amount: 0, count: 0 };
+          acc[key].amount += Number(r?.Amount) || 0;
+          acc[key].count += 1;
+          return acc;
+        }, {} as Record<string, { amount: number; count: number }>);
+        setOutstandingTotal(total);
+        setOutstandingCount(rows.length);
+        setOutstandingCustomer(split['Customer'] || { amount: 0, count: 0 });
+        setOutstandingWorkshop(split['Workshop'] || { amount: 0, count: 0 });
+      } finally {
+        setOutstandingLoading(false);
+      }
+    };
+    fetchOutstanding();
+  }, [authLoading, selectedLocation, user?.assigned_location, user?.role]);
 
   // Fetch a superset of logs for comparison (yesterday/last week/previous period)
   useEffect(() => {
@@ -1948,6 +2005,32 @@ useEffect(() => {
       </div>
 
 
+
+      {/* Total Outstanding (Pay Later) - All-time for current location */}
+      <div className="p-4 mb-4 rounded-lg border bg-red-50 border-red-100">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <p className="text-sm font-medium text-red-900">Total Outstanding (Pay Later)</p>
+            <div className="text-2xl font-bold text-red-900">
+              {outstandingLoading ? '…' : `₹${outstandingTotal.toLocaleString()}`}
+            </div>
+            <p className="text-xs text-red-800">{outstandingLoading ? '' : `${outstandingCount} unsettled pay later tickets`}</p>
+          </div>
+          <div className="flex gap-6">
+            <div>
+              <p className="text-xs text-red-700 mb-1">Customer</p>
+              <div className="text-sm font-semibold text-red-900">{outstandingLoading ? '…' : `₹${outstandingCustomer.amount.toLocaleString()}`}</div>
+              <div className="text-xs text-red-800">{outstandingLoading ? '' : `${outstandingCustomer.count} tickets`}</div>
+            </div>
+            <div className="h-10 w-px bg-red-200 self-center" />
+            <div>
+              <p className="text-xs text-red-700 mb-1">Workshop</p>
+              <div className="text-sm font-semibold text-red-900">{outstandingLoading ? '…' : `₹${outstandingWorkshop.amount.toLocaleString()}`}</div>
+              <div className="text-xs text-red-800">{outstandingLoading ? '' : `${outstandingWorkshop.count} tickets`}</div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Payment Mode Breakdown */}
       <Card>

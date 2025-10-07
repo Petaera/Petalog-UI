@@ -796,7 +796,7 @@ export default function ManagerManualLogs({ selectedLocation }: ManagerManualLog
                           <td className="p-2">
                             <Badge variant="outline">{log.vehicle_model || 'N/A'}</Badge>
                           </td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.Name || "-"}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.Name || log.workshop || log.Phone_no || "No ID"}</td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
                             {log.Phone_no ? (
                               <a
@@ -929,7 +929,7 @@ export default function ManagerManualLogs({ selectedLocation }: ManagerManualLog
                           <td className="p-2">
                             <Badge variant="outline">{log.vehicle_model || 'N/A'}</Badge>
                           </td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.Name || "-"}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.Name || log.workshop || log.Phone_no || "No ID"}</td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
                             {log.Phone_no ? (
                               <a
@@ -1042,7 +1042,7 @@ export default function ManagerManualLogs({ selectedLocation }: ManagerManualLog
                           <td className="p-2">
                             <Badge variant="outline">{log.vehicle_model || 'N/A'}</Badge>
                           </td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.Name || "-"}</td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.Name || log.workshop || log.Phone_no || "No ID"}</td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
                             {log.Phone_no ? (
                               <a
