@@ -879,118 +879,6 @@ export default function ManagerManualLogs({ selectedLocation }: ManagerManualLog
         </CardContent>
       </Card>
 
-      {/* Pay Later Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex flex-col sm:flex-row sm:items-center gap-2">
-            <div className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-purple-500" />
-              <span>Pay Later</span>
-              <Badge variant="secondary">{payLaterLogs.length}</Badge>
-            </div>
-            {selectedDate && (
-              <Badge variant="outline" className="sm:ml-2">
-                {new Date(selectedDate).toLocaleDateString()}
-              </Badge>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto -mx-4 sm:mx-0">
-            <div className="min-w-full inline-block align-middle">
-              <div className="overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-muted/50">
-                    <tr>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle No</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Name</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Amount</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Service</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Entry Time</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Exit Time</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Date</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {loading ? (
-                      <tr><td colSpan={11} className="text-center py-4">Loading...</td></tr>
-                    ) : payLaterLogs.length === 0 ? (
-                      <tr><td colSpan={11} className="text-center py-4 text-muted-foreground">
-                        {selectedDate ? `No pay later tickets for ${new Date(selectedDate).toLocaleDateString()}` : 'No pay later tickets'}
-                      </td></tr>
-                    ) : (
-                      payLaterLogs.map((log: any, idx: number) => (
-                        <tr key={log.id || idx} className="hover:bg-muted/30">
-                          <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
-                          <td className="p-2">
-                            <Badge variant="outline">{log.vehicle_model || 'N/A'}</Badge>
-                          </td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">{log.Name || log.workshop || log.Phone_no || "No ID"}</td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {log.Phone_no ? (
-                              <a
-                                href={`tel:${log.Phone_no}`}
-                                className="text-blue-600 hover:underline"
-                                title={`Call ${log.Phone_no}`}
-                              >
-                                {log.Phone_no}
-                              </a>
-                            ) : (
-                              "-"
-                            )}
-                          </td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-green-600 ">
-                            {(() => {
-                              const currentAmount = log.Amount || 0;
-                              const discountAmount = log.discount || 0;
-                              const originalAmount = currentAmount - discountAmount;
-                              return originalAmount > 0 ? formatCurrency(originalAmount) : "-";
-                            })()}
-                          </td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{log.service || "-"}</td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
-                            {log.entry_time ? new Date(log.entry_time).toLocaleString() :
-                              log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
-                          </td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">
-                            {log.exit_time ? new Date(log.exit_time).toLocaleString() :
-                              log.approved_at ? new Date(log.approved_at).toLocaleString() : "-"}
-                          </td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {log.payment_date ? new Date(log.payment_date).toLocaleString() : '-'}
-                          </td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
-                            <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100 text-xs">Pay Later</Badge>
-                          </td>
-                          <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
-                            <div className="flex flex-col sm:flex-row gap-1">
-                              <Button size="sm" variant="default" className="text-xs" onClick={() => openSettle(log)}>Settle</Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="text-xs"
-                                onClick={() => handleEdit(log)}
-                              >
-                                <Edit className="h-3 w-3 mr-1" />
-                                Edit
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Approved Logs Section */}
       <Card>
         <CardHeader>
@@ -998,7 +886,7 @@ export default function ManagerManualLogs({ selectedLocation }: ManagerManualLog
             <div className="flex items-center gap-2">
               <CheckCircle className="h-5 w-5 text-green-500" />
               <span>Ticket Closed</span>
-              <Badge variant="default">{approvedLogs.length}</Badge>
+              <Badge variant="default">{approvedLogs.length + payLaterLogs.length}</Badge>
             </div>
             {selectedDate && (
               <Badge variant="outline" className="sm:ml-2">
@@ -1031,12 +919,12 @@ export default function ManagerManualLogs({ selectedLocation }: ManagerManualLog
                   <tbody className="bg-white divide-y divide-gray-200">
                     {loading ? (
                       <tr><td colSpan={11} className="text-center py-4">Loading...</td></tr>
-                    ) : approvedLogs.length === 0 ? (
+                    ) : (approvedLogs.length + payLaterLogs.length) === 0 ? (
                       <tr><td colSpan={11} className="text-center py-4 text-muted-foreground">
                         {selectedDate ? `No approved logs found for ${new Date(selectedDate).toLocaleDateString()}` : 'No approved logs found'}
                       </td></tr>
                     ) : (
-                      approvedLogs.map((log, idx) => (
+                      [...approvedLogs, ...payLaterLogs].map((log: any, idx) => (
                         <tr key={log.id || idx} className="hover:bg-muted/30">
                           <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.vehicle_number || log.vehicles?.number_plate || "-"}</td>
                           <td className="p-2">
@@ -1090,8 +978,8 @@ export default function ManagerManualLogs({ selectedLocation }: ManagerManualLog
                             })()}
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">
-                            <Badge className="bg-green-100 text-green-800 hover:bg-green-100 text-xs">
-                              Approved
+                            <Badge className={`${log.payment_mode === 'credit' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'} hover:bg-green-100 text-xs`}>
+                              {log.payment_mode === 'credit' ? 'Pay Later' : 'Approved'}
                             </Badge>
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm font-medium">

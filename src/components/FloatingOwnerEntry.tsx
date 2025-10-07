@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, X, GripVertical } from 'lucide-react';
+import { Car, X, GripVertical } from 'lucide-react';
 
 // A mobile-only floating action button for quick Owner Entry access.
 // - Draggable within viewport; position persisted to localStorage
@@ -140,7 +140,7 @@ export const FloatingOwnerEntry: React.FC = () => {
             className="h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-lg active:scale-95 transition flex items-center justify-center"
             aria-label="Open Owner Entry Quick Actions"
           >
-            <Plus className="h-6 w-6" />
+            <Car className="h-6 w-6" />
           </button>
         </div>
       </div>
