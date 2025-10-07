@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
+import FloatingOwnerEntry from '@/components/FloatingOwnerEntry';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -447,6 +448,8 @@ const PayrollLayout: React.FC = () => {
         <div className="p-6">
           <Outlet />
         </div>
+        {/* Mobile Floating Owner Entry Button (global within payroll area as well) */}
+        <FloatingOwnerEntry />
       </div>
     </div>
   );

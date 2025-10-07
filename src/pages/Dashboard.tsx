@@ -177,7 +177,7 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
   // Show error state with retry option
   if (manualLogsError && autoLogsError) {
     return (
-      <Layout>
+      <Layout selectedLocation={selectedLocation || ""} onLocationChange={() => {}}>
         <div className="p-4 lg:p-6">
           <div className="text-center py-12">
             <div className="text-red-500 text-6xl mb-4">⚠️</div>

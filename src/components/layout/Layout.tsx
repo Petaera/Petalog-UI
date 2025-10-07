@@ -12,6 +12,7 @@ import VehicleHistory from '@/pages/VehicleHistory';
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { getLocationFilterDescription } from "@/lib/utils";
+import FloatingOwnerEntry from "@/components/FloatingOwnerEntry";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -215,6 +216,8 @@ export function Layout({ children, selectedLocation, onLocationChange }: LayoutP
           </main>
         </div>
       </div>
+      {/* Mobile Floating Owner Entry Button (global) */}
+      <FloatingOwnerEntry />
     </SidebarProvider>
   );
 }
