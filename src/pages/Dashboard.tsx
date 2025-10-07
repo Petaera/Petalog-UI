@@ -17,6 +17,8 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
     totalVehiclesToday: 0,
     activeSessions: 0,
     revenueToday: 0,
+    payLaterTodayCount: 0,
+    payLaterTodayAmount: 0,
     loading: true
   });
   const [locationFilterApplied, setLocationFilterApplied] = useState(false);
@@ -124,6 +126,23 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
       // Calculate stats - only for approved/closed tickets
       const totalVehiclesToday = todayData?.length || 0;
       const revenueToday = todayData?.reduce((sum, log) => sum + (log.Amount || 0), 0) || 0;
+      // Pay Later (approved credit) for today
+      let payLaterQuery = supabase
+        .from('logs-man')
+        .select('Amount, created_at, location_id, approval_status, payment_mode')
+        .eq('approval_status', 'approved')
+        .eq('payment_mode', 'credit')
+        .gte('created_at', startOfDay.toISOString())
+        .lt('created_at', endOfDay.toISOString());
+
+      if (locationFilter) {
+        payLaterQuery = payLaterQuery.eq('location_id', locationFilter);
+      }
+
+      const { data: payLaterData } = await payLaterQuery;
+      const payLaterTodayCount = payLaterData?.length || 0;
+      const payLaterTodayAmount = payLaterData?.reduce((sum, log) => sum + (log.Amount || 0), 0) || 0;
+
       
       
       
@@ -149,6 +168,8 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
         totalVehiclesToday,
         activeSessions,
         revenueToday,
+        payLaterTodayCount,
+        payLaterTodayAmount,
         loading: false
       });
       
@@ -274,6 +295,28 @@ const Dashboard = ({ selectedLocation }: { selectedLocation?: string }) => {
             </div>
             <p className="text-xs text-muted-foreground">
               Total earnings today
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Pay Later Today */}
+        <Card 
+          className="cursor-pointer hover:shadow-lg transition-shadow duration-200"
+          onClick={() => navigate('/pay-later')}
+        >
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Pay Later Today</CardTitle>
+            <Clock className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {stats.loading ? "..." : `₹${stats.payLaterTodayAmount.toLocaleString()}`}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {stats.loading ? '' : `${stats.payLaterTodayCount} tickets`}
+              {locationFilterApplied && (
+                <span className="ml-1 text-blue-600">📍 Filtered</span>
+              )}
             </p>
           </CardContent>
         </Card>
