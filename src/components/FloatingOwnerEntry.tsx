@@ -20,7 +20,6 @@ export const FloatingOwnerEntry: React.FC = () => {
       return true;
     }
   });
-  const [sheetOpen, setSheetOpen] = useState(false);
   const [pos, setPos] = useState<{ xPct: number; yPct: number }>(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY_POS);
@@ -137,7 +136,7 @@ export const FloatingOwnerEntry: React.FC = () => {
           {/* Main FAB */}
           <button
             type="button"
-            onClick={() => setSheetOpen(true)}
+            onClick={() => navigate('/owner-entry')}
             className="h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-lg active:scale-95 transition flex items-center justify-center"
             aria-label="Open Owner Entry Quick Actions"
           >
@@ -146,35 +145,6 @@ export const FloatingOwnerEntry: React.FC = () => {
         </div>
       </div>
 
-      {/* Half-height bottom sheet */}
-      {sheetOpen && (
-        <div className="fixed inset-0 z-[70] md:hidden">
-          {/* Backdrop */}
-          <div className="absolute inset-0 bg-black/40" onClick={() => setSheetOpen(false)} />
-          {/* Sheet */}
-          <div className="absolute bottom-0 left-0 right-0 h-1/2 bg-white rounded-t-2xl shadow-2xl p-4 flex flex-col">
-            <div className="flex items-center justify-between mb-2">
-              <div className="h-1.5 w-12 bg-gray-300 rounded-full mx-auto absolute left-1/2 -translate-x-1/2 top-2" />
-              <span className="font-semibold">Quick Actions</span>
-              <button type="button" className="p-2 -mr-2" onClick={() => setSheetOpen(false)} aria-label="Close">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="mt-2 space-y-3">
-              <button
-                type="button"
-                className="w-full h-12 rounded-lg bg-primary text-primary-foreground font-semibold shadow active:scale-98"
-                onClick={() => { setSheetOpen(false); navigate('/owner-entry'); }}
-              >
-                Go to Owner Entry
-              </button>
-              <div className="text-xs text-muted-foreground">
-                Tip: drag the floating button by the handle to reposition it.
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 };
