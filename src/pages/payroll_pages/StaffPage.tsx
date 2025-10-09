@@ -46,6 +46,18 @@ interface Staff {
   carryFwd?: number;
 }
 
+interface PaymentEntry {
+  id: string;
+  amount: number;
+  type: 'Advance' | 'Salary' | string;
+  payment_mode: string | null;
+  payment_date: string;
+  salary_month: number | null;
+  salary_year: number | null;
+  notes: string | null;
+  created_at?: string;
+}
+
 // Document Viewer Modal Component
 const DocumentViewerModal = ({ isOpen, onClose, documents, staffName }: { 
   isOpen: boolean; 
@@ -298,6 +310,19 @@ const StaffPage: React.FC = () => {
   
   // Payments state
   const [showPaymentPanel, setShowPaymentPanel] = useState(false);
+  const [paymentsViewerOpen, setPaymentsViewerOpen] = useState(false);
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [paymentsForStaff, setPaymentsForStaff] = useState<{ staffId: string; name: string }>({ staffId: '', name: '' });
+  const [payments, setPayments] = useState<PaymentEntry[]>([]);
+  const [editingPayment, setEditingPayment] = useState<PaymentEntry | null>(null);
+  const [paymentsEditSaving, setPaymentsEditSaving] = useState(false);
+  const [editAmount, setEditAmount] = useState<string>('');
+  const [editType, setEditType] = useState<'Advance' | 'Salary' | string>('Advance');
+  const [editMode, setEditMode] = useState<string>('');
+  const [editDate, setEditDate] = useState<string>('');
+  const [editSalaryMonth, setEditSalaryMonth] = useState<string>('');
+  const [editSalaryYear, setEditSalaryYear] = useState<string>('');
+  const [editNotes, setEditNotes] = useState<string>('');
   const [paymentStaffId, setPaymentStaffId] = useState<string>('');
   const [paymentType, setPaymentType] = useState<'Advance' | 'Salary' | 'Salary_Carryforward'>('Advance');
   const [paymentAmount, setPaymentAmount] = useState<string>('');
@@ -546,7 +571,7 @@ const StaffPage: React.FC = () => {
           console.warn('Failed to load carry_fwd rows', e);
         }
       }
-
+      
       const mapped: Staff[] = (staffData || []).map((row: any): Staff => ({
         id: row.id,
         name: row.name,
@@ -644,6 +669,38 @@ const StaffPage: React.FC = () => {
   const openDocumentViewer = (staffMember: Staff) => {
     setSelectedStaffDocs({ name: staffMember.name, docs: staffMember.doc_url });
     setDocumentViewerOpen(true);
+  };
+
+  // Open Payments Viewer and fetch payments for staff
+  const openPaymentsViewer = async (staffMember: Staff) => {
+    try {
+      setPaymentsViewerOpen(true);
+      setPaymentsLoading(true);
+      setPaymentsForStaff({ staffId: staffMember.id, name: staffMember.name });
+      const { data, error } = await supabase
+        .from('payment_data')
+        .select('id, amount, type, payment_mode, payment_date, salary_month, salary_year, notes, created_at')
+        .eq('staff_id', staffMember.id)
+        .order('payment_date', { ascending: false } as any);
+      if (error) throw error;
+      const rows: PaymentEntry[] = (data || []).map((r: any) => ({
+        id: r.id,
+        amount: Number(r.amount || 0),
+        type: r.type,
+        payment_mode: r.payment_mode,
+        payment_date: r.payment_date,
+        salary_month: r.salary_month ?? null,
+        salary_year: r.salary_year ?? null,
+        notes: r.notes ?? null,
+        created_at: r.created_at,
+      }));
+      setPayments(rows);
+    } catch (e: any) {
+      toast({ title: 'Failed to load payments', description: e?.message || 'Error fetching payments', variant: 'destructive' });
+      setPayments([]);
+    } finally {
+      setPaymentsLoading(false);
+    }
   };
 
   const removeDocument = (index: number) => {
@@ -878,6 +935,257 @@ const StaffPage: React.FC = () => {
         documents={selectedStaffDocs.docs}
         staffName={selectedStaffDocs.name}
       />
+      {/* Payments Viewer Modal */}
+      {paymentsViewerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b">
+              <div>
+                <h2 className="text-xl font-semibold">Payments — {paymentsForStaff.name}</h2>
+                <p className="text-sm text-gray-500">{payments.length} record{payments.length !== 1 ? 's' : ''}</p>
+              </div>
+              <button onClick={() => setPaymentsViewerOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 overflow-auto">
+              {paymentsLoading ? (
+                <div className="text-sm text-muted-foreground">Loading payments…</div>
+              ) : payments.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No payments found for this staff.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="text-left p-3 text-foreground">Date</th>
+                        <th className="text-left p-3 text-foreground">Type</th>
+                        <th className="text-left p-3 text-foreground">Mode</th>
+                        <th className="text-right p-3 text-foreground">Amount</th>
+                        <th className="text-left p-3 text-foreground">Salary Period</th>
+                        <th className="text-left p-3 text-foreground">Notes</th>
+                        <th className="text-center p-3 text-foreground">Edit</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {payments.map((p) => (
+                        <tr key={p.id} className="border-b border-border">
+                          <td className="p-3 text-foreground">{new Date(p.payment_date).toLocaleDateString('en-IN')}</td>
+                          <td className="p-3 text-foreground">{editingPayment?.id === p.id ? (
+                            <select className="form-input" value={editType} onChange={(e) => setEditType(e.target.value)}>
+                              <option value="Advance">Advance</option>
+                              <option value="Salary">Salary</option>
+                            </select>
+                          ) : p.type}</td>
+                          <td className="p-3 text-foreground">{editingPayment?.id === p.id ? (
+                            <select className="form-input" value={editMode} onChange={(e) => setEditMode(e.target.value)}>
+                              <option value="cash">CASH</option>
+                              <option value="upi">UPI</option>
+                              <option value="credit">CREDIT</option>
+                            </select>
+                          ) : ((p.payment_mode || '').toString().toUpperCase() || '—')}</td>
+                          <td className="p-3 text-right text-foreground">{editingPayment?.id === p.id ? (
+                            <input className="form-input text-right" type="number" min="0" step="1" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} />
+                          ) : formatCurrency(Math.floor(p.amount || 0))}</td>
+                          <td className="p-3 text-foreground">
+                            {editingPayment?.id === p.id ? (
+                              <div className="flex gap-2 items-center">
+                                <select className="form-input" value={editSalaryMonth} onChange={(e) => setEditSalaryMonth(e.target.value)}>
+                                  <option value="">—</option>
+                                  <option value="1">Jan</option>
+                                  <option value="2">Feb</option>
+                                  <option value="3">Mar</option>
+                                  <option value="4">Apr</option>
+                                  <option value="5">May</option>
+                                  <option value="6">Jun</option>
+                                  <option value="7">Jul</option>
+                                  <option value="8">Aug</option>
+                                  <option value="9">Sep</option>
+                                  <option value="10">Oct</option>
+                                  <option value="11">Nov</option>
+                                  <option value="12">Dec</option>
+                                </select>
+                                <input className="form-input w-24" type="number" placeholder="Year" value={editSalaryYear} onChange={(e) => setEditSalaryYear(e.target.value)} />
+                              </div>
+                            ) : (
+                              p.type === 'Salary' && p.salary_month && p.salary_year ? (
+                                <>{new Date(2000, (p.salary_month || 1) - 1, 1).toLocaleString('en-IN', { month: 'short' })} {p.salary_year}</>
+                              ) : (
+                                '—'
+                              )
+                            )}
+                          </td>
+                          <td className="p-3 text-foreground">{editingPayment?.id === p.id ? (
+                            <input className="form-input" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
+                          ) : (p.notes || '—')}</td>
+                          <td className="p-3 text-center">
+                            {editingPayment?.id === p.id ? (
+                              <div className="flex items-center justify-center gap-2">
+                                <Button size="sm" disabled={paymentsEditSaving} onClick={async () => {
+                                  try {
+                                    setPaymentsEditSaving(true);
+                                    const update: any = {
+                                      amount: Math.floor(Number(editAmount || 0)),
+                                      type: editType,
+                                      payment_mode: (editMode || '').toLowerCase() || null,
+                                      notes: editNotes || null,
+                                    };
+                                    if (editDate) update.payment_date = editDate;
+                                    // Salary period only if type is Salary and both provided
+                                    if (editType === 'Salary') {
+                                      update.salary_month = editSalaryMonth ? Number(editSalaryMonth) : null;
+                                      update.salary_year = editSalaryYear ? Number(editSalaryYear) : null;
+                                    } else {
+                                      update.salary_month = null;
+                                      update.salary_year = null;
+                                    }
+                                    const { error: updErr } = await supabase
+                                      .from('payment_data')
+                                      .update(update)
+                                      .eq('id', editingPayment.id);
+                                    if (updErr) throw updErr;
+                                    // refresh local list
+                                    setPayments(prev => prev.map(row => row.id === editingPayment.id ? {
+                                      ...row,
+                                      ...update,
+                                      payment_date: update.payment_date || row.payment_date,
+                                    } : row));
+
+                                    // Reflect in advance / carry_fwd tables based on delta and type changes
+                                    const staffId = paymentsForStaff.staffId;
+                                    const oldType = editingPayment.type;
+                                    const newType = update.type;
+                                    const oldAmount = Math.floor(Number(editingPayment.amount || 0));
+                                    const newAmount = Math.floor(Number(update.amount || 0));
+                                    const delta = newAmount - oldAmount;
+
+                                    // Helper: adjust advance by diff (positive increases, negative decreases but not below zero)
+                                    const adjustAdvanceBy = async (diff: number) => {
+                                      const { data: advRow } = await supabase
+                                        .from('advance')
+                                        .select('staff_id, advance')
+                                        .eq('staff_id', staffId)
+                                        .maybeSingle();
+                                      const current = Number(advRow?.advance || 0);
+                                      const next = Math.max(0, current + diff);
+                                      if (!advRow) {
+                                        if (next > 0) {
+                                          await supabase.from('advance').insert([{ staff_id: staffId, advance: next }]);
+                                        }
+                                      } else {
+                                        await supabase.from('advance').update({ advance: next, updated_at: new Date().toISOString() }).eq('staff_id', staffId);
+                                      }
+                                    };
+
+                                    // Helper: adjust carry_fwd by diff (positive increases balance, negative reduces and not below zero)
+                                    const adjustCarryBy = async (diff: number) => {
+                                      const { data: cfRow } = await supabase
+                                        .from('carry_fwd')
+                                        .select('staff_id, amount')
+                                        .eq('staff_id', staffId)
+                                        .maybeSingle();
+                                      const current = Number(cfRow?.amount || 0);
+                                      const next = Math.max(0, current + diff);
+                                      if (!cfRow) {
+                                        if (next > 0) {
+                                          await supabase.from('carry_fwd').insert([{ staff_id: staffId, amount: next, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }]);
+                                        }
+                                      } else {
+                                        await supabase.from('carry_fwd').update({ amount: next, updated_at: new Date().toISOString() }).eq('staff_id', staffId);
+                                      }
+                                    };
+
+                                    if (oldType === newType) {
+                                      if (newType === 'Advance') {
+                                        // Simple: adjust advance by delta
+                                        if (delta !== 0) await adjustAdvanceBy(delta);
+                                      } else if (newType === 'Salary') {
+                                        if (delta > 0) {
+                                          // Treat increase as extra overpay: clear carry_fwd first, then remainder to advance
+                                          const { data: cfRow2 } = await supabase
+                                            .from('carry_fwd')
+                                            .select('amount')
+                                            .eq('staff_id', staffId)
+                                            .maybeSingle();
+                                          const cfAmt = Number(cfRow2?.amount || 0);
+                                          const clearAmt = Math.min(delta, cfAmt);
+                                          if (clearAmt > 0) await adjustCarryBy(-clearAmt);
+                                          const rem = delta - clearAmt;
+                                          if (rem > 0) await adjustAdvanceBy(rem);
+                                        } else if (delta < 0) {
+                                          // Treat decrease as shortage: increase carry_fwd by shortage
+                                          const shortage = Math.abs(delta);
+                                          await adjustCarryBy(shortage);
+                                        }
+                                      }
+                                    } else {
+                                      // Type changed: reverse old effect minimally, then apply new effect
+                                      if (oldType === 'Advance') {
+                                        // Reverse: decrease advance by oldAmount
+                                        if (oldAmount > 0) await adjustAdvanceBy(-oldAmount);
+                                      } else if (oldType === 'Salary') {
+                                        // Reverse: consider removal of salary payment increases carry_fwd by oldAmount
+                                        if (oldAmount > 0) await adjustCarryBy(oldAmount);
+                                      }
+
+                                      if (newType === 'Advance') {
+                                        if (newAmount > 0) await adjustAdvanceBy(newAmount);
+                                      } else if (newType === 'Salary') {
+                                        if (newAmount > 0) {
+                                          // Apply like a fresh salary payment increase: clear carry then remainder to advance
+                                          const { data: cfRow2 } = await supabase
+                                            .from('carry_fwd')
+                                            .select('amount')
+                                            .eq('staff_id', staffId)
+                                            .maybeSingle();
+                                          const cfAmt = Number(cfRow2?.amount || 0);
+                                          const clearAmt = Math.min(newAmount, cfAmt);
+                                          if (clearAmt > 0) await adjustCarryBy(-clearAmt);
+                                          const rem = newAmount - clearAmt;
+                                          if (rem > 0) await adjustAdvanceBy(rem);
+                                        }
+                                      }
+                                    }
+                                    setEditingPayment(null);
+                                  } catch (e: any) {
+                                    toast({ title: 'Update failed', description: e?.message || 'Error updating payment', variant: 'destructive' });
+                                  } finally {
+                                    setPaymentsEditSaving(false);
+                                  }
+                                }}>Save</Button>
+                                <Button size="sm" variant="outline" onClick={() => setEditingPayment(null)}>Cancel</Button>
+                              </div>
+                            ) : (
+                              <Button size="sm" variant="outline" onClick={() => {
+                                setEditingPayment(p);
+                                setEditAmount(String(Math.floor(p.amount || 0)));
+                                setEditType(p.type);
+                                setEditMode((p.payment_mode || '').toString());
+                                setEditDate(p.payment_date);
+                                setEditSalaryMonth(p.salary_month ? String(p.salary_month) : '');
+                                setEditSalaryYear(p.salary_year ? String(p.salary_year) : '');
+                                setEditNotes(p.notes || '');
+                              }}>Edit</Button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            {payments.length > 0 && (
+              <div className="p-4 border-t flex items-center justify-between text-sm">
+                <div className="text-muted-foreground">Total records: {payments.length}</div>
+                <div className="font-medium text-foreground">
+                  Total Amount: {formatCurrency(Math.floor(payments.reduce((s, p) => s + (p.amount || 0), 0)))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
@@ -1170,7 +1478,7 @@ const StaffPage: React.FC = () => {
             </div>
             {paymentType === 'Salary' && paymentStaffId && (
               <>
-                <div className="grid gap-2">
+              <div className="grid gap-2">
                   <Label>Payment Month</Label>
                   <select
                     value={selectedPaymentMonth}
@@ -1206,15 +1514,15 @@ const StaffPage: React.FC = () => {
                 </div>
                 <div className="grid gap-2">
                   <Label>Calculate Salary with Leave Deduction</Label>
-                  <Button
-                    variant="outline"
+                <Button
+                  variant="outline"
                     onClick={async () => {
                       await calculateSalaryWithLeaves();
                     }}
                   >
                     Calculate Salary
-                  </Button>
-                </div>
+                </Button>
+              </div>
               </>
             )}
             {user?.role === 'owner' && (
@@ -1467,7 +1775,7 @@ const StaffPage: React.FC = () => {
                       }
                     }
                   }
-                
+
                   // If overpaid, first clear carry-forward, then add remaining to advance
                   if (overpay > 0) {
                     // First, check and clear any carry-forward balance
@@ -1499,25 +1807,25 @@ const StaffPage: React.FC = () => {
                     
                     // If there's still remaining overpay after clearing carry-forward, add to advance
                     if (remainingOverpay > 0) {
-                      const { data: advRow2, error: advSelErr2 } = await supabase
-                        .from('advance')
-                        .select('staff_id, advance')
-                        .eq('staff_id', paymentStaffId)
-                        .maybeSingle();
-                      if (advSelErr2) throw advSelErr2;
+                    const { data: advRow2, error: advSelErr2 } = await supabase
+                      .from('advance')
+                      .select('staff_id, advance')
+                      .eq('staff_id', paymentStaffId)
+                      .maybeSingle();
+                    if (advSelErr2) throw advSelErr2;
 
-                      if (!advRow2) {
-                        const { error: advInsErr2 } = await supabase
-                          .from('advance')
+                    if (!advRow2) {
+                      const { error: advInsErr2 } = await supabase
+                        .from('advance')
                           .insert([{ staff_id: paymentStaffId, advance: remainingOverpay, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }]);
-                        if (advInsErr2) throw advInsErr2;
-                      } else {
+                      if (advInsErr2) throw advInsErr2;
+                    } else {
                         const newAdvance2 = Number(advRow2.advance || 0) + remainingOverpay;
-                        const { error: advUpdErr2 } = await supabase
-                          .from('advance')
-                          .update({ advance: newAdvance2, updated_at: new Date().toISOString() })
-                          .eq('staff_id', paymentStaffId);
-                        if (advUpdErr2) throw advUpdErr2;
+                      const { error: advUpdErr2 } = await supabase
+                        .from('advance')
+                        .update({ advance: newAdvance2, updated_at: new Date().toISOString() })
+                        .eq('staff_id', paymentStaffId);
+                      if (advUpdErr2) throw advUpdErr2;
                       }
                     }
                   }
@@ -1920,6 +2228,7 @@ const StaffPage: React.FC = () => {
                   <th className="text-right p-4 font-medium text-foreground">Advance</th>
                 )}
                 <th className="text-center p-4 font-medium text-foreground">Documents</th>
+                <th className="text-center p-4 font-medium text-foreground">Payments</th>
                 <th className="text-center p-4 font-medium text-foreground">Status</th>
                 <th className="text-center p-4 font-medium text-foreground">Actions</th>
               </tr>
@@ -2008,6 +2317,17 @@ const StaffPage: React.FC = () => {
                         ) : (
                           <span className="text-xs">(0)</span>
                        )}
+                    </Button>
+                  </td>
+                  <td className="p-4 text-center">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openPaymentsViewer(member)}
+                      className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
+                      title="View Payments"
+                    >
+                      <CreditCard className="h-4 w-4" />
                     </Button>
                   </td>
                   <td className="p-4 text-center">
