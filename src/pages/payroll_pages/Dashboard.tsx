@@ -120,9 +120,12 @@ const Dashboard: React.FC = () => {
           }
         } catch (_) {}
 
-        // Load staff for branch using RPC function
+        // Load staff for branch from public.staff
         const { data: staffData, error: staffErr } = await supabase
-          .rpc('get_staff_by_branch', { branch_id_param: selectedLocationId });
+          .from('staff')
+          .select('id, name, role_title, is_active, monthly_salary')
+          .eq('branch_id', selectedLocationId)
+          .order('name', { ascending: true } as any);
         if (staffErr) throw staffErr;
 
         const staffMapped: Staff[] = (staffData || []).map((row: any) => ({
@@ -295,9 +298,11 @@ const Dashboard: React.FC = () => {
         staffMapped.forEach(s => { staffIdToName[s.id] = s.name; });
         const missingStaffIds = Array.from(new Set((payActs || []).map((r: any) => r.kind === 'SalaryPayment' ? r.ref_id : advanceIdToStaff[r.ref_id || '']).filter((id: any) => id && !staffIdToName[id])));
         if (missingStaffIds.length > 0) {
-          const { data: staffData } = await supabase
-            .rpc('get_staff_by_ids', { staff_ids: missingStaffIds });
-          (staffData || []).forEach((row: any) => { staffIdToName[row.id] = row.name; });
+          const { data: staffRows } = await supabase
+            .from('staff')
+            .select('id, name')
+            .in('id', missingStaffIds as any);
+          (staffRows || []).forEach((row: any) => { staffIdToName[row.id] = row.name; });
         }
         const payrollActs = (payActs || []).map((r: any) => {
           const staffId = r.kind === 'SalaryPayment' ? r.ref_id : advanceIdToStaff[r.ref_id || ''];
@@ -364,9 +369,11 @@ const Dashboard: React.FC = () => {
                   // Fetch missing staff names if needed
                   const missingLeaveStaffIds = leaveStaffIds.filter((id: string) => !leaveStaffMap[id]);
                   if (missingLeaveStaffIds.length > 0) {
-                    const { data: staffData } = await supabase
-                      .rpc('get_staff_by_ids', { staff_ids: missingLeaveStaffIds });
-                    (staffData || []).forEach((s: any) => { leaveStaffMap[s.id] = s.name; });
+                    const { data: staffRows } = await supabase
+                      .from('staff')
+                      .select('id, name')
+                      .in('id', missingLeaveStaffIds as any);
+                    (staffRows || []).forEach((s: any) => { leaveStaffMap[s.id] = s.name; });
                   }
                   
                   leaveRows.forEach((leave: any) => {
@@ -406,9 +413,11 @@ const Dashboard: React.FC = () => {
                   // Fetch missing staff names if needed
                   const missingAbsentStaffIds = absentStaffIds.filter((id: string) => !absentStaffMap[id]);
                   if (missingAbsentStaffIds.length > 0) {
-                    const { data: staffData } = await supabase
-                      .rpc('get_staff_by_ids', { staff_ids: missingAbsentStaffIds });
-                    (staffData || []).forEach((s: any) => { absentStaffMap[s.id] = s.name; });
+                    const { data: staffRows } = await supabase
+                      .from('staff')
+                      .select('id, name')
+                      .in('id', missingAbsentStaffIds as any);
+                    (staffRows || []).forEach((s: any) => { absentStaffMap[s.id] = s.name; });
                   }
                   
                   absentRows.forEach((absent: any) => {
@@ -448,7 +457,9 @@ const Dashboard: React.FC = () => {
         let prevSalaries = 0;
         try {
           const { data } = await supabase
-            .rpc('get_staff_by_branch', { branch_id_param: selectedLocationId });
+            .from('staff')
+            .select('monthly_salary')
+            .eq('branch_id', selectedLocationId);
           prevSalaries = (data || []).reduce((s: number, r: any) => s + Number(r.monthly_salary || 0), 0);
         } catch (_) {}
         // Prev advances
