@@ -159,6 +159,14 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
       } else if (dateRange === "last30days") {
         const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
         logsQuery = logsQuery.gte('created_at', monthAgo.toISOString());
+      } else if (dateRange === "lastmonth") {
+        const firstDayCurrentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        const firstDayLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        logsQuery = logsQuery.gte('created_at', firstDayLastMonth.toISOString()).lt('created_at', firstDayCurrentMonth.toISOString());
+      } else if (dateRange === "last3months") {
+        const firstDayCurrentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        const firstDayThreeMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 3, 1);
+        logsQuery = logsQuery.gte('created_at', firstDayThreeMonthsAgo.toISOString()).lt('created_at', firstDayCurrentMonth.toISOString());
       } else if (dateRange === "singleday" && customFromDate) {
         const singleDay = new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate());
         const startOfDay = singleDay.toISOString();
@@ -396,13 +404,21 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
           const start = new Date(single.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
           const end = new Date(single.getTime() + 24 * 60 * 60 * 1000).toISOString();
           query = query.gte('created_at', start).lt('created_at', end);
-        } else if (dateRange === 'last7days' || dateRange === 'last30days' || (dateRange === 'custom' && customFromDate && customToDate)) {
+        } else if (dateRange === 'last7days' || dateRange === 'last30days' || dateRange === 'lastmonth' || dateRange === 'last3months' || (dateRange === 'custom' && customFromDate && customToDate)) {
           let rangeDays = dateRange === 'last30days' ? 30 : 7;
           let periodStart: Date;
           let periodEnd: Date;
           if (dateRange === 'custom' && customFromDate && customToDate) {
             periodStart = new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate());
             periodEnd = new Date(customToDate.getFullYear(), customToDate.getMonth(), customToDate.getDate() + 1);
+            rangeDays = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (24 * 60 * 60 * 1000));
+          } else if (dateRange === 'lastmonth') {
+            periodStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+            periodEnd = new Date(today.getFullYear(), today.getMonth(), 1);
+            rangeDays = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (24 * 60 * 60 * 1000));
+          } else if (dateRange === 'last3months') {
+            periodStart = new Date(today.getFullYear(), today.getMonth() - 3, 1);
+            periodEnd = new Date(today.getFullYear(), today.getMonth(), 1);
             rangeDays = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (24 * 60 * 60 * 1000));
           } else {
             periodEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000);
@@ -707,6 +723,16 @@ useEffect(() => {
     } else if (dateRange === "last30days") {
       const monthAgo = new Date(new Date().getTime() - 30 * 24 * 60 * 60 * 1000);
       filename += `-${format(monthAgo, 'dd-MM-yyyy')}-to-${format(new Date(), 'dd-MM-yyyy')}`;
+    } else if (dateRange === "lastmonth") {
+      const now = new Date();
+      const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+      filename += `-${format(firstDayLastMonth, 'dd-MM-yyyy')}-to-${format(lastDayLastMonth, 'dd-MM-yyyy')}`;
+    } else if (dateRange === "last3months") {
+      const now = new Date();
+      const firstDayThreeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+      const lastDayPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+      filename += `-${format(firstDayThreeMonthsAgo, 'dd-MM-yyyy')}-to-${format(lastDayPrevMonth, 'dd-MM-yyyy')}`;
     } else if (dateRange === "custom" && customFromDate && customToDate) {
       filename += `-${format(customFromDate, 'dd-MM-yyyy')}-to-${format(customToDate, 'dd-MM-yyyy')}`;
     } else {
@@ -782,6 +808,16 @@ useEffect(() => {
     } else if (dateRange === "last30days") {
       const monthAgo = new Date(new Date().getTime() - 30 * 24 * 60 * 60 * 1000);
       filename += `-${format(monthAgo, 'dd-MM-yyyy')}-to-${format(new Date(), 'dd-MM-yyyy')}`;
+    } else if (dateRange === "lastmonth") {
+      const now = new Date();
+      const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+      filename += `-${format(firstDayLastMonth, 'dd-MM-yyyy')}-to-${format(lastDayLastMonth, 'dd-MM-yyyy')}`;
+    } else if (dateRange === "last3months") {
+      const now = new Date();
+      const firstDayThreeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+      const lastDayPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+      filename += `-${format(firstDayThreeMonthsAgo, 'dd-MM-yyyy')}-to-${format(lastDayPrevMonth, 'dd-MM-yyyy')}`;
     } else if (dateRange === "custom" && customFromDate && customToDate) {
       filename += `-${format(customFromDate, 'dd-MM-yyyy')}-to-${format(customToDate, 'dd-MM-yyyy')}`;
     } else {
@@ -911,6 +947,8 @@ useEffect(() => {
                   <SelectItem value="singleday">Single Day</SelectItem>
                   <SelectItem value="last7days">Last 7 Days</SelectItem>
                   <SelectItem value="last30days">Last 30 Days</SelectItem>
+                  <SelectItem value="lastmonth">Last Month</SelectItem>
+                  <SelectItem value="last3months">Last 3 Months</SelectItem>
                   <SelectItem value="custom">Custom Range</SelectItem>
                 </SelectContent>
               </Select>
@@ -1224,6 +1262,10 @@ useEffect(() => {
                       ? "Last 7 Days"
                       : dateRange === "last30days"
                         ? "Last 30 Days"
+                        : dateRange === "lastmonth"
+                          ? "Last Month"
+                          : dateRange === "last3months"
+                            ? "Last 3 Months"
                         : dateRange === "custom" && customFromDate && customToDate
                           ? `${format(customFromDate, "dd MMM yyyy")} - ${format(customToDate, "dd MMM yyyy")}`
                           : "Filtered Period"}
@@ -1311,6 +1353,70 @@ useEffect(() => {
 
               const now = new Date();
               const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+              // LAST MONTH
+              if (dateRange === "lastmonth") {
+                const periodStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                const periodEnd = new Date(today.getFullYear(), today.getMonth(), 1);
+                const prevPeriodStart = new Date(today.getFullYear(), today.getMonth() - 2, 1);
+                const prevPeriodEnd = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                const currentRevenue = getRevenueForRange(periodStart, periodEnd);
+                const prevRevenue = getRevenueForRange(prevPeriodStart, prevPeriodEnd);
+                const change = getChange(currentRevenue, prevRevenue);
+                return (
+                  <div className="space-y-1 mt-2">
+                    <div className="flex items-center text-xs">
+                      <span className="text-muted-foreground mr-1">Previous month:</span>
+                      <span className="font-semibold">₹{prevRevenue.toLocaleString()}</span>
+                      <Arrow change={change} />
+                      <span
+                        className={
+                          "ml-1 font-medium " +
+                          (change > 0
+                            ? "text-green-600"
+                            : change < 0
+                              ? "text-red-600"
+                              : "text-muted-foreground")
+                        }
+                      >
+                        {Math.abs(change).toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
+              // LAST 3 MONTHS
+              if (dateRange === "last3months") {
+                const periodStart = new Date(today.getFullYear(), today.getMonth() - 3, 1);
+                const periodEnd = new Date(today.getFullYear(), today.getMonth(), 1);
+                const prevPeriodStart = new Date(today.getFullYear(), today.getMonth() - 6, 1);
+                const prevPeriodEnd = new Date(today.getFullYear(), today.getMonth() - 3, 1);
+                const currentRevenue = getRevenueForRange(periodStart, periodEnd);
+                const prevRevenue = getRevenueForRange(prevPeriodStart, prevPeriodEnd);
+                const change = getChange(currentRevenue, prevRevenue);
+                return (
+                  <div className="space-y-1 mt-2">
+                    <div className="flex items-center text-xs">
+                      <span className="text-muted-foreground mr-1">Previous 3 months:</span>
+                      <span className="font-semibold">₹{prevRevenue.toLocaleString()}</span>
+                      <Arrow change={change} />
+                      <span
+                        className={
+                          "ml-1 font-medium " +
+                          (change > 0
+                            ? "text-green-600"
+                            : change < 0
+                              ? "text-red-600"
+                              : "text-muted-foreground")
+                        }
+                      >
+                        {Math.abs(change).toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
 
               // TODAY
               if (dateRange === "today") {
@@ -1581,6 +1687,10 @@ useEffect(() => {
                       ? "Last 7 Days"
                       : dateRange === "last30days"
                         ? "Last 30 Days"
+                        : dateRange === "lastmonth"
+                          ? "Last Month"
+                          : dateRange === "last3months"
+                            ? "Last 3 Months"
                         : dateRange === "custom" && customFromDate && customToDate
                           ? `${format(customFromDate, "dd MMM yyyy")} - ${format(customToDate, "dd MMM yyyy")}`
                           : "Filtered Period"}
@@ -1664,6 +1774,70 @@ useEffect(() => {
 
               const now = new Date();
               const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+              // LAST MONTH
+              if (dateRange === "lastmonth") {
+                const periodStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                const periodEnd = new Date(today.getFullYear(), today.getMonth(), 1);
+                const prevPeriodStart = new Date(today.getFullYear(), today.getMonth() - 2, 1);
+                const prevPeriodEnd = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                const currentCount = getCountForRange(periodStart, periodEnd);
+                const prevCount = getCountForRange(prevPeriodStart, prevPeriodEnd);
+                const change = getChange(currentCount, prevCount);
+                return (
+                  <div className="space-y-1 mt-2">
+                    <div className="flex items-center text-xs">
+                      <span className="text-muted-foreground mr-1">Previous month:</span>
+                      <span className="font-semibold">{prevCount}</span>
+                      <Arrow change={change} />
+                      <span
+                        className={
+                          "ml-1 font-medium " +
+                          (change > 0
+                            ? "text-green-600"
+                            : change < 0
+                              ? "text-red-600"
+                              : "text-muted-foreground")
+                        }
+                      >
+                        {Math.abs(change).toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
+              // LAST 3 MONTHS
+              if (dateRange === "last3months") {
+                const periodStart = new Date(today.getFullYear(), today.getMonth() - 3, 1);
+                const periodEnd = new Date(today.getFullYear(), today.getMonth(), 1);
+                const prevPeriodStart = new Date(today.getFullYear(), today.getMonth() - 6, 1);
+                const prevPeriodEnd = new Date(today.getFullYear(), today.getMonth() - 3, 1);
+                const currentCount = getCountForRange(periodStart, periodEnd);
+                const prevCount = getCountForRange(prevPeriodStart, prevPeriodEnd);
+                const change = getChange(currentCount, prevCount);
+                return (
+                  <div className="space-y-1 mt-2">
+                    <div className="flex items-center text-xs">
+                      <span className="text-muted-foreground mr-1">Previous 3 months:</span>
+                      <span className="font-semibold">{prevCount}</span>
+                      <Arrow change={change} />
+                      <span
+                        className={
+                          "ml-1 font-medium " +
+                          (change > 0
+                            ? "text-green-600"
+                            : change < 0
+                              ? "text-red-600"
+                              : "text-muted-foreground")
+                        }
+                      >
+                        {Math.abs(change).toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
 
               // TODAY
               if (dateRange === "today") {
@@ -2389,6 +2563,8 @@ useEffect(() => {
               {dateRange === "singleday" && "Selected day hourly sales"}
               {dateRange === "last7days" && "Last 7 days - aggregated hourly sales"}
               {dateRange === "last30days" && "Last 30 days - aggregated hourly sales"}
+              {dateRange === "lastmonth" && "Last month - aggregated hourly sales"}
+              {dateRange === "last3months" && "Last 3 months - aggregated hourly sales"}
               {dateRange === "custom" && "Custom period - aggregated hourly sales"}
             </p>
           </CardHeader>
@@ -2496,6 +2672,8 @@ useEffect(() => {
                         if (dateRange === "singleday" && customFromDate) return format(customFromDate, "dd MMM");
                         if (dateRange === "last7days") return "Last 7 Days";
                         if (dateRange === "last30days") return "Last 30 Days";
+                        if (dateRange === "lastmonth") return "Last Month";
+                        if (dateRange === "last3months") return "Last 3 Months";
                         if (dateRange === "custom" && (customFromDate || customToDate)) {
                           return `${format(customFromDate || new Date(), "dd MMM")} - ${format(customToDate || new Date(), "dd MMM")}`;
                         }
@@ -2557,6 +2735,32 @@ useEffect(() => {
                             vehicleCount: 0,
                             startDate: monthStart,
                             endDate: monthEnd
+                          });
+                        }
+                      } else if (dateRange === "lastmonth") {
+                        for (let i = 2; i <= 6; i++) {
+                          const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                          const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+                          periods.push({
+                            label: `${monthStart.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`,
+                            revenue: 0,
+                            vehicleCount: 0,
+                            startDate: monthStart,
+                            endDate: monthEnd
+                          });
+                        }
+                      } else if (dateRange === "last3months") {
+                        const monthsPerWindow = 3;
+                        for (let i = 1; i <= 5; i++) {
+                          const endMonthOffset = i * monthsPerWindow;
+                          const windowStart = new Date(now.getFullYear(), now.getMonth() - endMonthOffset - (monthsPerWindow - 1), 1);
+                          const windowEnd = new Date(now.getFullYear(), now.getMonth() - endMonthOffset + 1, 0);
+                          periods.push({
+                            label: `${windowStart.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })} - ${windowEnd.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`,
+                            revenue: 0,
+                            vehicleCount: 0,
+                            startDate: windowStart,
+                            endDate: windowEnd
                           });
                         }
                       } else if (dateRange === "custom" && customFromDate && customToDate) {
