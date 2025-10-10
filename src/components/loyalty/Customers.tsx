@@ -40,6 +40,51 @@ export function Customers() {
   const { user } = useAuth();
   const { toast } = useToast();
   const location = useLocation();
+  const formatDate = (input?: string | number | Date | null) => {
+    if (!input && input !== 0) return '';
+    // If it's already a Date
+    if (input instanceof Date) {
+      if (isNaN(input.getTime())) return '';
+      const day = String(input.getDate()).padStart(2, '0');
+      const month = String(input.getMonth() + 1).padStart(2, '0');
+      const year = input.getFullYear();
+      return `${day}/${month}/${year}`;
+    }
+    // If it's a number (timestamp)
+    if (typeof input === 'number') {
+      const d = new Date(input);
+      if (isNaN(d.getTime())) return '';
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    }
+    // It's a string
+    const str = String(input);
+    if (!str) return '';
+    // Prefer date-part extraction for ISO-like strings to avoid timezone shifts
+    const isoLike = str.match(/^\d{4}-\d{2}-\d{2}(?:T.*)?$/);
+    if (isoLike) {
+      const first10 = str.slice(0, 10);
+      const [y, m, d] = first10.split('-');
+      return `${d}/${m}/${y}`;
+    }
+    // Try ISO or other parseable formats
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    }
+    // As last resort, try taking first 10 chars if they look like yyyy-mm-dd
+    const first10 = str.slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(first10)) {
+      const [y, m, d2] = first10.split('-');
+      return `${d2}/${m}/${y}`;
+    }
+    return '';
+  };
   
   // Check if user is manager
   const isManager = String(user?.role || '').toLowerCase().includes('manager');
@@ -90,6 +135,10 @@ export function Customers() {
   const [showMarkVisit, setShowMarkVisit] = useState(false);
   const [visitNotes, setVisitNotes] = useState('');
   const [visitService, setVisitService] = useState('');
+  const [visitDate, setVisitDate] = useState('');
+  const [showEditVisit, setShowEditVisit] = useState(false);
+  const [editVisitDraft, setEditVisitDraft] = useState<{ id?: string; purchase_id?: string; service_type?: string; notes?: string; use_date?: string; original_use_date?: string }>({});
+  const [visitEdits, setVisitEdits] = useState<Record<string, { service_type: string; notes: string; use_date: string; original_use_date?: string; expanded: boolean }>>({});
   const [showMarkEntry, setShowMarkEntry] = useState(false);
   const [entryAmount, setEntryAmount] = useState('');
   const [entryService, setEntryService] = useState('');
@@ -813,16 +862,14 @@ export function Customers() {
         }
       }
 
-      // Fetch loyalty visits for all purchases
+      // Fetch loyalty visits for all purchases (no restrictive limit to avoid missing entries)
       if (subscriptionCustomers.length > 0) {
         const allPurchaseIds = subscriptionCustomers.map(p => p.id);
         const { data: loyaltyVisits } = await supabase
           .from('loyalty_visits')
           .select('id, purchase_id, visit_type, service_rendered, amount_charged, visit_time, payment_method')
           .in('purchase_id', allPurchaseIds)
-          .order('visit_time', { ascending: false })
-          .limit(50); // Limit to recent visits
-        
+          .order('visit_time', { ascending: false });
         const lvmap: Record<string, any[]> = {};
         (loyaltyVisits || []).forEach(lv => {
           if (!lvmap[lv.purchase_id]) lvmap[lv.purchase_id] = [];
@@ -1570,14 +1617,14 @@ export function Customers() {
           'Vehicle Brand': vehicle.Brand || '',
           'Vehicle Type': vehicle.type || '',
           'Status': item.status || '',
-          'Start Date': item.start_date ? new Date(item.start_date).toLocaleDateString() : '',
-          'Expiry Date': item.expiry_date ? new Date(item.expiry_date).toLocaleDateString() : '',
+          'Start Date': item.start_date ? formatDate(item.start_date) : '',
+          'Expiry Date': item.expiry_date ? formatDate(item.expiry_date) : '',
           'Remaining Visits': item.remaining_visits ?? '',
           'Total Value': item.total_value ? `₹${item.total_value}` : '',
           'Amount Paid': item.amount ? `₹${item.amount}` : '',
           'Credit Balance': creditAccount.balance ? `₹${creditAccount.balance}` : '',
           'Total Deposited': creditAccount.total_deposited ? `₹${creditAccount.total_deposited}` : '',
-          'Purchase Date': item.created_at ? new Date(item.created_at).toLocaleDateString() : '',
+          'Purchase Date': item.created_at ? formatDate(item.created_at) : '',
           'Payment Method': item.source_payment_method || '',
         };
       });
@@ -1764,7 +1811,7 @@ export function Customers() {
                                       })()} ({sp.status || 'active'})
                                     </span>
                                     <span className="text-green-700">
-                                      {sp.expiry_date ? new Date(sp.expiry_date).toLocaleDateString() : ''}
+                                      {formatDate(sp.expiry_date)}
                                     </span>
                                   </div>
                                 ))}
@@ -1987,6 +2034,8 @@ export function Customers() {
         </div>
       )}
 
+      {/* Removed modal; editing is inline in the Edit modal */}
+
       {/* Search and Filters */}
       <div className="flex flex-col gap-4 p-3 sm:p-4 bg-gradient-card rounded-xl border border-border">
         <div className="relative">
@@ -2095,7 +2144,7 @@ export function Customers() {
                   {customer.expiry_date && (
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Expiry Date:</span>
-                      <span className="text-foreground font-medium">{customer.expiry_date?.slice(0,10)}</span>
+                      <span className="text-foreground font-medium">{formatDate(customer.expiry_date)}</span>
                     </div>
                   )}
                   {customer.remaining_visits !== null && (
@@ -2117,7 +2166,7 @@ export function Customers() {
                         {(usageHistoryMap[customer.id] || []).slice(0, 5).map(u => (
                           <div key={u.id} className="text-xs text-muted-foreground flex justify-between">
                             <span>{u.service_type || 'full wash'}</span>
-                            <span>{u.use_date ? new Date(u.use_date).toLocaleDateString() : ''}</span>
+                            <span>{formatDate(u.use_date)}</span>
                           </div>
                         ))}
                         {!(usageHistoryMap[customer.id] || []).length && (
@@ -2127,33 +2176,48 @@ export function Customers() {
                     </div>
                   )}
                   
-                  {/* Recent Loyalty Visits */}
+                  {/* Recent Activity */}
                   <div className="mt-2">
                     <div className="text-xs font-medium text-foreground mb-1">Recent Activity</div>
                     <div className="space-y-1 max-h-28 overflow-auto">
-                      {(loyaltyVisitsMap[customer.id] || []).slice(0, 3).map(lv => (
-                        <div key={lv.id} className="text-xs text-muted-foreground flex justify-between items-center">
-                          <div className="flex items-center gap-1">
-                            <span className={`px-1 py-0.5 rounded text-xs ${
-                              lv.visit_type === 'redemption' ? 'bg-blue-100 text-blue-700' :
-                              lv.visit_type === 'payment' ? 'bg-green-100 text-green-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}>
-                              {lv.visit_type}
-                            </span>
-                            <span>{lv.service_rendered || 'Service'}</span>
-                          </div>
-                          <div className="text-right">
-                            {lv.amount_charged > 0 && <span>₹{lv.amount_charged}</span>}
-                            <div className="text-xs text-muted-foreground">
-                              {lv.visit_time ? new Date(lv.visit_time).toLocaleDateString() : ''}
+                      {(() => {
+                        const isVisitPlan = String(plan.type || '').toLowerCase() === 'visit' || String(plan.type || '').toLowerCase() === 'package';
+                        if (isVisitPlan) {
+                          const recents = (usageHistoryMap[customer.id] || []).slice(0, 3);
+                          if (!recents.length) return <div className="text-xs text-muted-foreground">No recent activity</div>;
+                          return recents.map(u => (
+                            <div key={u.id} className="text-xs text-muted-foreground flex justify-between items-center">
+                              <div className="flex items-center gap-1">
+                                <span className="px-1 py-0.5 rounded text-xs bg-blue-100 text-blue-700">redemption</span>
+                                <span>{u.service_type || 'Service'}</span>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-xs text-muted-foreground">{formatDate(u.use_date)}</div>
+                              </div>
+                            </div>
+                          ));
+                        }
+                        const recents = (loyaltyVisitsMap[customer.id] || []).slice(0, 3);
+                        if (!recents.length) return <div className="text-xs text-muted-foreground">No recent activity</div>;
+                        return recents.map(lv => (
+                          <div key={lv.id} className="text-xs text-muted-foreground flex justify-between items-center">
+                            <div className="flex items-center gap-1">
+                              <span className={`px-1 py-0.5 rounded text-xs ${
+                                lv.visit_type === 'redemption' ? 'bg-blue-100 text-blue-700' :
+                                lv.visit_type === 'payment' ? 'bg-green-100 text-green-700' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>
+                                {lv.visit_type}
+                              </span>
+                              <span>{lv.service_rendered || 'Service'}</span>
+                            </div>
+                            <div className="text-right">
+                              {lv.amount_charged > 0 && <span>₹{lv.amount_charged}</span>}
+                              <div className="text-xs text-muted-foreground">{formatDate(lv.visit_time)}</div>
                             </div>
                           </div>
-                        </div>
-                      ))}
-                      {!(loyaltyVisitsMap[customer.id] || []).length && (
-                        <div className="text-xs text-muted-foreground">No recent activity</div>
-                      )}
+                        ));
+                      })()}
                     </div>
                   </div>
                   
@@ -2274,7 +2338,7 @@ export function Customers() {
                   {(String(plan.type || '').toLowerCase() === 'package' || String(plan.type || '').toLowerCase() === 'visit') && 
                    customer.remaining_visits > 0 && 
                    customer.status === 'active' && (
-                    <Button size="sm" variant="outline" className="text-xs sm:text-sm flex-1 sm:flex-none" onClick={() => { setSelectedPurchase(customer); setShowMarkVisit(true); setVisitNotes(''); setVisitService('full wash'); }}>
+                  <Button size="sm" variant="outline" className="text-xs sm:text-sm flex-1 sm:flex-none" onClick={() => { setSelectedPurchase(customer); setShowMarkVisit(true); setVisitNotes(''); setVisitService('full wash'); setVisitDate(new Date().toISOString().slice(0,10)); }}>
                       Mark Visit
                     </Button>
                   )}
@@ -2376,8 +2440,8 @@ export function Customers() {
                           <div>Type: {plan.type || '-'}</div>
                           <div>Price: {plan.plan_amount ? `₹${plan.plan_amount}` : (plan.price ? `₹${plan.price}` : '-')}</div>
                           <div>Max Redemptions: {plan.max_redemptions ?? '-'}</div>
-                          <div>Start Date: {selectedPurchase.start_date ? new Date(selectedPurchase.start_date).toLocaleDateString() : '-'}</div>
-                          <div>Expiry: {selectedPurchase.expiry_date ? new Date(selectedPurchase.expiry_date).toLocaleDateString() : '-'}</div>
+                           <div>Start Date: {selectedPurchase.start_date ? formatDate(selectedPurchase.start_date) : '-'}</div>
+                           <div>Expiry: {selectedPurchase.expiry_date ? formatDate(selectedPurchase.expiry_date) : '-'}</div>
                           <div>Remaining Visits: {selectedPurchase.remaining_visits ?? '-'}</div>
                           <div>Total Value: {selectedPurchase.total_value ? `₹${selectedPurchase.total_value}` : '-'}</div>
                         </div>
@@ -2468,6 +2532,129 @@ export function Customers() {
                   setShowEditModal(false);
                 }}>Save</Button>
               </div>
+
+              {(() => {
+                const plan = planDetailsMap[selectedPurchase?.plan_id];
+                const isVisitPlan = String(plan?.type || '').toLowerCase() === 'visit' || String(plan?.type || '').toLowerCase() === 'package';
+                if (!isVisitPlan) return null;
+                const usages = usageHistoryMap[selectedPurchase.id] || [];
+                return (
+                  <div className="pt-4 border-t space-y-2">
+                    <div className="text-sm font-medium">Edit Entries</div>
+                    <div className="space-y-2 max-h-64 overflow-auto">
+                      {usages.length === 0 && (
+                        <div className="text-xs text-muted-foreground">No visits yet</div>
+                      )}
+                      {usages.map(u => {
+                        const ve = visitEdits[u.id] || { service_type: u.service_type || '', notes: u.notes || '', use_date: (u.use_date || '').slice(0,10), original_use_date: u.use_date || '', expanded: false };
+                        return (
+                          <div key={u.id} className="border rounded p-2">
+                            <div className="flex items-center justify-between gap-2 text-xs">
+                              <div className="min-w-0 flex-1 truncate">
+                                <span className="font-medium">{u.service_type || 'full wash'}</span>
+                                <span className="text-muted-foreground"> • </span>
+                             <span className="shrink-0">{formatDate(u.use_date)}</span>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setVisitEdits(prev => ({ ...prev, [u.id]: { ...ve, expanded: !ve.expanded } }));
+                                }}
+                              >
+                                {ve.expanded ? 'Close' : 'Edit'}
+                              </Button>
+                            </div>
+                            {ve.expanded && (
+                              <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                                <div>
+                                  <label className="block mb-1 font-medium">Service</label>
+                                  <Input value={ve.service_type} onChange={(e) => setVisitEdits(prev => ({ ...prev, [u.id]: { ...ve, service_type: e.target.value } }))} placeholder="e.g., Premium Wash" />
+                                </div>
+                                <div>
+                                  <label className="block mb-1 font-medium">Date</label>
+                                  <Input type="date" value={ve.use_date} onChange={(e) => setVisitEdits(prev => ({ ...prev, [u.id]: { ...ve, use_date: e.target.value } }))} />
+                                </div>
+                                <div>
+                                  <label className="block mb-1 font-medium">Notes</label>
+                                  <Input value={ve.notes} onChange={(e) => setVisitEdits(prev => ({ ...prev, [u.id]: { ...ve, notes: e.target.value } }))} placeholder="Optional" />
+                                </div>
+                                <div className="sm:col-span-3 flex justify-end gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setVisitEdits(prev => ({ ...prev, [u.id]: { ...ve, service_type: u.service_type || '', notes: u.notes || '', use_date: (u.use_date || '').slice(0,10), original_use_date: u.use_date || '', expanded: false } }));
+                                    }}
+                                  >
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    onClick={async () => {
+                                      try {
+                                        const updatedIso = ve.use_date ? new Date(ve.use_date + 'T00:00:00').toISOString() : ve.original_use_date;
+                                        await supabase
+                                          .from('package_usages')
+                                          .update({ service_type: ve.service_type || null, notes: ve.notes || null, use_date: updatedIso || null })
+                                          .eq('id', u.id);
+                                        // update matching loyalty row by old timestamp
+                                        if (ve.original_use_date) {
+                                          // Match by date range on the original date to avoid millisecond mismatches
+                                          const start = new Date(ve.original_use_date);
+                                          const end = new Date(start);
+                                          end.setHours(23,59,59,999);
+                                          const { data: loyaltyRows } = await supabase
+                                            .from('loyalty_visits')
+                                            .select('id, visit_time')
+                                            .eq('purchase_id', selectedPurchase.id)
+                                            .gte('visit_time', start.toISOString())
+                                            .lte('visit_time', end.toISOString())
+                                            .order('visit_time', { ascending: false })
+                                            .limit(1);
+                                          const loyaltyId = loyaltyRows && loyaltyRows[0]?.id;
+                                          if (loyaltyId) {
+                                            await supabase
+                                              .from('loyalty_visits')
+                                              .update({ service_rendered: ve.service_type || null, visit_time: updatedIso || null })
+                                              .eq('id', loyaltyId);
+                                          }
+                                        }
+                                        // local updates
+                                        setUsageHistoryMap(prev => {
+                                          const list = prev[selectedPurchase.id] || [];
+                                          const newList = list.map(x => x.id === u.id ? { ...x, service_type: ve.service_type || x.service_type, notes: ve.notes || x.notes, use_date: updatedIso || x.use_date } : x);
+                                          return { ...prev, [selectedPurchase.id]: newList };
+                                        });
+                                        if (ve.original_use_date) {
+                                          setLoyaltyVisitsMap(prev => {
+                                            const list = prev[selectedPurchase.id] || [];
+                                            const idx = list.findIndex(lv => lv.visit_time === ve.original_use_date);
+                                            if (idx === -1) return prev;
+                                            const newList = [...list];
+                                            newList[idx] = { ...newList[idx], service_rendered: ve.service_type || newList[idx].service_rendered, visit_time: updatedIso || newList[idx].visit_time } as any;
+                                            return { ...prev, [selectedPurchase.id]: newList };
+                                          });
+                                        }
+                                        setVisitEdits(prev => ({ ...prev, [u.id]: { ...ve, expanded: false, original_use_date: updatedIso || ve.original_use_date } }));
+                                        toast({ title: 'Entry updated' });
+                                      } catch (e) {
+                                        toast({ title: 'Update failed', variant: 'destructive' });
+                                      }
+                                    }}
+                                  >
+                                    Save
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         </div>
@@ -2683,6 +2870,10 @@ export function Customers() {
                 <Input value={visitService} onChange={(e) => setVisitService(e.target.value)} placeholder="e.g., Premium Wash" />
               </div>
               <div>
+                <label className="block mb-1 font-medium">Date</label>
+                <Input type="date" value={visitDate} onChange={(e) => setVisitDate(e.target.value)} />
+              </div>
+              <div>
                 <label className="block mb-1 font-medium">Notes</label>
                 <Input value={visitNotes} onChange={(e) => setVisitNotes(e.target.value)} placeholder="Optional notes" />
               </div>
@@ -2690,12 +2881,14 @@ export function Customers() {
                 <Button variant="outline" onClick={() => setShowMarkVisit(false)}>Close</Button>
                 <Button onClick={async () => {
                   try {
+                    const selectedDateIso = visitDate ? new Date(visitDate + 'T00:00:00').toISOString() : new Date().toISOString();
                     const payload: any = {
                       purchase_id: selectedPurchase.id,
                       service_type: visitService || null,
                       service_value: null,
                       created_by: user?.id || null,
                       notes: visitNotes || null,
+                      use_date: selectedDateIso,
                     };
                     const { error: insErr } = await supabase
                       .from('package_usages')
@@ -2713,6 +2906,7 @@ export function Customers() {
                       amount_charged: 0, // Visit-based plans don't charge per visit
                       payment_method: 'subscription',
                       created_by: user?.id || null,
+                      visit_time: selectedDateIso,
                     };
                     const { error: loyaltyErr } = await supabase
                       .from('loyalty_visits')
@@ -2739,7 +2933,7 @@ export function Customers() {
                     setUsageHistoryMap(prev => ({
                       ...prev,
                       [selectedPurchase.id]: [
-                        { id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), purchase_id: selectedPurchase.id, service_type: visitService || 'full wash', use_date: new Date().toISOString(), notes: visitNotes || null },
+                        { id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), purchase_id: selectedPurchase.id, service_type: visitService || 'full wash', use_date: selectedDateIso, notes: visitNotes || null },
                         ...((prev[selectedPurchase.id] || []))
                       ]
                     }));
@@ -2748,7 +2942,7 @@ export function Customers() {
                     setLoyaltyVisitsMap(prev => ({
                       ...prev,
                       [selectedPurchase.id]: [
-                        { id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), purchase_id: selectedPurchase.id, visit_type: 'redemption', service_rendered: visitService || 'full wash', amount_charged: 0, visit_time: new Date().toISOString(), payment_method: 'subscription' },
+                        { id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), purchase_id: selectedPurchase.id, visit_type: 'redemption', service_rendered: visitService || 'full wash', amount_charged: 0, visit_time: selectedDateIso, payment_method: 'subscription' },
                         ...((prev[selectedPurchase.id] || []))
                       ]
                     }));
