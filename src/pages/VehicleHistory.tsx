@@ -35,6 +35,7 @@ interface VehicleHistory {
   created_at: string;
   exit_time?: string;
   log_type: 'Manual';
+  payment_mode?: string;
 }
 
 interface VehicleStats {
@@ -201,7 +202,8 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
         manager: log.manager || 'Unknown',
         created_at: log.created_at,
         exit_time: log.exit_time,
-        log_type: 'Manual' as const
+        log_type: 'Manual' as const,
+        payment_mode: log.payment_mode
       })) || [];
 
       setVehicleHistory(processedHistory);
@@ -817,7 +819,14 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
                       </TableCell>
                       <TableCell className="font-medium">{visit.service}</TableCell>
                       <TableCell className="font-semibold text-financial">
-                        {visit.amount > 0 ? `₹${visit.amount.toLocaleString()}` : '-'}
+                        <div className="flex flex-col gap-1">
+                          <div>{visit.amount > 0 ? `₹${visit.amount.toLocaleString()}` : '-'}</div>
+                          {visit.payment_mode === 'subscription' && (
+                            <Badge variant="secondary" className="text-xs w-fit">
+                              Subscription
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <Badge variant={visit.entry_type === "Workshop" ? "default" : visit.entry_type === "Automatic" ? "outline" : "secondary"}>
