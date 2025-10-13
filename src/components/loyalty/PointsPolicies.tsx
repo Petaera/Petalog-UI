@@ -151,7 +151,7 @@ export function PointsPolicies() {
       let query = supabase
         .from('loyalty_point_policies')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('start_at', { ascending: false });
 
       if (locationIds.length > 0) {
         query = query.or(`location_id.in.(${locationIds.join(',')}),location_id.is.null`);

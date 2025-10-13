@@ -15,7 +15,8 @@ import {
   Crown,
   Clock,
   Zap,
-  Coins
+  Coins,
+  X
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -158,6 +159,8 @@ export function Customers() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteTargetPurchase, setDeleteTargetPurchase] = useState<any | null>(null);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showPointsHistoryModal, setShowPointsHistoryModal] = useState(false);
+  const [selectedCustomerForPoints, setSelectedCustomerForPoints] = useState<any | null>(null);
   const [exportFilters, setExportFilters] = useState({
     locationId: '',
     planType: '',
@@ -2106,17 +2109,29 @@ export function Customers() {
       </div>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
         {[
-          { label: 'Total Customers', value: filteredCustomers.length, color: 'primary' },
-          { label: 'Active', value: subscriptionCustomers.filter(c => String(c.status || '').toLowerCase() === 'active').length, color: 'success' },
-          { label: 'Expiring Soon', value: subscriptionCustomers.filter(c => { const s = String(c.status || '').toLowerCase(); return s === 'expiring soon' || s === 'expiringsoon'; }).length, color: 'warning' },
-          { label: 'Expired', value: subscriptionCustomers.filter(c => String(c.status || '').toLowerCase() === 'expired').length, color: 'destructive' }
+          { label: 'Total Customers', value: filteredCustomers.length, color: 'primary', icon: null },
+          { label: 'Active', value: subscriptionCustomers.filter(c => String(c.status || '').toLowerCase() === 'active').length, color: 'success', icon: null },
+          { label: 'Expiring Soon', value: subscriptionCustomers.filter(c => { const s = String(c.status || '').toLowerCase(); return s === 'expiring soon' || s === 'expiringsoon'; }).length, color: 'warning', icon: null },
+          { label: 'Expired', value: subscriptionCustomers.filter(c => String(c.status || '').toLowerCase() === 'expired').length, color: 'destructive', icon: null },
+          { 
+            label: 'Total Points', 
+            value: Object.values(pointsAccountMap).reduce((sum, acc) => sum + Number(acc.balance_points || 0), 0).toLocaleString() + ' pts',
+            color: 'purple-600',
+            icon: Coins,
+            gradient: true
+          }
         ].map((stat, index) => (
-          <Card key={stat.label} className="animate-slide-up" style={{ animationDelay: `${index * 100}ms` }}>
+          <Card 
+            key={stat.label} 
+            className={`animate-slide-up ${stat.gradient ? 'bg-gradient-to-br from-purple-50 to-blue-50 border-purple-200' : ''}`}
+            style={{ animationDelay: `${index * 100}ms` }}
+          >
             <CardContent className="p-3 sm:p-4 text-center">
-              <div className={`text-xl sm:text-2xl font-bold text-${stat.color} mb-1`}>{stat.value}</div>
-              <div className="text-xs sm:text-sm text-muted-foreground">{stat.label}</div>
+              {stat.icon && <stat.icon className="w-5 h-5 text-purple-600 mx-auto mb-2" />}
+              <div className={`text-xl sm:text-2xl font-bold ${stat.gradient ? 'text-purple-900' : `text-${stat.color}`} mb-1`}>{stat.value}</div>
+              <div className={`text-xs sm:text-sm ${stat.gradient ? 'text-purple-700' : 'text-muted-foreground'}`}>{stat.label}</div>
             </CardContent>
           </Card>
         ))}
@@ -2156,7 +2171,16 @@ export function Customers() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => { setSelectedPurchase(customer); setShowViewModal(true); }}>View</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => { setSelectedPurchase(customer); setShowViewModal(true); }}>View Details</DropdownMenuItem>
+                      {pointsAccountMap[customer.customer_id] && (
+                        <DropdownMenuItem onClick={() => {
+                          setSelectedCustomerForPoints(customer);
+                          setShowPointsHistoryModal(true);
+                        }}>
+                          <Coins className="w-4 h-4 mr-2 text-purple-600" />
+                          View Points History
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem onClick={() => {
                         setSelectedPurchase(customer);
                         const c = customerDetailsMap[customer.customer_id] || {};
@@ -3480,6 +3504,151 @@ export function Customers() {
                 </Button>
               </div>
             </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Points History Modal */}
+      {showPointsHistoryModal && selectedCustomerForPoints && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 transition-all duration-300 animate-fade-in p-4" onClick={() => setShowPointsHistoryModal(false)}>
+          <Card className="w-full max-w-3xl max-h-[90vh] p-0 overflow-hidden shadow-2xl animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="px-4 sm:px-6 py-4 border-b bg-gradient-to-r from-purple-50 to-blue-50">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
+                    <Coins className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg sm:text-xl font-bold text-purple-900">Loyalty Points History</h2>
+                    <p className="text-sm text-purple-700">
+                      {customerDetailsMap[selectedCustomerForPoints.customer_id]?.name || 'Customer'} - 
+                      {customerDetailsMap[selectedCustomerForPoints.customer_id]?.phone || ''}
+                    </p>
+                  </div>
+                </div>
+                <Button variant="ghost" onClick={() => setShowPointsHistoryModal(false)}>
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+            
+            <CardContent className="p-4 sm:p-6 space-y-4 overflow-auto max-h-[calc(90vh-180px)]">
+              {/* Points Summary */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <Card className="bg-gradient-to-br from-purple-50 to-blue-50 border-purple-200">
+                  <CardContent className="p-4 text-center">
+                    <div className="text-2xl font-bold text-purple-900 mb-1">
+                      {Number(pointsAccountMap[selectedCustomerForPoints.customer_id]?.balance_points || 0).toLocaleString()}
+                    </div>
+                    <div className="text-xs text-purple-700">Current Balance</div>
+                  </CardContent>
+                </Card>
+                
+                <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
+                  <CardContent className="p-4 text-center">
+                    <div className="text-2xl font-bold text-green-900 mb-1">
+                      {Number(pointsAccountMap[selectedCustomerForPoints.customer_id]?.lifetime_earned || 0).toLocaleString()}
+                    </div>
+                    <div className="text-xs text-green-700">Lifetime Earned</div>
+                  </CardContent>
+                </Card>
+                
+                <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 border-blue-200">
+                  <CardContent className="p-4 text-center">
+                    <div className="text-2xl font-bold text-blue-900 mb-1">
+                      {pointsLedgerMap[selectedCustomerForPoints.customer_id]?.length || 0}
+                    </div>
+                    <div className="text-xs text-blue-700">Total Transactions</div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Transaction History */}
+              <div>
+                <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-purple-600" />
+                  Transaction History
+                </h3>
+                
+                {pointsLedgerMap[selectedCustomerForPoints.customer_id] && pointsLedgerMap[selectedCustomerForPoints.customer_id].length > 0 ? (
+                  <div className="space-y-2">
+                    {pointsLedgerMap[selectedCustomerForPoints.customer_id].map((entry: any, index: number) => {
+                      const isPositive = entry.points > 0;
+                      const entryTypeColors: Record<string, string> = {
+                        earn: 'bg-green-100 text-green-800 border-green-300',
+                        spend: 'bg-red-100 text-red-800 border-red-300',
+                        adjust: isPositive ? 'bg-blue-100 text-blue-800 border-blue-300' : 'bg-orange-100 text-orange-800 border-orange-300',
+                        expire: 'bg-gray-100 text-gray-800 border-gray-300',
+                        reversal: 'bg-purple-100 text-purple-800 border-purple-300'
+                      };
+                      
+                      return (
+                        <Card key={entry.id} className="hover:shadow-md transition-shadow">
+                          <CardContent className="p-4">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Badge 
+                                    variant="outline" 
+                                    className={`text-xs font-medium ${entryTypeColors[entry.entry_type] || 'bg-gray-100 text-gray-800'}`}
+                                  >
+                                    {entry.entry_type.toUpperCase()}
+                                  </Badge>
+                                  <span className="text-xs text-muted-foreground">
+                                    {new Date(entry.created_at).toLocaleString('en-IN', {
+                                      day: '2-digit',
+                                      month: 'short',
+                                      year: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })}
+                                  </span>
+                                </div>
+                                
+                                <div className="text-sm text-foreground mb-1">
+                                  {entry.note || 'No description'}
+                                </div>
+                                
+                                {entry.currency_amount && (
+                                  <div className="text-xs text-muted-foreground">
+                                    Transaction Amount: ₹{Number(entry.currency_amount).toLocaleString()}
+                                  </div>
+                                )}
+                              </div>
+                              
+                              <div className="text-right">
+                                <div className={`text-xl font-bold ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                                  {isPositive ? '+' : ''}{entry.points}
+                                </div>
+                                <div className="text-xs text-muted-foreground">points</div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 bg-muted/30 rounded-lg">
+                    <Coins className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+                    <p className="text-muted-foreground">No points transactions yet</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+            
+            <div className="px-4 sm:px-6 py-4 border-t bg-muted/30">
+              <div className="flex justify-between items-center">
+                <div className="text-xs text-muted-foreground">
+                  Last activity: {pointsAccountMap[selectedCustomerForPoints.customer_id]?.last_activity_at 
+                    ? new Date(pointsAccountMap[selectedCustomerForPoints.customer_id].last_activity_at).toLocaleString('en-IN')
+                    : 'Never'}
+                </div>
+                <Button variant="outline" onClick={() => setShowPointsHistoryModal(false)}>
+                  Close
+                </Button>
+              </div>
+            </div>
           </Card>
         </div>
       )}
