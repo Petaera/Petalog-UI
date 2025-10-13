@@ -14,7 +14,8 @@ import {
   MoreHorizontal,
   Crown,
   Clock,
-  Zap
+  Zap,
+  Coins
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -121,6 +122,8 @@ export function Customers() {
   const [creditAccountMap, setCreditAccountMap] = useState<Record<string, { id: string; balance: number; total_deposited: number }>>({});
   const [usageHistoryMap, setUsageHistoryMap] = useState<Record<string, Array<{ id: string; purchase_id: string; service_type: string | null; use_date: string | null; notes: string | null }>>>({});
   const [loyaltyVisitsMap, setLoyaltyVisitsMap] = useState<Record<string, Array<{ id: string; visit_type: string; service_rendered: string | null; amount_charged: number; visit_time: string | null; payment_method: string | null }>>>({});
+  const [pointsAccountMap, setPointsAccountMap] = useState<Record<string, { id: string; balance_points: number; lifetime_earned: number; last_activity_at: string | null }>>({});
+  const [pointsLedgerMap, setPointsLedgerMap] = useState<Record<string, Array<{ id: string; entry_type: string; points: number; currency_amount: number | null; note: string | null; created_at: string }>>>({});
   const [showViewModal, setShowViewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedPurchase, setSelectedPurchase] = useState<any | null>(null);
@@ -834,6 +837,46 @@ export function Customers() {
         const cmap: Record<string, any> = {};
         (credits || []).forEach((r: any) => { cmap[r.customer_id] = { id: r.id, balance: Number(r.balance || 0), total_deposited: Number(r.total_deposited || 0) }; });
         setCreditAccountMap(cmap);
+      }
+
+      // Fetch loyalty points accounts for these customers
+      if (customerIds.length > 0) {
+        const { data: pointsAccounts } = await supabase
+          .from('loyalty_point_accounts')
+          .select('id, customer_id, balance_points, lifetime_earned, last_activity_at')
+          .in('customer_id', customerIds);
+        const pmap: Record<string, any> = {};
+        (pointsAccounts || []).forEach((r: any) => { 
+          pmap[r.customer_id] = { 
+            id: r.id, 
+            balance_points: Number(r.balance_points || 0), 
+            lifetime_earned: Number(r.lifetime_earned || 0),
+            last_activity_at: r.last_activity_at 
+          }; 
+        });
+        setPointsAccountMap(pmap);
+
+        // Fetch points ledger for these accounts
+        const accountIds = pointsAccounts?.map(a => a.id).filter(Boolean) || [];
+        if (accountIds.length > 0) {
+          const { data: ledger } = await supabase
+            .from('loyalty_point_ledger')
+            .select('id, account_id, entry_type, points, currency_amount, note, created_at')
+            .in('account_id', accountIds)
+            .order('created_at', { ascending: false })
+            .limit(100);
+          
+          const lmap: Record<string, any[]> = {};
+          (ledger || []).forEach(entry => {
+            // Find customer_id from account_id
+            const account = pointsAccounts?.find(a => a.id === entry.account_id);
+            if (account) {
+              if (!lmap[account.customer_id]) lmap[account.customer_id] = [];
+              lmap[account.customer_id].push(entry);
+            }
+          });
+          setPointsLedgerMap(lmap);
+        }
       }
 
       // Fetch visit/package usage histories for current purchases
@@ -2159,6 +2202,15 @@ export function Customers() {
                       <span className={`${Number(creditAccountMap[customer.customer_id]?.balance ?? 0) === 0 ? 'text-red-600' : 'text-success'} font-medium`}>₹{(creditAccountMap[customer.customer_id]?.balance ?? 0).toLocaleString()}</span>
                     </div>
                   )}
+                  {pointsAccountMap[customer.customer_id] && (
+                    <div className="flex items-center justify-between bg-gradient-to-r from-blue-50 to-purple-50 p-2 rounded-lg border border-blue-200">
+                      <div className="flex items-center gap-2">
+                        <Coins className="w-4 h-4 text-blue-600" />
+                        <span className="text-blue-700 font-medium text-sm">Points:</span>
+                      </div>
+                      <span className="text-blue-900 font-bold">{Number(pointsAccountMap[customer.customer_id].balance_points || 0).toLocaleString()} pts</span>
+                    </div>
+                  )}
                   {(String(plan.type || '').toLowerCase() === 'package' || String(plan.type || '').toLowerCase() === 'visit') && (
                     <div className="mt-2">
                       <div className="text-xs font-medium text-foreground mb-1">Visit History</div>
@@ -2472,6 +2524,51 @@ export function Customers() {
                             <div>Plan Multiplier: {plan.multiplier ? `${plan.multiplier}x` : '-'}</div>
                             <div>Plan Amount: {plan.plan_amount ? `₹${plan.plan_amount}` : '-'}</div>
                           </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                    {pointsAccountMap[selectedPurchase.customer_id] && (
+                      <Card className="bg-gradient-to-br from-blue-50 to-purple-50 border border-blue-200">
+                        <CardHeader>
+                          <div className="font-semibold text-blue-900 flex items-center gap-2">
+                            <Coins className="w-4 h-4" />
+                            Loyalty Points
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-sm grid grid-cols-2 gap-3">
+                            <div className="bg-white/60 p-3 rounded-lg">
+                              <div className="text-xs text-blue-600 mb-1">Current Balance</div>
+                              <div className="font-bold text-blue-900 text-lg">{Number(pointsAccountMap[selectedPurchase.customer_id].balance_points || 0).toLocaleString()} pts</div>
+                            </div>
+                            <div className="bg-white/60 p-3 rounded-lg">
+                              <div className="text-xs text-blue-600 mb-1">Lifetime Earned</div>
+                              <div className="font-bold text-blue-900 text-lg">{Number(pointsAccountMap[selectedPurchase.customer_id].lifetime_earned || 0).toLocaleString()} pts</div>
+                            </div>
+                          </div>
+                          {pointsLedgerMap[selectedPurchase.customer_id] && pointsLedgerMap[selectedPurchase.customer_id].length > 0 && (
+                            <div className="mt-4">
+                              <div className="text-xs font-semibold text-blue-700 mb-2">Recent Activity</div>
+                              <div className="space-y-2 max-h-48 overflow-y-auto">
+                                {pointsLedgerMap[selectedPurchase.customer_id].slice(0, 5).map((entry: any) => (
+                                  <div key={entry.id} className="flex items-center justify-between text-xs bg-white/60 p-2 rounded">
+                                    <div className="flex items-center gap-2">
+                                      <Badge 
+                                        variant={entry.entry_type === 'earn' ? 'default' : entry.entry_type === 'spend' ? 'secondary' : 'outline'}
+                                        className="text-xs"
+                                      >
+                                        {entry.entry_type}
+                                      </Badge>
+                                      <span className="text-blue-800">{entry.note || '-'}</span>
+                                    </div>
+                                    <div className={`font-medium ${entry.points > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                      {entry.points > 0 ? '+' : ''}{entry.points} pts
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </CardContent>
                       </Card>
                     )}

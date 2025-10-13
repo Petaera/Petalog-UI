@@ -17,7 +17,9 @@ import {
   CreditCard,
   MapPin,
   Target,
-  AlertCircle
+  AlertCircle,
+  Coins,
+  Crown
 } from 'lucide-react';
 
 export function Analytics() {
@@ -41,7 +43,11 @@ export function Analytics() {
     customerLifetime: [] as Array<{ segment: string; value: number; count: number }>,
     expiringPlans: 0,
     creditBalance: 0,
-    totalCustomers: 0
+    totalCustomers: 0,
+    totalPointsDistributed: 0,
+    activePointsBalance: 0,
+    topPointsEarners: [] as Array<{ customer_name: string; phone: string; points: number; lifetime_earned: number }>,
+    pointsDistribution: [] as Array<{ range: string; count: number; total_points: number }>
   });
   const [isLoading, setIsLoading] = useState(true);
   const [dateRange, setDateRange] = useState('30'); // days
@@ -270,6 +276,66 @@ export function Analytics() {
           creditBalance = (creditAccounts || []).reduce((sum, acc) => sum + Number(acc.balance || 0), 0);
         }
 
+        // Loyalty Points Analytics
+        let totalPointsDistributed = 0;
+        let activePointsBalance = 0;
+        let topPointsEarners: Array<{ customer_name: string; phone: string; points: number; lifetime_earned: number }> = [];
+        let pointsDistribution: Array<{ range: string; count: number; total_points: number }> = [];
+        
+        if (customerIds.length > 0) {
+          const { data: pointsAccounts } = await supabase
+            .from('loyalty_point_accounts')
+            .select('customer_id, balance_points, lifetime_earned')
+            .in('customer_id', customerIds);
+          
+          if (pointsAccounts && pointsAccounts.length > 0) {
+            totalPointsDistributed = pointsAccounts.reduce((sum, acc) => sum + Number(acc.lifetime_earned || 0), 0);
+            activePointsBalance = pointsAccounts.reduce((sum, acc) => sum + Number(acc.balance_points || 0), 0);
+            
+            // Top points earners
+            const { data: customers } = await supabase
+              .from('customers')
+              .select('id, name, phone')
+              .in('id', pointsAccounts.map(p => p.customer_id));
+            
+            const customerMap = new Map(customers?.map(c => [c.id, c]) || []);
+            
+            topPointsEarners = pointsAccounts
+              .sort((a, b) => Number(b.lifetime_earned || 0) - Number(a.lifetime_earned || 0))
+              .slice(0, 5)
+              .map(acc => {
+                const customer = customerMap.get(acc.customer_id);
+                return {
+                  customer_name: customer?.name || 'Unknown',
+                  phone: customer?.phone || '',
+                  points: Number(acc.balance_points || 0),
+                  lifetime_earned: Number(acc.lifetime_earned || 0)
+                };
+              });
+            
+            // Points distribution by range
+            const ranges = [
+              { min: 0, max: 100, label: '0-100' },
+              { min: 101, max: 500, label: '101-500' },
+              { min: 501, max: 1000, label: '501-1K' },
+              { min: 1001, max: 5000, label: '1K-5K' },
+              { min: 5001, max: Infinity, label: '5K+' }
+            ];
+            
+            pointsDistribution = ranges.map(range => {
+              const accountsInRange = pointsAccounts.filter(acc => 
+                Number(acc.balance_points || 0) >= range.min && 
+                Number(acc.balance_points || 0) <= range.max
+              );
+              return {
+                range: range.label,
+                count: accountsInRange.length,
+                total_points: accountsInRange.reduce((sum, acc) => sum + Number(acc.balance_points || 0), 0)
+              };
+            }).filter(r => r.count > 0);
+          }
+        }
+
         setAnalyticsData({
           totalRevenue,
           activeSubscriptions,
@@ -288,7 +354,11 @@ export function Analytics() {
           customerLifetime: [], // Would need more complex calculation
           expiringPlans,
           creditBalance,
-          totalCustomers
+          totalCustomers,
+          totalPointsDistributed,
+          activePointsBalance,
+          topPointsEarners,
+          pointsDistribution
         });
 
       } catch (error) {
@@ -611,6 +681,142 @@ export function Analytics() {
           </div>
         </CardContent>
       </Card>
+          )}
+
+          {/* Loyalty Points Analytics Section */}
+          {(analyticsData.totalPointsDistributed > 0 || analyticsData.topPointsEarners.length > 0) && (
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
+                <Coins className="w-6 h-6 text-purple-600" />
+                Loyalty Points Analytics
+              </h2>
+              
+              {/* Points Metrics */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Card className="animate-slide-up bg-gradient-to-br from-purple-50 to-blue-50">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <Coins className="w-10 h-10 text-purple-600" />
+                      <span className="text-sm font-medium text-purple-600">Lifetime</span>
+                    </div>
+                    <div className="text-3xl font-bold text-purple-900 mb-1">
+                      {analyticsData.totalPointsDistributed.toLocaleString()} pts
+                    </div>
+                    <div className="text-sm text-purple-700">Total Points Distributed</div>
+                  </CardContent>
+                </Card>
+                
+                <Card className="animate-slide-up bg-gradient-to-br from-blue-50 to-cyan-50">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <TrendingUp className="w-10 h-10 text-blue-600" />
+                      <span className="text-sm font-medium text-blue-600">Active</span>
+                    </div>
+                    <div className="text-3xl font-bold text-blue-900 mb-1">
+                      {analyticsData.activePointsBalance.toLocaleString()} pts
+                    </div>
+                    <div className="text-sm text-blue-700">Active Points Balance</div>
+                  </CardContent>
+                </Card>
+                
+                <Card className="animate-slide-up bg-gradient-to-br from-green-50 to-emerald-50">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <Users className="w-10 h-10 text-green-600" />
+                      <span className="text-sm font-medium text-green-600">Engaged</span>
+                    </div>
+                    <div className="text-3xl font-bold text-green-900 mb-1">
+                      {analyticsData.topPointsEarners.length}
+                    </div>
+                    <div className="text-sm text-green-700">Top Points Holders</div>
+                  </CardContent>
+                </Card>
+              </div>
+              
+              {/* Points Distribution and Top Earners */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Top Points Earners */}
+                <Card className="animate-fade-in">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Crown className="w-5 h-5 text-yellow-600" />
+                      Top Points Earners
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {analyticsData.topPointsEarners.length > 0 ? (
+                        analyticsData.topPointsEarners.map((earner, index) => (
+                          <div key={index} className="flex items-center justify-between p-3 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white font-bold text-sm">
+                                {index + 1}
+                              </div>
+                              <div>
+                                <div className="font-medium text-foreground">{earner.customer_name}</div>
+                                <div className="text-xs text-muted-foreground">{earner.phone}</div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-lg font-bold text-purple-900">{earner.points.toLocaleString()}</div>
+                              <div className="text-xs text-purple-600">{earner.lifetime_earned.toLocaleString()} lifetime</div>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center text-muted-foreground py-8">
+                          <Coins className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+                          <p>No points data available</p>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                {/* Points Distribution */}
+                <Card className="animate-fade-in">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <BarChart3 className="w-5 h-5 text-blue-600" />
+                      Points Distribution
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {analyticsData.pointsDistribution.length > 0 ? (
+                        analyticsData.pointsDistribution.map((dist, index) => {
+                          const maxCount = Math.max(...analyticsData.pointsDistribution.map(d => d.count));
+                          const widthPercent = (dist.count / maxCount) * 100;
+                          
+                          return (
+                            <div key={index} className="space-y-1">
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="font-medium text-foreground">{dist.range} points</span>
+                                <span className="text-muted-foreground">{dist.count} customers</span>
+                              </div>
+                              <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                                <div 
+                                  className="h-full bg-gradient-to-r from-purple-500 to-blue-500 rounded-full transition-all duration-500"
+                                  style={{ width: `${widthPercent}%` }}
+                                ></div>
+                              </div>
+                              <div className="text-xs text-muted-foreground text-right">
+                                {dist.total_points.toLocaleString()} total points
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="text-center text-muted-foreground py-8">
+                          <BarChart3 className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+                          <p>No distribution data available</p>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
           )}
         </>
       )}

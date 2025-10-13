@@ -36,6 +36,7 @@ import { SubscriptionSchemes } from "./components/loyalty/SubscriptionSchemes";
 import { CreateSchemeWizard } from "./components/loyalty/CreateSchemeWizard";
 import { Customers } from "./components/loyalty/Customers";
 import { Analytics } from "./components/loyalty/Analytics";
+import { PointsPolicies } from "./components/loyalty/PointsPolicies";
 import { LoyaltyLayout } from "./components/loyalty/LoyaltyLayout";
 
 // Payroll pages
@@ -321,6 +322,7 @@ const App = () => {
                  <Route path="schemes" element={<SubscriptionSchemes />} />
                  <Route path="create" element={<CreateSchemeWizard onComplete={() => {}} />} />
                  <Route path="edit/:id" element={<CreateSchemeWizard onComplete={() => {}} />} />
+                 <Route path="points" element={<PointsPolicies />} />
                  <Route path="customers" element={<Customers />} />
                  <Route path="analytics" element={<Analytics />} />
                </Route>

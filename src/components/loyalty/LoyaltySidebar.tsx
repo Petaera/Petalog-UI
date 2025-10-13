@@ -11,7 +11,8 @@ import {
   Sparkles,
   ArrowLeft,
   Home,
-  Menu
+  Menu,
+  Coins
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -39,6 +40,14 @@ const allSidebarItems = [
     icon: Plus,
     path: '/loyalty/create',
     description: 'Setup Wizard',
+    roles: ['owner'] // Owner only
+  },
+  {
+    id: 'points',
+    label: 'Points Management',
+    icon: Coins,
+    path: '/loyalty/points',
+    description: 'Earning Policies',
     roles: ['owner'] // Owner only
   },
   {

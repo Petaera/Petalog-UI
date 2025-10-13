@@ -15,7 +15,8 @@ import {
   ArrowUpRight,
   Crown,
   Zap,
-  Target
+  Target,
+  Coins
 } from 'lucide-react';
 
 const allQuickActions = [
@@ -51,6 +52,7 @@ export function DashboardOverview({ onNavigate }: DashboardOverviewProps) {
   const [totalRevenue, setTotalRevenue] = useState<number | null>(null);
   const [loyaltyMembers, setLoyaltyMembers] = useState<number | null>(null);
   const [expiringSoon, setExpiringSoon] = useState<number | null>(null);
+  const [totalPointsDistributed, setTotalPointsDistributed] = useState<number | null>(null);
   const [recentActivities, setRecentActivities] = useState<any[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string>('');
   const [permittedLocationIds, setPermittedLocationIds] = useState<string[]>([]);
@@ -87,6 +89,7 @@ export function DashboardOverview({ onNavigate }: DashboardOverviewProps) {
     { key: 'activeSubs', title: 'Active Subscriptions', valueKey: 'activeSubscriptions', icon: CreditCard, color: 'blue-600', ownerOnly: false },
     { key: 'revenue', title: 'Total Revenue', valueKey: 'totalRevenue', icon: TrendingUp, color: 'blue-500', ownerOnly: true },
     { key: 'loyalty', title: 'Loyalty Members', valueKey: 'loyaltyMembers', icon: Users, color: 'blue-400', ownerOnly: false },
+    { key: 'points', title: 'Points Distributed', valueKey: 'totalPointsDistributed', icon: Coins, color: 'purple-500', ownerOnly: false },
     { key: 'expiring', title: 'Expiring Soon', valueKey: 'expiringSoon', icon: Calendar, color: 'blue-300', ownerOnly: false }
   ];
   
@@ -210,6 +213,29 @@ export function DashboardOverview({ onNavigate }: DashboardOverviewProps) {
       setTotalRevenue(revenueMonth);
       setLoyaltyMembers(loyaltyCount);
       setExpiringSoon(expSoonCount);
+
+      // Fetch loyalty points statistics
+      let totalPoints = 0;
+      if (permittedLocationIds.length > 0) {
+        // Get all customers for the permitted locations
+        const { data: locationCustomers } = await supabase
+          .from('subscription_purchases')
+          .select('customer_id')
+          .in('location_id', permittedLocationIds);
+        
+        const customerIds = Array.from(new Set((locationCustomers || []).map(p => p.customer_id).filter(Boolean)));
+        
+        if (customerIds.length > 0) {
+          // Fetch all points accounts for these customers
+          const { data: pointsAccounts } = await supabase
+            .from('loyalty_point_accounts')
+            .select('lifetime_earned')
+            .in('customer_id', customerIds);
+          
+          totalPoints = (pointsAccounts || []).reduce((sum, acc) => sum + Number(acc.lifetime_earned || 0), 0);
+        }
+      }
+      setTotalPointsDistributed(totalPoints);
 
       setMoM({
         activeSubs: { pct: pctChange(activeThisMonth, activePrevMonth), label: prevMonthName },
@@ -344,6 +370,7 @@ export function DashboardOverview({ onNavigate }: DashboardOverviewProps) {
         const value = stat.valueKey === 'activeSubscriptions' ? (activeSubscriptions ?? '...')
           : stat.valueKey === 'totalRevenue' ? (totalRevenue !== null ? `₹${totalRevenue.toLocaleString()}` : '...')
           : stat.valueKey === 'loyaltyMembers' ? (loyaltyMembers ?? '...')
+          : stat.valueKey === 'totalPointsDistributed' ? (totalPointsDistributed !== null ? `${totalPointsDistributed.toLocaleString()} pts` : '...')
           : (expiringSoon ?? '...');
         const onClick = () => {
           if (stat.key === 'activeSubs') navigate('/loyalty/customers?filter=active');
