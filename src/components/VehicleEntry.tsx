@@ -97,15 +97,14 @@ export default function VehicleEntry({
   const { isSubmitDisabled, submitForm } = useFormSubmission();
   const {
     usableSubscriptions,
-    showSubscriptionModal,
     selectedSubscription,
     useSubscriptionForRedemption,
-    checkForActiveSubscriptions,
     processRedemption,
-    confirmSubscriptionSelection,
-    skipSubscription,
     resetSubscriptionState,
-    setShowSubscriptionModal,
+    fetchUsableSubscriptions,
+    setSelectedSubscription,
+    setUseSubscriptionForRedemption,
+    setUsableSubscriptions,
   } = useLoyaltyRedemption();
   
   // Edit mode hook
@@ -311,6 +310,44 @@ export default function VehicleEntry({
     setDiscount(String(d));
   }, [entryType, workshop, vehicleType, workshopPriceMatrix]);
 
+  // Auto-fetch subscriptions when phone number is entered
+  useEffect(() => {
+    const fetchSubscriptions = async () => {
+      if (!phoneNumber || !phoneNumber.trim() || !selectedLocation) {
+        setUsableSubscriptions([]);
+        setSelectedSubscription(null);
+        setUseSubscriptionForRedemption(false);
+        return;
+      }
+
+      try {
+        const { data: existingCustomer } = await supabase
+          .from('customers')
+          .select('id')
+          .eq('phone', phoneNumber.trim())
+          .eq('owner_id', (user as any)?.own_id)
+          .eq('location_id', selectedLocation)
+          .maybeSingle();
+
+        if (existingCustomer) {
+          const subscriptions = await fetchUsableSubscriptions(existingCustomer.id);
+          setUsableSubscriptions(subscriptions);
+        } else {
+          setUsableSubscriptions([]);
+          setSelectedSubscription(null);
+          setUseSubscriptionForRedemption(false);
+        }
+      } catch (error) {
+        console.warn('Error fetching subscriptions:', error);
+        setUsableSubscriptions([]);
+        setSelectedSubscription(null);
+        setUseSubscriptionForRedemption(false);
+      }
+    };
+
+    fetchSubscriptions();
+  }, [phoneNumber, selectedLocation, user]);
+
   // Apply edit data after all required data is loaded
   useEffect(() => {
     if (pendingEditData && priceMatrix.length > 0 && vehicleData.length > 0) {
@@ -493,32 +530,7 @@ export default function VehicleEntry({
       return;
     }
 
-    // For new entries, check for subscriptions if customer has phone number
-    if (phoneNumber && phoneNumber.trim()) {
-      // Check for existing customer to see if they have subscriptions
-      try {
-        const { data: existingCustomer } = await supabase
-          .from('customers')
-          .select('id')
-          .eq('phone', phoneNumber.trim())
-          .eq('owner_id', (user as any)?.own_id)
-          .eq('location_id', selectedLocation)
-          .maybeSingle();
-
-        if (existingCustomer) {
-          const hasSubscriptions = await checkForActiveSubscriptions(existingCustomer.id);
-          if (hasSubscriptions) {
-            // Modal is shown, wait for user to select subscription or skip
-            return;
-          }
-        }
-      } catch (error) {
-        console.warn('Error checking subscriptions:', error);
-        // Continue with normal submission if subscription check fails
-      }
-    }
-
-    // No subscriptions or no customer, proceed with normal submission
+    // Proceed with submission (subscription selection is now handled in the UI)
     await continueSubmission();
   };
 
@@ -719,7 +731,7 @@ export default function VehicleEntry({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6">
         {/* Entry Form */}
         <Card>
           <CardHeader>
@@ -786,6 +798,11 @@ export default function VehicleEntry({
                         <div className="flex-shrink-0 text-right">
                           <div className="text-sm text-muted-foreground">Amount</div>
                           <div className="text-lg font-semibold">{typeof latestVisitSummary.Amount === 'number' ? `₹${latestVisitSummary.Amount}` : (latestVisitSummary.Amount ? `₹${latestVisitSummary.Amount}` : '—')}</div>
+                          {latestVisitSummary.payment_mode === 'subscription' && (
+                            <Badge variant="secondary" className="mt-1 text-xs">
+                              Subscription
+                            </Badge>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -815,6 +832,11 @@ export default function VehicleEntry({
                             <div className="text-right">
                               <div className="text-sm font-semibold">{typeof v.Amount === 'number' ? `₹${v.Amount}` : (v.Amount ? `₹${v.Amount}` : '—')}</div>
                               <div className="text-xs text-muted-foreground">{v.payment_mode ? v.payment_mode : ''}</div>
+                              {v.payment_mode === 'subscription' && (
+                                <Badge variant="secondary" className="mt-1 text-xs">
+                                  Subscription
+                                </Badge>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -1002,6 +1024,80 @@ export default function VehicleEntry({
               </div>
             </div>
 
+              {/* Subscription Selection Section */}
+              {phoneNumber && phoneNumber.trim() && usableSubscriptions.length > 0 && (
+                <div className="space-y-4 p-4 border rounded-lg bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+                  <Label className="text-base font-semibold text-blue-700 dark:text-blue-300">Available Subscription Packages</Label>
+                  <p className="text-sm text-blue-600 dark:text-blue-400">
+                    This customer has active subscription packages. Choose one to use for this visit:
+                  </p>
+                  
+                  <div className="space-y-3">
+                    {usableSubscriptions.map((subscription) => {
+                      const plan = subscription.subscription_plans;
+                      const isSelected = selectedSubscription?.id === subscription.id;
+                      return (
+                        <div
+                          key={subscription.id}
+                          className={`border rounded-lg p-3 cursor-pointer transition-colors ${
+                            isSelected 
+                              ? 'border-green-500 bg-green-50 dark:bg-green-950/20' 
+                              : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
+                          }`}
+                          onClick={() => {
+                            if (isSelected) {
+                              // Deselect if already selected
+                              setSelectedSubscription(null);
+                              setUseSubscriptionForRedemption(false);
+                            } else {
+                              // Select this subscription
+                              setSelectedSubscription(subscription);
+                              setUseSubscriptionForRedemption(true);
+                            }
+                          }}
+                        >
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-medium">{plan.name}</h4>
+                                {isSelected && (
+                                  <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                                )}
+                              </div>
+                              <p className="text-sm text-gray-600 dark:text-gray-400">
+                                {subscription.remaining_visits} visits remaining
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-500">
+                                Original: {plan.max_redemptions} visits • ₹{plan.price}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                                {subscription.remaining_visits} left
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedSubscription(null);
+                        setUseSubscriptionForRedemption(false);
+                      }}
+                      className="text-xs"
+                    >
+                      Use Normal Payment
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {/* Selected Subscription Indicator */}
               {selectedSubscription && useSubscriptionForRedemption && (
                 <div className="space-y-2 p-4 border rounded-lg bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800">
@@ -1021,49 +1117,73 @@ export default function VehicleEntry({
               {/* Payment Mode Selection */}
               <div className="space-y-2">
                 <Label>Payment Mode</Label>
-                <div className="flex gap-2">
-                  <Button
-                    variant={paymentMode === 'cash' ? 'default' : 'outline'}
-                    size="sm"
-                    className="flex-1"
-                    onClick={() => setPaymentMode('cash')}
-                  >
-                    <Banknote className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                    <span className="text-xs sm:text-sm">Cash</span>
-                  </Button>
-                  <Button
-                    variant={paymentMode === 'upi' ? 'default' : 'outline'}
-                    size="sm"
-                    className="flex-1"
-                    onClick={() => setPaymentMode('upi')}
-                  >
-                    <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                    <span className="text-xs sm:text-sm">UPI</span>
-                  </Button>
-                  <Button
-                    variant={paymentMode === 'credit' ? 'default' : 'outline'}
-                    size="sm"
-                    className="flex-1"
-                    onClick={() => setPaymentMode('credit')}
-                  >
-                    <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                    <span className="text-xs sm:text-sm">Pay Later</span>
-                  </Button>
-                </div>
-                {paymentMode === 'upi' && (
-                  <p className="text-xs text-muted-foreground">
-                    Select a UPI account below to display the QR code for payment
-                  </p>
+                {selectedSubscription && useSubscriptionForRedemption ? (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                      disabled
+                    >
+                      <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                      <span className="text-xs sm:text-sm">Subscription</span>
+                    </Button>
+                    <div className="flex-1"></div>
+                    <div className="flex-1"></div>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button
+                      variant={paymentMode === 'cash' ? 'default' : 'outline'}
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => setPaymentMode('cash')}
+                    >
+                      <Banknote className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                      <span className="text-xs sm:text-sm">Cash</span>
+                    </Button>
+                    <Button
+                      variant={paymentMode === 'upi' ? 'default' : 'outline'}
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => setPaymentMode('upi')}
+                    >
+                      <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                      <span className="text-xs sm:text-sm">UPI</span>
+                    </Button>
+                    <Button
+                      variant={paymentMode === 'credit' ? 'default' : 'outline'}
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => setPaymentMode('credit')}
+                    >
+                      <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                      <span className="text-xs sm:text-sm">Pay Later</span>
+                    </Button>
+                  </div>
                 )}
-                {paymentMode === 'credit' && (
-                  <p className="text-xs text-muted-foreground">
-                    Customer will pay later. Ticket will be marked as pending payment.
+                {!selectedSubscription || !useSubscriptionForRedemption ? (
+                  <>
+                    {paymentMode === 'upi' && (
+                      <p className="text-xs text-muted-foreground">
+                        Select a UPI account below to display the QR code for payment
+                      </p>
+                    )}
+                    {paymentMode === 'credit' && (
+                      <p className="text-xs text-muted-foreground">
+                        Customer will pay later. Ticket will be marked as pending payment.
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-xs text-green-600 dark:text-green-400">
+                    This visit will be processed using the selected subscription package (no payment required)
                   </p>
                 )}
               </div>
 
               {/* UPI Account Selection */}
-              {paymentMode === 'upi' && (
+              {paymentMode === 'upi' && (!selectedSubscription || !useSubscriptionForRedemption) && (
                 <div className="space-y-2">
                   <Label>Select UPI Account</Label>
                   {upiAccountsLoading ? (
@@ -1162,70 +1282,6 @@ export default function VehicleEntry({
         )}
       </div>
 
-      {/* Subscription Selection Modal */}
-      {showSubscriptionModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">Select Subscription Package</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              This customer has active subscription packages. Choose one to use for this visit:
-            </p>
-            
-            <div className="space-y-3 mb-4">
-              {usableSubscriptions.map((subscription) => {
-                const plan = subscription.subscription_plans;
-                return (
-                  <div
-                    key={subscription.id}
-                    className="border rounded-lg p-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
-                    onClick={() => {
-                      confirmSubscriptionSelection(subscription);
-                      continueSubmission();
-                    }}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h4 className="font-medium">{plan.name}</h4>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {subscription.remaining_visits} visits remaining
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-500">
-                          Original: {plan.max_redemptions} visits • ₹{plan.price}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-sm font-medium text-green-600 dark:text-green-400">
-                          {subscription.remaining_visits} left
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  skipSubscription();
-                  continueSubmission();
-                }}
-                className="flex-1"
-              >
-                Use Normal Payment
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => setShowSubscriptionModal(false)}
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
