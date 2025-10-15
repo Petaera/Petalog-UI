@@ -19,6 +19,7 @@ import {
   X
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { enrollPurchase } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useLocation } from 'react-router-dom';
 
@@ -95,6 +96,15 @@ export function Customers() {
   const [expiringMode, setExpiringMode] = useState(false);
   const [loyaltyMode, setLoyaltyMode] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEnrollModal, setShowEnrollModal] = useState(false);
+  const [enrollPhone, setEnrollPhone] = useState('');
+  const [enrollPhoneLocked, setEnrollPhoneLocked] = useState(false);
+  const [enrollPlanId, setEnrollPlanId] = useState('');
+  const [enrollLocationId, setEnrollLocationId] = useState('');
+  const [enrollVehicleNumber, setEnrollVehicleNumber] = useState('');
+  const [enrollPaymentMethod, setEnrollPaymentMethod] = useState<'cash' | 'upi' | 'credit' | 'mixed'>('cash');
+  const [enrollAmount, setEnrollAmount] = useState<string>('');
+  const [enrollUpiAccountId, setEnrollUpiAccountId] = useState<string>('');
   const [addStep, setAddStep] = useState<'selectPlan' | 'identify' | 'form'>('selectPlan');
   const [schemeType, setSchemeType] = useState('');
   const [planType, setPlanType] = useState('');
@@ -929,35 +939,62 @@ export function Customers() {
     }
   }, [subscriptionCustomers]);
 
-  const filteredCustomers = subscriptionCustomers.filter(purchase => {
-    const cust = customerDetailsMap[purchase.customer_id] || {};
-    const plan = planDetailsMap[purchase.plan_id] || {};
-    const vehicle = vehicleInfoMap[cust.default_vehicle_id] || {};
+  // Group subscription purchases by customer to avoid duplicate cards
+  const customerGroups = subscriptionCustomers.reduce((groups, purchase) => {
+    const customerId = purchase.customer_id;
+    if (!groups[customerId]) {
+      groups[customerId] = [];
+    }
+    groups[customerId].push(purchase);
+    return groups;
+  }, {} as Record<string, any[]>);
+
+  // Convert to array of unique customers with their subscriptions
+  const uniqueCustomers = Object.entries(customerGroups).map(([customerId, purchases]) => ({
+    customer_id: customerId,
+    subscriptions: purchases,
+    // Use the most recent purchase for customer-level data
+    ...purchases[0]
+  }));
+
+  const filteredCustomers = uniqueCustomers.filter(customer => {
+    const cust = customerDetailsMap[customer.customer_id] || {};
     const name = String(cust.name || '');
     const phone = String(cust.phone || '');
-    const scheme = String(plan.name || '');
-    const vehicleNumber = String(vehicle.number_plate || '');
     const term = searchTerm.trim().toLowerCase();
     const matchesSearch = term.length === 0 ||
       name.toLowerCase().includes(term) ||
-      phone.toLowerCase().includes(term) ||
-      scheme.toLowerCase().includes(term) ||
-      vehicleNumber.toLowerCase().includes(term);
-    const normalizedStatus = String(purchase.status || '').toLowerCase();
-    const filterNorm = filterStatus.toLowerCase();
-    let matchesFilter = filterStatus === 'all' || normalizedStatus === filterNorm.replace(' ', '');
+      phone.toLowerCase().includes(term);
+    
+    // Check if any subscription matches the status filter
+    let matchesFilter = filterStatus === 'all';
+    if (filterStatus !== 'all') {
+      matchesFilter = customer.subscriptions.some(sub => {
+        const normalizedStatus = String(sub.status || '').toLowerCase();
+        const filterNorm = filterStatus.toLowerCase();
+        return normalizedStatus === filterNorm.replace(' ', '');
+      });
+    }
+    
     // Expiring Soon derived filter mode
     if (expiringMode) {
-      if (!purchase.expiry_date) return false;
-      const now = new Date();
-      const in7 = new Date(now.getTime() + 7*24*60*60*1000);
-      const d = new Date(purchase.expiry_date);
-      matchesFilter = d >= now && d <= in7;
+      matchesFilter = customer.subscriptions.some(sub => {
+        if (!sub.expiry_date) return false;
+        const now = new Date();
+        const in7 = new Date(now.getTime() + 7*24*60*60*1000);
+        const d = new Date(sub.expiry_date);
+        return d >= now && d <= in7;
+      });
     }
+    
     // Loyalty mode: only visit-based plan purchases
     if (loyaltyMode) {
-      matchesFilter = String(plan.type || '').toLowerCase() === 'visit';
+      matchesFilter = customer.subscriptions.some(sub => {
+        const plan = planDetailsMap[sub.plan_id] || {};
+        return String(plan.type || '').toLowerCase() === 'visit';
+      });
     }
+    
     return matchesSearch && matchesFilter;
   });
 
@@ -1753,6 +1790,10 @@ export function Customers() {
             Export Data
           </Button>
           )}
+          <Button className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white shadow-md hover:shadow-lg" onClick={() => { setEnrollPhone(''); setEnrollPhoneLocked(false); setShowEnrollModal(true); }}>
+            <Plus className="w-4 h-4 mr-2" />
+            Add Subscription
+          </Button>
           <Button className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg" onClick={handleAddCustomerClick}>
             <Plus className="w-4 h-4 mr-2" />
             Add Customer
@@ -2080,6 +2121,143 @@ export function Customers() {
         </div>
       )}
 
+      {/* Enroll Subscription Modal */}
+      {showEnrollModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 transition-all duration-300 animate-fade-in p-4">
+          <Card className="w-full max-w-xl p-0 overflow-hidden shadow-2xl animate-slide-up">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <Button variant="ghost" onClick={() => setShowEnrollModal(false)}>Close</Button>
+              <h2 className="text-xl font-bold">Add Subscription to Existing Customer</h2>
+              <div style={{ width: 60 }}></div>
+            </div>
+            <CardContent className="p-4 sm:p-6 space-y-4">
+              <div>
+                <label className="block mb-2 font-medium">Customer Phone</label>
+                <Input value={enrollPhone} onChange={(e) => setEnrollPhone(e.target.value)} placeholder="Enter phone number" disabled={enrollPhoneLocked} />
+              </div>
+              <div>
+                <label className="block mb-2 font-medium">Plan</label>
+                <select
+                  className="w-full border rounded h-10 px-3"
+                  value={enrollPlanId}
+                  onChange={(e) => setEnrollPlanId(e.target.value)}
+                >
+                  <option value="">Select a plan</option>
+                  {schemes.filter((p) => p.active !== false).map((p) => (
+                    <option key={p.id} value={p.id}>{p.name} - ₹{p.plan_amount || p.price || 0} ({String(p.type).toLowerCase()})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block mb-2 font-medium">Location</label>
+                <select
+                  className="w-full border rounded h-10 px-3"
+                  value={enrollLocationId}
+                  onChange={(e) => setEnrollLocationId(e.target.value)}
+                >
+                  <option value="">Select a location</option>
+                  {permittedLocations.map((l) => (
+                    <option key={l.id} value={l.id}>{l.name}</option>
+                  ))}
+                </select>
+              </div>
+              {(() => {
+                const plan = schemes.find((p) => p.id === enrollPlanId);
+                const type = String(plan?.type || '').toLowerCase();
+                return (
+                  <>
+                    {type !== 'credit' && (
+                      <div>
+                        <label className="block mb-2 font-medium">Vehicle Number</label>
+                        <Input value={enrollVehicleNumber} onChange={(e) => setEnrollVehicleNumber(e.target.value.toUpperCase())} placeholder="KL07AB0001" />
+                      </div>
+                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block mb-2 font-medium">Payment Method</label>
+                        <select
+                          className="w-full border rounded h-10 px-3"
+                          value={enrollPaymentMethod}
+                          onChange={(e) => setEnrollPaymentMethod(e.target.value as any)}
+                        >
+                          <option value="cash">Cash</option>
+                          <option value="upi">UPI</option>
+                          <option value="credit">Credit</option>
+                          <option value="mixed">Mixed</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block mb-2 font-medium">Amount Collected</label>
+                        <Input value={enrollAmount} onChange={(e) => setEnrollAmount(e.target.value)} placeholder="e.g., 999" />
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+              <div className="pt-2 flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowEnrollModal(false)}>Cancel</Button>
+                <Button
+                  onClick={async () => {
+                    try {
+                      if (!enrollPhone.trim() || !enrollPlanId || !enrollLocationId) {
+                        toast({ title: 'Missing details', description: 'Phone, plan and location are required', variant: 'destructive' });
+                        return;
+                      }
+                      // Lookup customer
+                      const { data: cust } = await supabase
+                        .from('customers')
+                        .select('id')
+                        .eq('phone', enrollPhone.trim())
+                        .maybeSingle();
+                      if (!cust?.id) {
+                        toast({ title: 'Customer not found', description: 'No customer found with this phone', variant: 'destructive' });
+                        return;
+                      }
+                      // Optional vehicle lookup for non-credit
+                      let vehicleId: string | undefined;
+                      const plan = schemes.find((p) => p.id === enrollPlanId);
+                      const type = String(plan?.type || '').toLowerCase();
+                      if (type !== 'credit') {
+                        if (!enrollVehicleNumber.trim()) {
+                          toast({ title: 'Vehicle required', description: 'Enter vehicle number for visit/package plans', variant: 'destructive' });
+                          return;
+                        }
+                        const { data: veh } = await supabase
+                          .from('vehicles')
+                          .select('id')
+                          .eq('number_plate', enrollVehicleNumber.toUpperCase().replace(/\s|-/g, ''))
+                          .maybeSingle();
+                        vehicleId = veh?.id;
+                      }
+
+                      const totalValue = Number(enrollAmount || (plan?.price ?? 0)) || 0;
+                      await enrollPurchase({
+                        p_plan_id: enrollPlanId,
+                        p_customer_id: cust.id,
+                        p_vehicle_id: vehicleId,
+                        p_location_id: enrollLocationId,
+                        p_total_value: totalValue,
+                        p_payment_method: enrollPaymentMethod,
+                        p_created_by: user?.id
+                      } as any);
+
+                      toast({ title: 'Subscription added', description: 'The subscription was added to the customer' });
+                      setShowEnrollModal(false);
+                      // Reset
+                      setEnrollPhone(''); setEnrollPlanId(''); setEnrollLocationId(''); setEnrollVehicleNumber(''); setEnrollAmount(''); setEnrollPaymentMethod('cash');
+                    } catch (e: any) {
+                      toast({ title: 'Failed to add subscription', description: e?.message || 'Unknown error', variant: 'destructive' });
+                    }
+                  }}
+                >
+                  Enroll
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Removed modal; editing is inline in the Edit modal */}
 
       {/* Search and Filters */}
@@ -2141,12 +2319,13 @@ export function Customers() {
        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
         {filteredCustomers.map((customer, index) => {
           const cust = customerDetailsMap[customer.customer_id] || {};
-          const plan = planDetailsMap[customer.plan_id] || {};
           const vehicleInfo = vehicleInfoMap[cust.default_vehicle_id] || {};
-          const showVehicleInfo = plan.type === 'package' || plan.type === 'visit';
+          
+          // Get all subscriptions for this customer (already grouped)
+          const customerSubscriptions = customer.subscriptions;
           return (
             <Card 
-              key={customer.id} 
+              key={customer.customer_id} 
               className="hover:shadow-card transition-all duration-300 bg-gradient-card animate-slide-up"
               style={{ animationDelay: `${index * 100}ms` }}
             >
@@ -2156,7 +2335,7 @@ export function Customers() {
                     <h3 className="font-semibold text-foreground text-sm sm:text-base truncate">{cust.name || 'Customer'}</h3>
                     <p className="text-xs sm:text-sm text-muted-foreground truncate">{cust.phone ? `Phone: ${cust.phone}` : ''}</p>
                     <p className="text-xs sm:text-sm text-muted-foreground truncate">{cust.email ? `Email: ${cust.email}` : ''}</p>
-                    {showVehicleInfo && (
+                    {(vehicleInfo.Model || vehicleInfo.Brand || vehicleInfo.number_plate) && (
                       <>
                         <p className="text-xs sm:text-sm text-muted-foreground truncate">{vehicleInfo.Model ? `Model: ${vehicleInfo.Model}` : ''}</p>
                         <p className="text-xs sm:text-sm text-muted-foreground truncate">{vehicleInfo.Brand ? `Brand: ${vehicleInfo.Brand}` : ''}</p>
@@ -2172,6 +2351,14 @@ export function Customers() {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem onClick={() => { setSelectedPurchase(customer); setShowViewModal(true); }}>View Details</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => { 
+                        setShowEnrollModal(true); 
+                        setEnrollPhone(String(cust.phone || '')); 
+                        setEnrollPlanId(''); 
+                        setEnrollLocationId(permittedLocations.length > 0 ? permittedLocations[0].id : ''); 
+                        setEnrollVehicleNumber(''); 
+                        setEnrollPhoneLocked(true); 
+                      }}>Add Subscription</DropdownMenuItem>
                       {pointsAccountMap[customer.customer_id] && (
                         <DropdownMenuItem onClick={() => {
                           setSelectedCustomerForPoints(customer);
@@ -2192,239 +2379,144 @@ export function Customers() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4 p-3 sm:p-6">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-foreground">Status:</span>
-                    <Badge 
+                {/* Customer Subscriptions */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-semibold text-foreground">Active Plans ({customerSubscriptions.length})</h4>
+                    <Button 
+                      size="sm" 
                       variant="outline" 
-                      className={
-                        String(customer.status || '').toLowerCase() === 'active' 
-                          ? 'border-green-500 text-green-700 bg-green-50' 
-                          : String(customer.status || '').toLowerCase() === 'expired'
-                          ? 'border-red-500 text-red-700 bg-red-50'
-                          : 'border-gray-500 text-gray-700 bg-gray-50'
-                      }
+                      className="text-xs"
+                      onClick={() => { 
+                        setShowEnrollModal(true); 
+                        setEnrollPhone(String(cust.phone || '')); 
+                        setEnrollPlanId(''); 
+                        setEnrollLocationId(permittedLocations.length > 0 ? permittedLocations[0].id : ''); 
+                        setEnrollVehicleNumber(''); 
+                        setEnrollPhoneLocked(true); 
+                      }}
                     >
-                      {String(customer.status || '').charAt(0).toUpperCase() + String(customer.status || '').slice(1)}
-                    </Badge>
-                  </div>
-                  {customer.expiry_date && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Expiry Date:</span>
-                      <span className="text-foreground font-medium">{formatDate(customer.expiry_date)}</span>
-                    </div>
-                  )}
-                  {customer.remaining_visits !== null && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Visits Left:</span>
-                      <span className={`${Number(customer.remaining_visits) === 0 ? 'text-red-600' : 'text-success'} font-medium`}>{customer.remaining_visits}</span>
-                    </div>
-                  )}
-                  {String(plan.type || '').toLowerCase() === 'credit' && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Credit Balance:</span>
-                      <span className={`${Number(creditAccountMap[customer.customer_id]?.balance ?? 0) === 0 ? 'text-red-600' : 'text-success'} font-medium`}>₹{(creditAccountMap[customer.customer_id]?.balance ?? 0).toLocaleString()}</span>
-                    </div>
-                  )}
-                  {pointsAccountMap[customer.customer_id] && (
-                    <div className="flex items-center justify-between bg-gradient-to-r from-blue-50 to-purple-50 p-2 rounded-lg border border-blue-200">
-                      <div className="flex items-center gap-2">
-                        <Coins className="w-4 h-4 text-blue-600" />
-                        <span className="text-blue-700 font-medium text-sm">Points:</span>
-                      </div>
-                      <span className="text-blue-900 font-bold">{Number(pointsAccountMap[customer.customer_id].balance_points || 0).toLocaleString()} pts</span>
-                    </div>
-                  )}
-                  {(String(plan.type || '').toLowerCase() === 'package' || String(plan.type || '').toLowerCase() === 'visit') && (
-                    <div className="mt-2">
-                      <div className="text-xs font-medium text-foreground mb-1">Visit History</div>
-                      <div className="space-y-1 max-h-28 overflow-auto">
-                        {(usageHistoryMap[customer.id] || []).slice(0, 5).map(u => (
-                          <div key={u.id} className="text-xs text-muted-foreground flex justify-between">
-                            <span>{u.service_type || 'full wash'}</span>
-                            <span>{formatDate(u.use_date)}</span>
-                          </div>
-                        ))}
-                        {!(usageHistoryMap[customer.id] || []).length && (
-                          <div className="text-xs text-muted-foreground">No visits yet</div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Recent Activity */}
-                  <div className="mt-2">
-                    <div className="text-xs font-medium text-foreground mb-1">Recent Activity</div>
-                    <div className="space-y-1 max-h-28 overflow-auto">
-                      {(() => {
-                        const isVisitPlan = String(plan.type || '').toLowerCase() === 'visit' || String(plan.type || '').toLowerCase() === 'package';
-                        if (isVisitPlan) {
-                          const recents = (usageHistoryMap[customer.id] || []).slice(0, 3);
-                          if (!recents.length) return <div className="text-xs text-muted-foreground">No recent activity</div>;
-                          return recents.map(u => (
-                            <div key={u.id} className="text-xs text-muted-foreground flex justify-between items-center">
-                              <div className="flex items-center gap-1">
-                                <span className="px-1 py-0.5 rounded text-xs bg-blue-100 text-blue-700">redemption</span>
-                                <span>{u.service_type || 'Service'}</span>
-                              </div>
-                              <div className="text-right">
-                                <div className="text-xs text-muted-foreground">{formatDate(u.use_date)}</div>
-                              </div>
-                            </div>
-                          ));
-                        }
-                        const recents = (loyaltyVisitsMap[customer.id] || []).slice(0, 3);
-                        if (!recents.length) return <div className="text-xs text-muted-foreground">No recent activity</div>;
-                        return recents.map(lv => (
-                          <div key={lv.id} className="text-xs text-muted-foreground flex justify-between items-center">
-                            <div className="flex items-center gap-1">
-                              <span className={`px-1 py-0.5 rounded text-xs ${
-                                lv.visit_type === 'redemption' ? 'bg-blue-100 text-blue-700' :
-                                lv.visit_type === 'payment' ? 'bg-green-100 text-green-700' :
-                                'bg-gray-100 text-gray-700'
-                              }`}>
-                                {lv.visit_type}
-                              </span>
-                              <span>{lv.service_rendered || 'Service'}</span>
-                            </div>
-                            <div className="text-right">
-                              {lv.amount_charged > 0 && <span>₹{lv.amount_charged}</span>}
-                              <div className="text-xs text-muted-foreground">{formatDate(lv.visit_time)}</div>
-                            </div>
-                          </div>
-                        ));
-                      })()}
-                    </div>
+                      <Plus className="w-3 h-3 mr-1" />
+                      Add Plan
+                    </Button>
                   </div>
                   
-                  {/* Show Remove from Plan button for expired customers below the details */}
-                  {(() => {
-                    const currentCreditBalance = Number(creditAccountMap[customer.customer_id]?.balance ?? 0);
-                    const planType = String(plan.type || '').toLowerCase();
-                    const isExpiredByDate = customer.expiry_date && new Date(customer.expiry_date) < new Date();
-                    const isExpiredByVisits = customer.remaining_visits !== null && customer.remaining_visits <= 0;
-                    const isExpiredByCredit = planType === 'credit' && currentCreditBalance <= 0;
-                    const isExpiredByStatus = customer.status === 'expired';
-                    
-                    // Only show expiry notice if truly expired and no active value remaining
-                    const shouldShowExpired = (isExpiredByStatus || isExpiredByDate || isExpiredByVisits || isExpiredByCredit) &&
-                      // Additional safety checks
-                      (planType !== 'credit' || currentCreditBalance <= 0) &&
-                      (planType === 'credit' || customer.remaining_visits === 0 || customer.remaining_visits === null);
-                    
-                    if (!shouldShowExpired) return null;
-                    
-                    const expiryReason = isExpiredByStatus ? 'This plan has expired' :
-                                       isExpiredByDate ? 'This plan has expired (date)' :
-                                       isExpiredByVisits ? 'This plan has expired (no visits left)' :
-                                       isExpiredByCredit ? 'This plan has expired (no credit left)' :
-                                       'This plan has expired';
-                    
-                    return (
-                    <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-                      <div className="text-sm text-red-700 font-medium mb-2">
-                          {expiryReason}
-                      </div>
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
-                        className="text-red-600 border-red-300 hover:bg-red-50" 
-                        onClick={() => {
-                          setDeleteTargetPurchase(customer);
-                          setShowDeleteConfirm(true);
-                        }}
-                      >
-                        Remove from Plan
-                      </Button>
+                  {customerSubscriptions.length === 0 ? (
+                    <div className="text-center py-4 text-muted-foreground">
+                      <div className="text-sm">No active plans</div>
+                      <div className="text-xs">Add a subscription to get started</div>
                     </div>
-                    );
-                  })()}
+                  ) : (
+                    <div className="space-y-2 max-h-48 overflow-auto">
+                      {customerSubscriptions.map((subscription) => {
+                        const subPlan = planDetailsMap[subscription.plan_id] || {};
+                        const subVehicleInfo = vehicleInfoMap[subscription.vehicle_id] || {};
+                        const isActive = String(subscription.status || '').toLowerCase() === 'active';
+                        const isExpired = String(subscription.status || '').toLowerCase() === 'expired';
+                        const planType = String(subPlan.type || '').toLowerCase();
+                        
+                        return (
+                          <div key={subscription.id} className={`p-3 rounded-lg border ${
+                            isActive ? 'bg-green-50 border-green-200' : 
+                            isExpired ? 'bg-red-50 border-red-200' : 
+                            'bg-gray-50 border-gray-200'
+                          }`}>
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <h5 className="text-sm font-medium text-foreground">{subPlan.name || 'Unknown Plan'}</h5>
+                                  <Badge 
+                                    variant="outline" 
+                                    className={`text-xs ${
+                                      planType === 'credit' ? 'bg-green-100 text-green-700 border-green-300' :
+                                      planType === 'visit' ? 'bg-orange-100 text-orange-700 border-orange-300' :
+                                      'bg-blue-100 text-blue-700 border-blue-300'
+                                    }`}
+                                  >
+                                    {planType}
+                                  </Badge>
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {subVehicleInfo.number_plate && `Vehicle: ${subVehicleInfo.number_plate}`}
+                                </div>
+                              </div>
+                              <Badge 
+                                variant="outline" 
+                                className={`text-xs ${
+                                  isActive ? 'border-green-500 text-green-700 bg-green-50' : 
+                                  isExpired ? 'border-red-500 text-red-700 bg-red-50' :
+                                  'border-gray-500 text-gray-700 bg-gray-50'
+                                }`}
+                              >
+                                {String(subscription.status || '').charAt(0).toUpperCase() + String(subscription.status || '').slice(1)}
+                              </Badge>
+                            </div>
+                            
+                            <div className="space-y-1 text-xs">
+                              {subscription.expiry_date && (
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Expires:</span>
+                                  <span className="text-foreground">{formatDate(subscription.expiry_date)}</span>
+                                </div>
+                              )}
+                              
+                              {planType === 'credit' && (
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Balance:</span>
+                                  <span className={`font-medium ${Number(creditAccountMap[customer.customer_id]?.balance ?? 0) === 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                    ₹{(creditAccountMap[customer.customer_id]?.balance ?? 0).toLocaleString()}
+                                  </span>
+                                </div>
+                              )}
+                              
+                              {(planType === 'visit' || planType === 'package') && subscription.remaining_visits !== null && (
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Visits Left:</span>
+                                  <span className={`font-medium ${Number(subscription.remaining_visits) === 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                    {subscription.remaining_visits}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-                {/* Plan Details Card */}
-                <Card className="bg-muted/30 border border-border">
-                  <CardHeader>
-                    <div className="font-semibold text-primary">{plan.name || 'Plan'}</div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-sm text-muted-foreground">
-                      <div>Type: {plan.type}</div>
-                      <div>Price: {plan.plan_amount ? `₹${plan.plan_amount}` : (plan.price ? `₹${plan.price}` : '-')}</div>
-                      <div>Max Redemptions: {plan.max_redemptions ?? '-'}</div>
-                      <div>Currency: {plan.currency || '-'}</div>
+
+                {/* Points Account */}
+                {pointsAccountMap[customer.customer_id] && (
+                  <div className="flex items-center justify-between bg-gradient-to-r from-blue-50 to-purple-50 p-3 rounded-lg border border-blue-200">
+                    <div className="flex items-center gap-2">
+                      <Coins className="w-4 h-4 text-blue-600" />
+                      <span className="text-blue-700 font-medium text-sm">Loyalty Points:</span>
                     </div>
-                  </CardContent>
-                </Card>
-                <div className="flex flex-wrap gap-1 sm:gap-2">
-                  <Button size="sm" variant="outline" className="text-xs sm:text-sm flex-1 sm:flex-none" onClick={() => { setSelectedPurchase(customer); setShowViewModal(true); }}>
-                    View
-                  </Button>
-                  <Button size="sm" variant="outline" className="text-xs sm:text-sm flex-1 sm:flex-none" onClick={() => {
-                    setSelectedPurchase(customer);
-                    const c = customerDetailsMap[customer.customer_id] || {};
-                    setEditCustomerDraft({ id: c.id, name: c.name || '', phone: c.phone || '', email: c.email || '', date_of_birth: c.date_of_birth || '' });
-                    setShowEditModal(true);
-                  }}>
-                    Edit
-                  </Button>
-                  {String(plan.type || '').toLowerCase() === 'credit' && (
-                    <Button size="sm" variant="outline" className="text-xs sm:text-sm flex-1 sm:flex-none" onClick={() => { setSelectedPurchase(customer); setTopupAmount(''); setTopupMethod('cash'); setTopupUpiId(''); setShowTopupModal(true); }}>
-                      Top-up
-                    </Button>
-                  )}
-                  {(String(plan.type || '').toLowerCase() === 'package' || String(plan.type || '').toLowerCase() === 'visit') && 
-                   (customer.remaining_visits === 0 || customer.status === 'expired') && (
-                    <Button size="sm" variant="outline" className="text-xs sm:text-sm flex-1 sm:flex-none" onClick={() => { 
-                      setSelectedPurchase(customer); 
-                      setRenewPaymentMethod('cash'); 
-                      setRenewSelectedUpiAccountId(''); 
-                      setShowRenewModal(true); 
-                    }}>
-                      Renew Plan
-                    </Button>
-                  )}
-                  {/* Delete button for completed/expired plans */}
-                  {(() => {
-                    const currentCreditBalance = Number(creditAccountMap[customer.customer_id]?.balance ?? 0);
-                    const planType = String(plan.type || '').toLowerCase();
-                    const isExpiredByDate = customer.expiry_date && new Date(customer.expiry_date) < new Date();
-                    const isExpiredByVisits = customer.remaining_visits !== null && customer.remaining_visits <= 0;
-                    const isExpiredByCredit = planType === 'credit' && currentCreditBalance <= 0;
-                    const isExpiredByStatus = customer.status === 'expired';
-                    
-                    // Only show delete if truly expired and no active value remaining
-                    const shouldShowDelete = (isExpiredByStatus || isExpiredByDate || isExpiredByVisits || isExpiredByCredit) &&
-                      // Additional safety checks
-                      (planType !== 'credit' || currentCreditBalance <= 0) &&
-                      (planType === 'credit' || customer.remaining_visits === 0 || customer.remaining_visits === null);
-                    
-                    return shouldShowDelete && (
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
-                        className="text-red-600 border-red-300 hover:bg-red-50 text-xs sm:text-sm flex-1 sm:flex-none" 
-                        onClick={() => {
-                          setDeleteTargetPurchase(customer);
-                          setShowDeleteConfirm(true);
-                        }}
-                      >
-                        Delete
-                      </Button>
-                    );
-                  })()}
-                  {(String(plan.type || '').toLowerCase() === 'package' || String(plan.type || '').toLowerCase() === 'visit') && 
-                   customer.remaining_visits > 0 && 
-                   customer.status === 'active' && (
-                  <Button size="sm" variant="outline" className="text-xs sm:text-sm flex-1 sm:flex-none" onClick={() => { setSelectedPurchase(customer); setShowMarkVisit(true); setVisitNotes(''); setVisitService('full wash'); setVisitDate(new Date().toISOString().slice(0,10)); }}>
-                      Mark Visit
-                    </Button>
-                  )}
-                  {String(plan.type || '').toLowerCase() === 'credit' && 
-                   Number(creditAccountMap[customer.customer_id]?.balance ?? 0) > 0 && 
-                   customer.status === 'active' && (
-                    <Button size="sm" variant="outline" className="text-xs sm:text-sm flex-1 sm:flex-none" onClick={() => { setSelectedPurchase(customer); setShowMarkEntry(true); setEntryAmount(''); setEntryService('full wash'); setEntryNotes(''); }}>
-                      Mark Entry
-                    </Button>
-                  )}
+                    <span className="text-blue-900 font-bold">{Number(pointsAccountMap[customer.customer_id].balance_points || 0).toLocaleString()} pts</span>
+                  </div>
+                )}
+
+                {/* Recent Activity */}
+                <div className="mt-3">
+                  <div className="text-xs font-medium text-foreground mb-2">Recent Activity</div>
+                  <div className="space-y-1 max-h-24 overflow-auto">
+                    {(() => {
+                      const recents = (loyaltyVisitsMap[customer.customer_id] || []).slice(0, 3);
+                      if (!recents.length) return <div className="text-xs text-muted-foreground">No recent activity</div>;
+                      return recents.map(lv => (
+                        <div key={lv.id} className="text-xs text-muted-foreground flex justify-between items-center">
+                          <div className="flex items-center gap-1">
+                            <span className="px-1 py-0.5 rounded text-xs bg-green-100 text-green-700">visit</span>
+                            <span>{lv.service_rendered || 'Service'}</span>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-xs text-muted-foreground">{formatDate(lv.visit_time)}</div>
+                            <div className="text-xs text-muted-foreground">₹{lv.amount_charged || 0}</div>
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
                 </div>
               </CardContent>
             </Card>

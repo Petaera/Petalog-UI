@@ -14,6 +14,7 @@ interface SubscriptionPurchase {
   id: string;
   plan_id: string;
   remaining_visits: number;
+  remaining_value?: number;
   status: string;
   created_at: string;
   subscription_plans: SubscriptionPlan;
@@ -24,6 +25,7 @@ interface RedemptionResult {
   logId?: string;
   subscriptionName?: string;
   remainingVisits?: number;
+  error?: string;
 }
 
 export const useLoyaltyRedemption = () => {
@@ -44,6 +46,7 @@ export const useLoyaltyRedemption = () => {
           id,
           plan_id,
           remaining_visits,
+          remaining_value,
           status,
           created_at,
           subscription_plans!inner(
@@ -56,8 +59,7 @@ export const useLoyaltyRedemption = () => {
         `)
         .eq('customer_id', customerId)
         .eq('status', 'active')
-        .in('subscription_plans.type', ['package', 'visit'])
-        .gt('remaining_visits', 0)
+        .in('subscription_plans.type', ['package', 'visit', 'credit'])
         .order('created_at', { ascending: false }) as { data: any; error: any };
 
       if (error) {
@@ -66,7 +68,15 @@ export const useLoyaltyRedemption = () => {
       }
 
       console.log('📊 Subscription query result:', subscriptions);
-      return subscriptions || [];
+      // Filter by availability per plan type
+      const filtered = (subscriptions || []).filter((s: any) => {
+        const t = s?.subscription_plans?.type;
+        if (t === 'credit') {
+          return (s?.remaining_value ?? 0) > 0;
+        }
+        return (s?.remaining_visits ?? 0) > 0;
+      });
+      return filtered;
     } catch (error) {
       console.warn('❌ Error fetching usable subscriptions:', error);
       return [];
@@ -98,7 +108,8 @@ export const useLoyaltyRedemption = () => {
     vehicleId: string,
     service: string[],
     locationId: string,
-    selectedSubscriptionId?: string
+    selectedSubscriptionId?: string,
+    amountCharged?: number
   ): Promise<RedemptionResult> => {
     try {
       // If no subscription is selected for redemption, skip redemption processing
@@ -114,6 +125,7 @@ export const useLoyaltyRedemption = () => {
           id,
           plan_id,
           remaining_visits,
+          remaining_value,
           status,
           subscription_plans!inner(
             id,
@@ -124,8 +136,7 @@ export const useLoyaltyRedemption = () => {
         `)
         .eq('customer_id', customerId)
         .eq('status', 'active')
-        .in('subscription_plans.type', ['package', 'visit'])
-        .gt('remaining_visits', 0) as { data: any; error: any };
+        .in('subscription_plans.type', ['package', 'visit', 'credit']) as { data: any; error: any };
 
       if (subError) {
         console.warn('Error fetching active subscriptions:', subError);
@@ -146,7 +157,13 @@ export const useLoyaltyRedemption = () => {
 
       const plan = subscription.subscription_plans;
 
-      if (!plan || subscription.remaining_visits <= 0) {
+      if (!plan) {
+        return { isRedemption: false };
+      }
+      if (plan.type === 'credit') {
+        const canCharge = (subscription.remaining_value ?? 0) >= (amountCharged ?? 0);
+        if (!canCharge) return { isRedemption: false, error: 'Insufficient credit balance' };
+      } else if ((subscription.remaining_visits ?? 0) <= 0) {
         return { isRedemption: false };
       }
 
@@ -160,7 +177,7 @@ export const useLoyaltyRedemption = () => {
           location_id: locationId,
           visit_type: 'redemption',
           service_rendered: service.join(', '),
-          amount_charged: 0, // No payment for redemptions
+          amount_charged: plan.type === 'credit' ? (amountCharged || 0) : 0, // Use amount for credit plans
           payment_method: 'subscription',
           created_by: user?.id,
           notes: `Package redemption from ${plan.name}`
@@ -170,32 +187,33 @@ export const useLoyaltyRedemption = () => {
 
       if (loyaltyError) {
         console.warn('Error creating loyalty visit:', loyaltyError);
-        return { isRedemption: false };
+        // Return error message for better user feedback
+        return { 
+          isRedemption: false, 
+          error: loyaltyError.message || 'Redemption failed due to subscription constraints'
+        };
       }
 
-      // Decrement remaining visits
-      const newRemainingVisits = Math.max(0, subscription.remaining_visits - 1);
-      const shouldExpire = newRemainingVisits <= 0;
-
-      const updateData: any = { remaining_visits: newRemainingVisits };
-      if (shouldExpire) {
-        updateData.status = 'expired';
-      }
-
-      const { error: updateError } = await supabase
+      // Read back updated subscription (DB trigger is expected to decrement/expire)
+      const { data: updatedSubscription, error: subReadError } = await supabase
         .from('subscription_purchases')
-        .update(updateData)
-        .eq('id', subscription.id);
+        .select('remaining_visits, status')
+        .eq('id', subscription.id)
+        .single();
 
-      if (updateError) {
-        console.warn('Error updating subscription visits:', updateError);
+      if (subReadError) {
+        console.warn('Error reading updated subscription after redemption:', subReadError);
       }
 
-      return { 
-        isRedemption: true, 
+      const remainingVisitsAfter = updatedSubscription?.remaining_visits != null
+        ? updatedSubscription.remaining_visits
+        : Math.max(0, subscription.remaining_visits - 1);
+
+      return {
+        isRedemption: true,
         logId: loyaltyVisit.id,
         subscriptionName: plan.name,
-        remainingVisits: newRemainingVisits
+        remainingVisits: remainingVisitsAfter
       };
 
     } catch (error) {

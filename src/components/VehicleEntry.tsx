@@ -579,16 +579,24 @@ export default function VehicleEntry({
           .maybeSingle();
 
         if (customer && vehicle) {
+          const finalAmount = parseFloat(amount) || 0;
+          const discountAmount = discount === '' ? 0 : parseFloat(discount) || 0;
+          const amountToCharge = finalAmount - discountAmount;
+          
           const result = await processRedemption(
             customer.id,
             vehicle.id,
             service,
             selectedLocation as string,
-            selectedSubscription.id
+            selectedSubscription.id,
+            amountToCharge
           );
           
           if (result.isRedemption) {
             redemptionData = result;
+          } else if (result.error) {
+            toast.error(result.error);
+            return;
           }
         }
       } catch (error) {
