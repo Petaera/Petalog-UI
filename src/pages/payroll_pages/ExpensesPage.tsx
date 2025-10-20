@@ -1031,7 +1031,7 @@ const ExpensesPage: React.FC = () => {
 
       {/* Add Expense Dialog */}
       <AlertDialog open={addExpenseOpen} onOpenChange={setAddExpenseOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="max-h-[90vh] overflow-y-auto">
           <AlertDialogHeader>
             <AlertDialogTitle>Add Expense</AlertDialogTitle>
             <AlertDialogDescription>Record a new expense for the selected branch and month.</AlertDialogDescription>
