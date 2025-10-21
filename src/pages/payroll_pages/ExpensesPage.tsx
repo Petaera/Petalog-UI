@@ -118,6 +118,75 @@ const ExpensesPage: React.FC = () => {
   const [categoryConfirmName, setCategoryConfirmName] = useState('');
   // Add Expense dialog
   const [addExpenseOpen, setAddExpenseOpen] = useState(false);
+  
+  // Test function to simulate tomorrow's recurring expenses (COMMENTED OUT - WORKING)
+  // const testTomorrowRecurringExpenses = async () => {
+  //   if (!selectedLocationId) {
+  //     toast({ title: 'Select branch', description: 'Choose a branch first.', variant: 'destructive' });
+  //     return;
+  //   }
+  //   
+  //   const tomorrow = new Date();
+  //   tomorrow.setDate(tomorrow.getDate() + 1);
+  //   const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+  //   
+  //   try {
+  //     setLoading(true);
+  //     await checkAndCreateRecurringExpenses(tomorrowStr);
+  //     await reloadExpenses();
+  //     toast({ 
+  //       title: 'Test Complete', 
+  //       description: `Simulated recurring expenses for ${tomorrowStr}. Check the expense list.`,
+  //       duration: 5000
+  //     });
+  //   } catch (error) {
+  //     console.error('Test error:', error);
+  //     toast({ title: 'Test Failed', description: 'Error simulating tomorrow\'s expenses', variant: 'destructive' });
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+
+  // Function to show upcoming recurring expenses (COMMENTED OUT - WORKING)
+  // const showUpcomingRecurringExpenses = async () => {
+  //   if (!selectedLocationId) {
+  //     toast({ title: 'Select branch', description: 'Choose a branch first.', variant: 'destructive' });
+  //     return;
+  //   }
+  //   
+  //   try {
+  //     const { data: recurringExpenses, error } = await supabase
+  //       .from('expenses')
+  //       .select('*')
+  //       .eq('branch_id', selectedLocationId)
+  //       .not('recurrence_type', 'is', null)
+  //       .neq('recurrence_type', 'One-time')
+  //       .not('next_due_date', 'is', null);
+  //     
+  //     if (error) {
+  //       console.error('Error fetching recurring expenses:', error);
+  //       return;
+  //     }
+  //     
+  //     if (!recurringExpenses || recurringExpenses.length === 0) {
+  //       toast({ title: 'No Recurring Expenses', description: 'No recurring expenses found.' });
+  //       return;
+  //     }
+  //     
+  //     const upcomingInfo = recurringExpenses.map(exp => 
+  //       `${exp.notes || 'Expense'} - Next due: ${formatDate(exp.next_due_date)} (${exp.recurrence_type})`
+  //     ).join('\n');
+  //     
+  //     toast({ 
+  //       title: 'Upcoming Recurring Expenses', 
+  //       description: upcomingInfo,
+  //       duration: 8000
+  //     });
+  //   } catch (error) {
+  //     console.error('Error:', error);
+  //     toast({ title: 'Error', description: 'Failed to fetch recurring expenses', variant: 'destructive' });
+  //   }
+  // };
 
 
   useEffect(() => {
@@ -132,6 +201,9 @@ const ExpensesPage: React.FC = () => {
           setLoading(false);
           return;
         }
+        
+        // Check and create recurring expenses for today
+        await checkAndCreateRecurringExpenses();
         
         // Expenses by month for selected branch
         try {
@@ -378,10 +450,204 @@ const ExpensesPage: React.FC = () => {
     setFormRecurrenceEndDate('');
   };
 
+  // Function to generate recurring expense dates
+  const generateRecurringDates = (startDate: string, recurrenceType: string, interval: number, endDate?: string): string[] => {
+    const dates: string[] = [];
+    const start = new Date(startDate);
+    const end = endDate ? new Date(endDate) : null;
+    const current = new Date(start);
+    
+    // Add the start date
+    dates.push(startDate);
+    
+    // Generate dates based on recurrence type
+    while (true) {
+      const nextDate = new Date(current);
+      
+      switch (recurrenceType) {
+        case 'Daily':
+          nextDate.setDate(current.getDate() + interval);
+          break;
+        case 'Weekly':
+          nextDate.setDate(current.getDate() + (interval * 7));
+          break;
+        case 'Monthly':
+          nextDate.setMonth(current.getMonth() + interval);
+          break;
+        case 'Bi-Monthly':
+          nextDate.setMonth(current.getMonth() + (interval * 2));
+          break;
+        case 'Quarterly':
+          nextDate.setMonth(current.getMonth() + (interval * 3));
+          break;
+        case 'Yearly':
+          nextDate.setFullYear(current.getFullYear() + interval);
+          break;
+        default:
+          return dates; // One-time, return just the start date
+      }
+      
+      // Check if we've reached the end date
+      if (end && nextDate > end) {
+        break;
+      }
+      
+      // Add the next date
+      dates.push(nextDate.toISOString().slice(0, 10));
+      current.setTime(nextDate.getTime());
+      
+      // Safety check to prevent infinite loops (max 1000 occurrences)
+      if (dates.length > 1000) {
+        break;
+      }
+    }
+    
+    return dates;
+  };
+
+  // Function to validate recurrence settings
+  const validateRecurrenceSettings = (recurrenceType: string, interval: number, endDate?: string): { isValid: boolean; message?: string } => {
+    if (recurrenceType === 'One-time') {
+      return { isValid: true };
+    }
+    
+    if (interval < 1) {
+      return { isValid: false, message: 'Interval must be at least 1' };
+    }
+    
+    if (endDate) {
+      const start = new Date();
+      const end = new Date(endDate);
+      if (end <= start) {
+        return { isValid: false, message: 'End date must be in the future' };
+      }
+    }
+    
+    return { isValid: true };
+  };
+
+  // Function to check and create recurring expenses for today
+  const checkAndCreateRecurringExpenses = async (testDate?: string) => {
+    if (!selectedLocationId) return;
+    
+    try {
+      const today = testDate || new Date().toISOString().slice(0, 10);
+      
+      // Find all recurring expenses that are due today
+      const { data: recurringExpenses, error } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('branch_id', selectedLocationId)
+        .not('recurrence_type', 'is', null)
+        .neq('recurrence_type', 'One-time')
+        .lte('next_due_date', today)
+        .or(`recurrence_end_date.is.null,recurrence_end_date.gte.${today}`);
+      
+      if (error) {
+        console.error('Error fetching recurring expenses:', error);
+        return;
+      }
+      
+      if (!recurringExpenses || recurringExpenses.length === 0) {
+        return;
+      }
+      
+      // Create new expense entries for each recurring expense that's due
+      const newExpenses = [];
+      
+      for (const recurringExpense of recurringExpenses) {
+        // Check if an expense already exists for today with the same details
+        const { data: existingExpense } = await supabase
+          .from('expenses')
+          .select('id')
+          .eq('branch_id', selectedLocationId)
+          .eq('date', today)
+          .eq('category_id', recurringExpense.category_id)
+          .eq('amount', recurringExpense.amount)
+          .eq('payment_mode', recurringExpense.payment_mode)
+          .eq('recurrence_type', 'One-time')
+          .single();
+        
+        if (existingExpense) {
+          // Expense already exists for today, skip
+          continue;
+        }
+        
+        // Calculate next due date
+        const nextDueDate = calculateNextDueDate(
+          today, 
+          recurringExpense.recurrence_type, 
+          recurringExpense.recurrence_interval
+        );
+        
+        // Check if we've reached the end date
+        if (recurringExpense.recurrence_end_date && nextDueDate > recurringExpense.recurrence_end_date) {
+          // Mark this recurring template as completed by setting recurrence_type to One-time
+          await supabase
+            .from('expenses')
+            .update({ 
+              recurrence_type: 'One-time',
+              recurrence_interval: null,
+              recurrence_end_date: null,
+              next_due_date: null
+            })
+            .eq('id', recurringExpense.id);
+          continue;
+        }
+        
+        // Create new expense entry for today
+        newExpenses.push({
+          branch_id: selectedLocationId,
+          date: today,
+          amount: recurringExpense.amount,
+          payment_mode: recurringExpense.payment_mode,
+          category_id: recurringExpense.category_id,
+          notes: recurringExpense.notes,
+          is_monthly: recurringExpense.is_monthly,
+          monthly_allocation_days: recurringExpense.monthly_allocation_days,
+          created_by: recurringExpense.created_by,
+          recurrence_type: 'One-time', // This is now a one-time expense entry
+          recurrence_interval: null,
+          recurrence_end_date: null,
+          next_due_date: null,
+        });
+        
+        // Update the recurring template with the next due date
+        await supabase
+          .from('expenses')
+          .update({ next_due_date: nextDueDate })
+          .eq('id', recurringExpense.id);
+      }
+      
+      // Insert all new expenses
+      if (newExpenses.length > 0) {
+        const { error: insertError } = await supabase
+          .from('expenses')
+          .insert(newExpenses);
+        
+        if (insertError) {
+          console.error('Error creating recurring expenses:', insertError);
+        } else {
+          console.log(`Created ${newExpenses.length} recurring expenses for today`);
+        }
+      }
+    } catch (error) {
+      console.error('Error in checkAndCreateRecurringExpenses:', error);
+    }
+  };
+
   const saveExpense = async () => {
     if (!selectedLocationId) { toast({ title: 'Select branch', description: 'Choose a branch first.', variant: 'destructive' }); return; }
     if (!formCategory || !formAmount || !formMode || !formDate) { toast({ title: 'Missing fields', description: 'Fill all required fields.', variant: 'destructive' }); return; }
     if (formMode === 'UPI' && !selectedUpiAccountId) { toast({ title: 'Select UPI account', description: 'Choose a UPI account for UPI payments.', variant: 'destructive' }); return; }
+    
+    // Validate recurrence settings
+    const validation = validateRecurrenceSettings(formRecurrenceType, Number(formRecurrenceInterval), formRecurrenceEndDate);
+    if (!validation.isValid) {
+      toast({ title: 'Invalid recurrence settings', description: validation.message, variant: 'destructive' });
+      return;
+    }
+    
     try {
       setSaving(true);
       const buildNotes = () => {
@@ -399,6 +665,7 @@ const ExpensesPage: React.FC = () => {
         : null;
 
       if (formRepeatDaily) {
+        // Handle the old daily repeat logic for backward compatibility
         const month = selectedMonth || formDate.slice(0, 7);
         const monthStart = `${month}-01`;
         const endDate = new Date(new Date(monthStart).getFullYear(), new Date(monthStart).getMonth() + 1, 0);
@@ -416,11 +683,38 @@ const ExpensesPage: React.FC = () => {
             is_monthly: formIsMonthly || false,
             monthly_allocation_days: formIsMonthly && formMonthlyDays ? Number(formMonthlyDays) : null,
             created_by: user?.id || null,
+            recurrence_type: 'Daily',
+            recurrence_interval: 1,
+            recurrence_end_date: null,
+            next_due_date: null,
           });
         }
         const { error: batchInsertError } = await supabase.from('expenses').insert(payloads);
         if (batchInsertError) throw batchInsertError;
+      } else if (formRecurrenceType !== 'One-time') {
+        // Handle recurring expenses - only create the current date entry
+        const nextDueDate = calculateNextDueDate(formDate, formRecurrenceType, Number(formRecurrenceInterval));
+        
+        const payload = {
+          branch_id: selectedLocationId,
+          date: formDate, // Only create for the current selected date
+          amount: Number(formAmount),
+          payment_mode: formMode,
+          category_id: formCategory,
+          notes: buildNotes(),
+          is_monthly: formIsMonthly || false,
+          monthly_allocation_days: formIsMonthly && formMonthlyDays ? Number(formMonthlyDays) : null,
+          created_by: user?.id || null,
+          recurrence_type: formRecurrenceType,
+          recurrence_interval: Number(formRecurrenceInterval),
+          recurrence_end_date: formRecurrenceEndDate || null,
+          next_due_date: nextDueDate,
+        };
+        
+        const { error: singleInsertError } = await supabase.from('expenses').insert(payload);
+        if (singleInsertError) throw singleInsertError;
       } else {
+        // Handle one-time expense
         const payload: any = {
           branch_id: selectedLocationId,
           date: formDate,
@@ -431,20 +725,36 @@ const ExpensesPage: React.FC = () => {
           is_monthly: formIsMonthly || false,
           monthly_allocation_days: formIsMonthly && formMonthlyDays ? Number(formMonthlyDays) : null,
           created_by: user?.id || null,
+          recurrence_type: 'One-time',
+          recurrence_interval: null,
+          recurrence_end_date: null,
+          next_due_date: null,
         };
         const { error: singleInsertError } = await supabase.from('expenses').insert(payload);
         if (singleInsertError) throw singleInsertError;
       }
+      
+      const message = formRepeatDaily 
+        ? 'Daily expenses created for the month.' 
+        : formRecurrenceType !== 'One-time' 
+          ? `Recurring expense created for ${formatDate(formDate)}. Future occurrences will be created automatically.`
+          : 'Your expense has been recorded successfully.';
+          
       toast({ 
         title: 'Expense added', 
-        description: formRepeatDaily ? 'Daily expenses created for the month.' : 'Your expense has been recorded successfully.',
-        duration: 3000 // Auto-dismiss after 3 seconds
+        description: message,
+        duration: 3000
       });
       resetForm();
       setShowAddForm(false);
       await reloadExpenses();
-    } catch (_) {
-      // swallow for now or show toast if available
+    } catch (error: any) {
+      console.error('Error saving expense:', error);
+      toast({ 
+        title: 'Error', 
+        description: error?.message || 'Failed to save expense', 
+        variant: 'destructive' 
+      });
     } finally {
       setSaving(false);
     }
@@ -640,6 +950,10 @@ const ExpensesPage: React.FC = () => {
         amount: Number(editAmount),
         payment_mode: editMode,
         notes,
+        recurrence_type: editRecurrenceType,
+        recurrence_interval: editRecurrenceType !== 'One-time' ? Number(editRecurrenceInterval) : null,
+        recurrence_end_date: editRecurrenceType !== 'One-time' ? (editRecurrenceEndDate || null) : null,
+        next_due_date: nextDueDate,
       };
       const { error } = await supabase.from('expenses').update(updates).eq('id', editingExpenseId);
       if (error) throw error;
@@ -823,6 +1137,15 @@ const ExpensesPage: React.FC = () => {
               {manageCategories ? 'Close' : 'Manage Categories'}
             </Button>
           )}
+          {/* Test buttons commented out - recurring expenses working properly */}
+          {/* <Button variant="outline" className="text-blue-600 border-blue-200 hover:bg-blue-50" onClick={() => {}}>
+            <Calendar className="h-4 w-4 mr-2" />
+            View Upcoming
+          </Button>
+          <Button variant="outline" className="text-orange-600 border-orange-200 hover:bg-orange-50" onClick={() => {}}>
+            <Calendar className="h-4 w-4 mr-2" />
+            Test Tomorrow
+          </Button> */}
           <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => setAddExpenseOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Add Expense
@@ -1166,6 +1489,10 @@ const ExpensesPage: React.FC = () => {
                     <strong>Preview:</strong> This expense will repeat every {formRecurrenceInterval} {formRecurrenceType.toLowerCase()}
                     {formRecurrenceEndDate && ` until ${formatDate(formRecurrenceEndDate)}`}
                     . Next due: {formatDate(calculateNextDueDate(formDate, formRecurrenceType, Number(formRecurrenceInterval)))}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    <strong>Note:</strong> Only the expense for {formatDate(formDate)} will be created now. 
+                    Future recurring expenses will be automatically created on their due dates.
                   </p>
                 </div>
               )}
