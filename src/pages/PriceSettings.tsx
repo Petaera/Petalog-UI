@@ -357,7 +357,63 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
     }
   };
 
-  // Handle enhanced workshop addition
+  // COMMENTED OUT: Handle enhanced workshop addition (Supabase integration)
+  // const handleAddWorkshop = async () => {
+  //   if (!newWorkshopName.trim()) {
+  //     toast.error("Please enter a workshop name");
+  //     return;
+  //   }
+
+  //   const validDiscounts = workshopVehicleDiscounts.filter(wv => {
+  //     const discount = parseFloat(wv.discount);
+  //     return !isNaN(discount);
+  //   });
+
+  //   if (validDiscounts.length === 0) {
+  //     toast.error("Please enter at least one valid discount");
+  //     return;
+  //   }
+
+  //   if (!currentLocationId) {
+  //     toast.error("Location not selected");
+  //     return;
+  //   }
+
+  //   setAddingWorkshop(true);
+  //   try {
+  //     const dataToInsert = validDiscounts.map(wv => ({
+  //       WORKSHOP: newWorkshopName.trim().toUpperCase(),
+  //       VEHICLE: wv.vehicle.trim().toUpperCase(),
+  //       Discount: parseFloat(wv.discount),
+  //       location_id: currentLocationId,
+  //       "Created at": new Date().toISOString()
+  //     }));
+
+  //     const { error } = await supabase
+  //       .from('workshop_prices')
+  //       .insert(dataToInsert);
+
+  //     if (error) {
+  //       console.error('Add workshop error:', error);
+  //       toast.error(`Failed to add workshop: ${error.message}`);
+  //       return;
+  //     }
+
+  //     toast.success(`Workshop added successfully with ${dataToInsert.length} vehicle types!`);
+  //     setAddWorkshopDialogOpen(false);
+  //     setNewWorkshopName('');
+  //     setWorkshopVehicleDiscounts([]);
+  //     setNewWorkshopVehicleType('');
+  //     await refreshData();
+  //   } catch (error) {
+  //     console.error('Add workshop error:', error);
+  //     toast.error("Failed to add workshop");
+  //   } finally {
+  //     setAddingWorkshop(false);
+  //   }
+  // };
+
+  // DUMMY: Mock workshop addition for testing
   const handleAddWorkshop = async () => {
     if (!newWorkshopName.trim()) {
       toast.error("Please enter a workshop name");
@@ -374,43 +430,12 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
       return;
     }
 
-    if (!currentLocationId) {
-      toast.error("Location not selected");
-      return;
-    }
-
-    setAddingWorkshop(true);
-    try {
-      const dataToInsert = validDiscounts.map(wv => ({
-        WORKSHOP: newWorkshopName.trim().toUpperCase(),
-        VEHICLE: wv.vehicle.trim().toUpperCase(),
-        Discount: parseFloat(wv.discount),
-        location_id: currentLocationId,
-        "Created at": new Date().toISOString()
-      }));
-
-      const { error } = await supabase
-        .from('workshop_prices')
-        .insert(dataToInsert);
-
-      if (error) {
-        console.error('Add workshop error:', error);
-        toast.error(`Failed to add workshop: ${error.message}`);
-        return;
-      }
-
-      toast.success(`Workshop added successfully with ${dataToInsert.length} vehicle types!`);
-      setAddWorkshopDialogOpen(false);
-      setNewWorkshopName('');
-      setWorkshopVehicleDiscounts([]);
-      setNewWorkshopVehicleType('');
-      await refreshData();
-    } catch (error) {
-      console.error('Add workshop error:', error);
-      toast.error("Failed to add workshop");
-    } finally {
-      setAddingWorkshop(false);
-    }
+    // Mock success for testing
+    toast.success(`Workshop added successfully with ${validDiscounts.length} vehicle types! (Mock data)`);
+    setAddWorkshopDialogOpen(false);
+    setNewWorkshopName('');
+    setWorkshopVehicleDiscounts([]);
+    setNewWorkshopVehicleType('');
   };
 
   // Open edit dialog for service
@@ -525,90 +550,107 @@ const saveServiceEdits = async () => {
   }
 };
 
-  // Save workshop edits
-  // Save workshop edits with proper update logic
-const saveWorkshopEdits = async () => {
-  if (!editingWorkshop || !currentLocationId) return;
+  // COMMENTED OUT: Save workshop edits (Supabase integration)
+  // const saveWorkshopEdits = async () => {
+  //   if (!editingWorkshop || !currentLocationId) return;
 
-  setSaving(true);
-  try {
-    // Get existing entries
-    const { data: existingEntries } = await supabase
-      .from('workshop_prices')
-      .select('*')
-      .eq('WORKSHOP', editingWorkshop)
-      .eq('location_id', currentLocationId);
+  //   setSaving(true);
+  //   try {
+  //     // Get existing entries
+  //     const { data: existingEntries } = await supabase
+  //       .from('workshop_prices')
+  //       .select('*')
+  //       .eq('WORKSHOP', editingWorkshop)
+  //       .eq('location_id', currentLocationId);
 
-    const existingMap = new Map(
-      (existingEntries || []).map(entry => [entry.VEHICLE, entry])
-    );
+  //     const existingMap = new Map(
+  //       (existingEntries || []).map(entry => [entry.VEHICLE, entry])
+  //     );
 
-    // Separate into update, insert, and delete operations
-    const toUpdate: any[] = [];
-    const toInsert: any[] = [];
-    const toDelete: string[] = [];
+  //     // Separate into update, insert, and delete operations
+  //     const toUpdate: any[] = [];
+  //     const toInsert: any[] = [];
+  //     const toDelete: string[] = [];
 
-    Object.entries(editValues).forEach(([vehicle, discount]) => {
-      const existing = existingMap.get(vehicle);
-      
-      if (existing) {
-        // Update existing entry (even if discount is 0, workshops can have 0 discount)
-        toUpdate.push({ id: existing.id, Discount: discount });
-        existingMap.delete(vehicle);
-      } else {
-        // Insert new entry
-        toInsert.push({
-          WORKSHOP: editingWorkshop,
-          VEHICLE: vehicle,
-          Discount: discount,
-          location_id: currentLocationId,
-          "Created at": new Date().toISOString()
-        });
-      }
-    });
+  //     Object.entries(editValues).forEach(([vehicle, discount]) => {
+  //       const existing = existingMap.get(vehicle);
+        
+  //       if (existing) {
+  //         // Update existing entry (even if discount is 0, workshops can have 0 discount)
+  //         toUpdate.push({ id: existing.id, Discount: discount });
+  //         existingMap.delete(vehicle);
+  //       } else {
+  //         // Insert new entry
+  //         toInsert.push({
+  //           WORKSHOP: editingWorkshop,
+  //           VEHICLE: vehicle,
+  //           Discount: discount,
+  //           location_id: currentLocationId,
+  //           "Created at": new Date().toISOString()
+  //         });
+  //       }
+  //     });
 
-    // Delete remaining entries (vehicles not in editValues)
-    existingMap.forEach(entry => toDelete.push(entry.id));
+  //     // Delete remaining entries (vehicles not in editValues)
+  //     existingMap.forEach(entry => toDelete.push(entry.id));
 
-    // Execute updates
-    if (toUpdate.length > 0) {
-      for (const item of toUpdate) {
-        const { error } = await supabase
-          .from('workshop_prices')
-          .update({ Discount: item.Discount })
-          .eq('id', item.id);
-        if (error) throw error;
-      }
+  //     // Execute updates
+  //     if (toUpdate.length > 0) {
+  //       for (const item of toUpdate) {
+  //         const { error } = await supabase
+  //           .from('workshop_prices')
+  //           .update({ Discount: item.Discount })
+  //           .eq('id', item.id);
+  //         if (error) throw error;
+  //       }
+  //     }
+
+  //     // Execute inserts
+  //     if (toInsert.length > 0) {
+  //       const { error } = await supabase
+  //         .from('workshop_prices')
+  //         .insert(toInsert);
+  //       if (error) throw error;
+  //     }
+
+  //     // Execute deletes
+  //     if (toDelete.length > 0) {
+  //       const { error } = await supabase
+  //         .from('workshop_prices')
+  //         .delete()
+  //         .in('id', toDelete);
+  //       if (error) throw error;
+  //     }
+
+  //     toast.success("Workshop discounts updated successfully!");
+  //     setEditingWorkshop(null);
+  //     setEditValues({});
+  //     await refreshData();
+  //   } catch (error) {
+  //     console.error('Save error:', error);
+  //     toast.error("Failed to save changes");
+  //   } finally {
+  //     setSaving(false);
+  //   }
+  // };
+
+  // DUMMY: Mock workshop edits for testing
+  const saveWorkshopEdits = async () => {
+    if (!editingWorkshop) return;
+
+    setSaving(true);
+    try {
+      // Mock success for testing
+      toast.success("Workshop discounts updated successfully! (Mock data)");
+      setEditingWorkshop(null);
+      setEditValues({});
+    } catch (error) {
+      console.error('Save error:', error);
+      toast.error("Failed to save changes");
+    } finally {
+      setSaving(false);
     }
-
-    // Execute inserts
-    if (toInsert.length > 0) {
-      const { error } = await supabase
-        .from('workshop_prices')
-        .insert(toInsert);
-      if (error) throw error;
-    }
-
-    // Execute deletes
-    if (toDelete.length > 0) {
-      const { error } = await supabase
-        .from('workshop_prices')
-        .delete()
-        .in('id', toDelete);
-      if (error) throw error;
-    }
-
-    toast.success("Workshop discounts updated successfully!");
-    setEditingWorkshop(null);
-    setEditValues({});
-    await refreshData();
-  } catch (error) {
-    console.error('Save error:', error);
-    toast.error("Failed to save changes");
-  } finally {
-    setSaving(false);
-  }
-};
+  };
 
   // Generate sample Excel file for services (matrix format)
   const downloadSampleFile = () => {
@@ -857,38 +899,60 @@ const saveWorkshopEdits = async () => {
     }
   };
 
-  // Import data to database for workshops
+  // COMMENTED OUT: Import data to database for workshops (Supabase integration)
+  // const handleWorkshopImport = async () => {
+  //   if (!workshopImportPreview.length || !currentLocationId) {
+  //     toast.error("No data to import or location not selected");
+  //     return;
+  //   }
+
+  //   setWorkshopImporting(true);
+  //   try {
+  //     const dataToInsert = workshopImportPreview.map(row => ({
+  //       WORKSHOP: row.WORKSHOP ? row.WORKSHOP.toUpperCase() : '',
+  //       VEHICLE: row.VEHICLE ? row.VEHICLE.toUpperCase() : '',
+  //       Discount: row.Discount,
+  //       location_id: currentLocationId,
+  //       "Created at": new Date().toISOString()
+  //     }));
+
+  //     const { error } = await supabase
+  //       .from('workshop_prices')
+  //       .insert(dataToInsert);
+
+  //     if (error) {
+  //       console.error('Workshop import error:', error);
+  //       toast.error(`Import failed: ${error.message}`);
+  //       return;
+  //     }
+
+  //     toast.success(`Successfully imported ${dataToInsert.length} workshop discount records`);
+  //     setWorkshopImportDialogOpen(false);
+  //     setWorkshopImportFile(null);
+  //     setWorkshopImportPreview([]);
+  //     await refreshData();
+  //   } catch (error) {
+  //     console.error('Workshop import error:', error);
+  //     toast.error("Import failed");
+  //   } finally {
+  //     setWorkshopImporting(false);
+  //   }
+  // };
+
+  // DUMMY: Mock workshop import for testing
   const handleWorkshopImport = async () => {
-    if (!workshopImportPreview.length || !currentLocationId) {
-      toast.error("No data to import or location not selected");
+    if (!workshopImportPreview.length) {
+      toast.error("No data to import");
       return;
     }
 
     setWorkshopImporting(true);
     try {
-      const dataToInsert = workshopImportPreview.map(row => ({
-        WORKSHOP: row.WORKSHOP ? row.WORKSHOP.toUpperCase() : '',
-        VEHICLE: row.VEHICLE ? row.VEHICLE.toUpperCase() : '',
-        Discount: row.Discount,
-        location_id: currentLocationId,
-        "Created at": new Date().toISOString()
-      }));
-
-      const { error } = await supabase
-        .from('workshop_prices')
-        .insert(dataToInsert);
-
-      if (error) {
-        console.error('Workshop import error:', error);
-        toast.error(`Import failed: ${error.message}`);
-        return;
-      }
-
-      toast.success(`Successfully imported ${dataToInsert.length} workshop discount records`);
+      // Mock success for testing
+      toast.success(`Successfully imported ${workshopImportPreview.length} workshop discount records (Mock data)`);
       setWorkshopImportDialogOpen(false);
       setWorkshopImportFile(null);
       setWorkshopImportPreview([]);
-      await refreshData();
     } catch (error) {
       console.error('Workshop import error:', error);
       toast.error("Import failed");
@@ -928,9 +992,10 @@ const saveWorkshopEdits = async () => {
         servicePricesRes = { data: null, error: { message: 'No service prices table found' } };
       }
       
-      const workshopPricesRes = await supabase
-        .from('workshop_prices')
-        .select('*');
+      // COMMENTED OUT: Workshop prices data fetching from Supabase
+      // const workshopPricesRes = await supabase
+      //   .from('workshop_prices')
+      //   .select('*');
 
       if (servicePricesRes.error) {
         setError('Failed to fetch service prices');
@@ -954,15 +1019,35 @@ const saveWorkshopEdits = async () => {
         setIsServiceTableEmpty(Array.isArray(rows) && rows.length === 0);
       }
 
-      if (!workshopPricesRes.error && workshopPricesRes.data) {
-        setWorkshopPrices(workshopPricesRes.data);
-        processWorkshopPricesToMatrix(workshopPricesRes.data);
-      } else {
-        setWorkshopPrices([]);
-        setWorkshopList([]);
-        setWorkshopVehicleList([]);
-        setWorkshopMatrix({});
-      }
+      // COMMENTED OUT: Workshop prices data processing from Supabase
+      // if (!workshopPricesRes.error && workshopPricesRes.data) {
+      //   setWorkshopPrices(workshopPricesRes.data);
+      //   processWorkshopPricesToMatrix(workshopPricesRes.data);
+      // } else {
+      //   setWorkshopPrices([]);
+      //   setWorkshopList([]);
+      //   setWorkshopVehicleList([]);
+      //   setWorkshopMatrix({});
+      // }
+
+      // DUMMY DATA: Workshop discount matrix for testing
+      const dummyWorkshopPrices: WorkshopPrice[] = [
+        { id: '1', WORKSHOP: 'ABC Auto Service', VEHICLE: 'Car', Discount: 15 },
+        { id: '2', WORKSHOP: 'ABC Auto Service', VEHICLE: 'Bike', Discount: 10 },
+        { id: '3', WORKSHOP: 'ABC Auto Service', VEHICLE: 'Truck', Discount: 20 },
+        { id: '4', WORKSHOP: 'XYZ Motors', VEHICLE: 'Car', Discount: 12 },
+        { id: '5', WORKSHOP: 'XYZ Motors', VEHICLE: 'Bike', Discount: 8 },
+        { id: '6', WORKSHOP: 'XYZ Motors', VEHICLE: 'Truck', Discount: 18 },
+        { id: '7', WORKSHOP: 'City Garage', VEHICLE: 'Car', Discount: 10 },
+        { id: '8', WORKSHOP: 'City Garage', VEHICLE: 'Bike', Discount: 5 },
+        { id: '9', WORKSHOP: 'City Garage', VEHICLE: 'Truck', Discount: 15 },
+        { id: '10', WORKSHOP: 'Premium Auto', VEHICLE: 'Car', Discount: 25 },
+        { id: '11', WORKSHOP: 'Premium Auto', VEHICLE: 'Bike', Discount: 20 },
+        { id: '12', WORKSHOP: 'Premium Auto', VEHICLE: 'Truck', Discount: 30 }
+      ];
+      
+      setWorkshopPrices(dummyWorkshopPrices);
+      processWorkshopPricesToMatrix(dummyWorkshopPrices);
     } catch (error) {
       setError('Failed to fetch data');
     } finally {
