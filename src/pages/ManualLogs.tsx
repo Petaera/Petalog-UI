@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, PenTool, Check, X, Clock, CheckCircle, Calendar, Edit, Trash2 } from "lucide-react";
+import { ArrowLeft, PenTool, Check, X, Clock, CheckCircle, Calendar, Edit, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 
 import { useUpiAccounts } from '@/hooks/useUpiAccounts';
+import { DataCalendar } from '@/components/ui/DataCalendar';
 
 interface ManualLogsProps {
   selectedLocation?: string;
@@ -83,6 +84,10 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
   const [loyaltyPlans, setLoyaltyPlans] = useState<any[]>([]);
   const [selectedLoyaltyPlanId, setSelectedLoyaltyPlanId] = useState<string>('');
   const [addingToLoyalty, setAddingToLoyalty] = useState(false);
+
+  // Calendar data tracking
+  const [datesWithData, setDatesWithData] = useState<string[]>([]);
+  const [isCalendarExpanded, setIsCalendarExpanded] = useState(false);
 
   // Reset UPI account selection when selectedLocation changes
   useEffect(() => {
@@ -302,6 +307,25 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
   const fetchLogs = async () => {
     setLoading(true);
     try {
+      // First, fetch all dates with data for calendar visualization
+      const { data: allLogsData } = await supabase
+        .from("logs-man")
+        .select("entry_time, created_at")
+        .eq("location_id", selectedLocation);
+
+      // Extract unique dates from all logs
+      const uniqueDates = new Set<string>();
+      if (allLogsData) {
+        allLogsData.forEach(log => {
+          const entryTime = log.entry_time || log.created_at;
+          if (entryTime) {
+            const dateStr = new Date(entryTime).toISOString().split('T')[0];
+            uniqueDates.add(dateStr);
+          }
+        });
+      }
+      setDatesWithData(Array.from(uniqueDates));
+
       // Fetch pending logs (not approved yet)
       let pendingQuery = supabase
         .from("logs-man")
@@ -626,6 +650,52 @@ export default function ManualLogs({ selectedLocation }: ManualLogsProps) {
               </div>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Calendar Visualization */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-muted-foreground" />
+              <Label className="text-sm font-medium">
+                Data Entry Calendar
+              </Label>
+              <Badge variant="outline" className="text-xs">
+                {datesWithData.length} days with data
+              </Badge>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsCalendarExpanded(!isCalendarExpanded)}
+              className="flex items-center gap-2"
+            >
+              {isCalendarExpanded ? (
+                <>
+                  <ChevronUp className="h-4 w-4" />
+                  Hide Calendar
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="h-4 w-4" />
+                  Show Calendar
+                </>
+              )}
+            </Button>
+          </div>
+          
+          {isCalendarExpanded && (
+            <div className="mt-4">
+              <DataCalendar
+                selectedDate={selectedDate}
+                onDateSelect={setSelectedDate}
+                datesWithData={datesWithData}
+                className="w-full max-w-md mx-auto"
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
 
