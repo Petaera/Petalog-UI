@@ -1,4 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
+import { useState, useEffect } from "react";
 import {
   Home,
   Database,
@@ -28,12 +29,16 @@ import {
 } from "@/components/ui/sidebar";
 
 import { useAuth } from "@/contexts/AuthContext";
+import { useSelectedLocation } from "@/hooks/useSelectedLocation";
+import { supabase } from "@/lib/supabaseClient";
 
 export function AppSidebar() {
   const location = useLocation();
   const currentPath = location.pathname;
   const { user } = useAuth();
   const { setOpenMobile } = useSidebar();
+  const selectedLocationId = useSelectedLocation();
+  const [locationLogo, setLocationLogo] = useState<string | null>(null);
 
   const isManager = user?.role === 'manager';
   const isWorker = user?.role === 'worker';
@@ -48,6 +53,37 @@ export function AppSidebar() {
     // Close the mobile sidebar when a navigation item is clicked
     setOpenMobile(false);
   };
+
+  // Fetch location-specific logo
+  // Priority: Location custom logo > Default logo
+  useEffect(() => {
+    const fetchLocationLogo = async () => {
+      if (!selectedLocationId) {
+        setLocationLogo(null);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('locations')
+          .select('logo_url')
+          .eq('id', selectedLocationId)
+          .single();
+
+        // If location has a custom logo, use it; otherwise use null (which will fallback to default)
+        if (!error && data?.logo_url) {
+          setLocationLogo(data.logo_url);
+        } else {
+          setLocationLogo(null);
+        }
+      } catch (error) {
+        console.error('Error fetching location logo:', error);
+        setLocationLogo(null);
+      }
+    };
+
+    fetchLocationLogo();
+  }, [selectedLocationId]);
 
   const navigationItems = isWorker
     ? [
@@ -84,8 +120,19 @@ export function AppSidebar() {
       <SidebarContent className="py-4">
         <SidebarGroup>
           <SidebarGroupLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3 py-2">
-            <span className="hidden sm:inline" style={{ fontSize: '24px', fontWeight: 'bold' ,alignContent: 'center'}}>PetaLog </span><br/>
-            <span className="sm:hidden">PetaLog</span>
+            <div className="flex items-center gap-2">
+              {/* Show location-specific logo if uploaded, otherwise show default logo */}
+              <img 
+                src={locationLogo || "/uploads/Logo only white bg.png"} 
+                alt="Location Logo" 
+                className="h-6 w-6 sm:h-10 sm:w-10 object-contain"
+                onError={(e) => {
+                  // Fallback to default logo if custom location logo fails to load
+                  e.currentTarget.src = "/uploads/Logo only white bg.png";
+                }}
+              />
+              <span className="font-bold text-lg sm:text-2xl">PetaLog</span>
+            </div>
           </SidebarGroupLabel>
 
           <SidebarGroupContent>

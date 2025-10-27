@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, Check, Mail, BarChart3, TrendingUp } from "lucide-react";
+import { Loader2, Check, Mail, BarChart3, TrendingUp, Upload, Image as ImageIcon } from "lucide-react";
+import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 
 interface TemplateOption {
   id: number;
@@ -61,9 +62,13 @@ const templateOptions: TemplateOption[] = [
 
 export function ProfileSettings() {
   const { user } = useAuth();
+  const selectedLocationId = useSelectedLocation();
   const [selectedTemplate, setSelectedTemplate] = useState<number>(1);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoUrl, setLogoUrl] = useState<string>("");
+  const [locationName, setLocationName] = useState<string>("");
 
   useEffect(() => {
     const loadUserTemplate = async () => {
@@ -93,6 +98,29 @@ export function ProfileSettings() {
     loadUserTemplate();
   }, [user?.id]);
 
+  useEffect(() => {
+    const loadLocationLogo = async () => {
+      if (!selectedLocationId) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('locations')
+          .select('name, logo_url')
+          .eq('id', selectedLocationId)
+          .single();
+
+        if (!error && data) {
+          setLocationName(data.name || "");
+          setLogoUrl(data.logo_url || "");
+        }
+      } catch (error) {
+        console.error('Error loading location logo:', error);
+      }
+    };
+
+    loadLocationLogo();
+  }, [selectedLocationId]);
+
   const handleSaveTemplate = async () => {
     if (!user?.id) {
       toast.error('User not authenticated');
@@ -120,6 +148,84 @@ export function ProfileSettings() {
     }
   };
 
+  const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!user?.id || !selectedLocationId) {
+      toast.error('Please select a location first');
+      return;
+    }
+
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload an image file');
+      return;
+    }
+
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Image size should be less than 2MB');
+      return;
+    }
+
+    setLogoUploading(true);
+
+    try {
+      // Upload to Supabase storage
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${selectedLocationId}-${Date.now()}.${fileExt}`;
+      const filePath = `location-logos/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('uploads')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error('Error uploading logo:', uploadError);
+        
+        // Check if bucket doesn't exist
+        if (uploadError.message?.includes('Bucket not found') || uploadError.message?.includes('does not exist')) {
+          toast.error('Storage bucket not found. Please run the create_logo_storage_bucket.sql file in your Supabase SQL Editor.', {
+            duration: 5000
+          });
+        } else {
+          toast.error('Failed to upload logo: ' + uploadError.message);
+        }
+        
+        setLogoUploading(false);
+        return;
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('uploads')
+        .getPublicUrl(filePath);
+
+      // Update location with logo URL
+      const { error: updateError } = await supabase
+        .from('locations')
+        .update({ logo_url: publicUrl })
+        .eq('id', selectedLocationId);
+
+      if (updateError) {
+        console.error('Error updating location:', updateError);
+        toast.error('Failed to save logo URL');
+      } else {
+        setLogoUrl(publicUrl);
+        toast.success('Logo uploaded successfully!');
+      }
+    } catch (error) {
+      console.error('Error handling logo upload:', error);
+      toast.error('Failed to upload logo');
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
   if (initialLoading) {
     return (
       <div className="container max-w-4xl mx-auto p-6">
@@ -135,6 +241,81 @@ export function ProfileSettings() {
       {/* Header */}
       <div className="space-y-2">
         <h1 className="text-3xl font-bold tracking-tight">Profile Settings</h1>
+      </div>
+
+      {/* Location Logo Upload Section */}
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <h2 className="text-2xl font-semibold">Location Logo</h2>
+          <p className="text-muted-foreground">
+            Upload a logo for your location. This logo will appear in the sidebar.
+          </p>
+        </div>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
+              {/* Current Logo Preview */}
+              <div className="flex-shrink-0">
+                {logoUrl ? (
+                  <img
+                    src={logoUrl}
+                    alt="Location Logo"
+                    className="w-32 h-32 object-contain rounded-lg border bg-muted p-2"
+                  />
+                ) : (
+                  <div className="w-32 h-32 flex items-center justify-center rounded-lg border bg-muted">
+                    <ImageIcon className="w-12 h-12 text-muted-foreground" />
+                  </div>
+                )}
+              </div>
+
+              {/* Upload Controls */}
+              <div className="flex-1 space-y-4">
+                <div>
+                  <p className="text-sm font-medium mb-1">
+                    {locationName && `Location: ${locationName}`}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Upload a logo image (PNG, JPG up to 2MB)
+                  </p>
+                </div>
+
+                <div className="flex gap-3">
+                  <input
+                    type="file"
+                    id="logo-upload"
+                    accept="image/*"
+                    onChange={handleLogoUpload}
+                    disabled={logoUploading || !selectedLocationId}
+                    className="hidden"
+                  />
+                  <Button
+                    asChild
+                    disabled={logoUploading || !selectedLocationId}
+                  >
+                    <label
+                      htmlFor="logo-upload"
+                      className="cursor-pointer flex items-center gap-2"
+                    >
+                      {logoUploading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4" />
+                          Upload Logo
+                        </>
+                      )}
+                    </label>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Email Report Templates Section */}
