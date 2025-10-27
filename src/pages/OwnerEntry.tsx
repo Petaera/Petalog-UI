@@ -472,6 +472,58 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
     }
   }, [selectedModel, availableModels]);
 
+  // Auto-fill vehicleType based on most recent previous entries for the selected model
+  useEffect(() => {
+    // Do not override during edit/apply flows
+    if (!selectedModel || isEditing || isApplyingEditData) return;
+
+    let cancelled = false;
+
+    const fillVehicleTypeFromHistory = async () => {
+      try {
+        console.log('Attempting to auto-fill vehicleType for model:', selectedModel);
+
+        // First, try to find the most recent manual log entry that contains vehicle_type for this model
+        const { data: lastLog, error: logErr } = await supabase
+          .from('logs-man')
+          .select('vehicle_type')
+          .ilike('vehicle_model', selectedModel)
+          .not('vehicle_type', 'is', null)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (!logErr && lastLog && lastLog.vehicle_type) {
+          console.log('Found vehicle_type in logs-man for model', selectedModel, lastLog.vehicle_type);
+          if (!cancelled) setVehicleType(lastLog.vehicle_type);
+          return;
+        }
+
+        // Fallback: try to use the Vehicles_in_india dataset (availableModels contains type)
+        const modelEntry = availableModels.find(m => m.name === selectedModel && m.type);
+        if (modelEntry && modelEntry.type) {
+          // modelEntry.type may be numeric type codes; try to map to a vehicleType string if possible
+          // Prefer leaving mapping logic to existing heuristics: if priceMatrix contains a VEHICLE matching some known string,
+          // leave vehicleType empty here and rely on existing category->vehicleType derived flows. But if modelEntry.type looks like a descriptive string, use it.
+          const typeCandidate = String(modelEntry.type).trim();
+          if (typeCandidate && typeCandidate.toLowerCase() !== 'null') {
+            console.log('Using Vehicles_in_india type for vehicleType:', typeCandidate);
+            if (!cancelled) setVehicleType(typeCandidate);
+            return;
+          }
+        }
+
+        console.log('No historical vehicle_type found for model:', selectedModel);
+      } catch (err) {
+        console.warn('Error while auto-filling vehicleType for model', selectedModel, err);
+      }
+    };
+
+    // Slight debounce to avoid firing during fast typing
+    const t = setTimeout(fillVehicleTypeFromHistory, 150);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [selectedModel, availableModels, isEditing, isApplyingEditData]);
+
   // Update available models when vehicle brand changes (filtering by brand)
   useEffect(() => {
     if (vehicleData.length === 0) {
