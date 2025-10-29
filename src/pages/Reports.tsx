@@ -289,6 +289,133 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
   const [pendingLogs, setPendingLogs] = useState([]);
   const [showSingleDayCalendar, setShowSingleDayCalendar] = useState(false);
 
+  // New vs Returning customer stats (for current range) + previous period comparison
+  const [customerStats, setCustomerStats] = useState({
+    newCount: 0,
+    newAmount: 0,
+    returningCount: 0,
+    returningAmount: 0,
+    prevTotalCustomers: 0,
+    prevTotalAmount: 0,
+  });
+
+  // Helpers to compute current and previous period ranges based on selected dateRange
+  const getCurrentAndPrevRanges = (): { currentStart: Date; currentEnd: Date; prevStart: Date; prevEnd: Date } => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    let currentStart: Date = new Date(today);
+    let currentEnd: Date = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+
+    if (dateRange === "today") {
+      currentStart = new Date(today);
+      currentEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+    } else if (dateRange === "yesterday") {
+      const y = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+      currentStart = new Date(y.getFullYear(), y.getMonth(), y.getDate());
+      currentEnd = new Date(today);
+    } else if (dateRange === "singleday" && customFromDate) {
+      const s = new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate());
+      currentStart = s;
+      currentEnd = new Date(s.getTime() + 24 * 60 * 60 * 1000);
+    } else if (dateRange === "last7days") {
+      currentEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+      currentStart = new Date(currentEnd.getTime() - 7 * 24 * 60 * 60 * 1000);
+    } else if (dateRange === "last30days") {
+      currentEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+      currentStart = new Date(currentEnd.getTime() - 30 * 24 * 60 * 60 * 1000);
+    } else if (dateRange === "lastmonth") {
+      currentStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      currentEnd = new Date(today.getFullYear(), today.getMonth(), 1);
+    } else if (dateRange === "last3months") {
+      currentStart = new Date(today.getFullYear(), today.getMonth() - 3, 1);
+      currentEnd = new Date(today.getFullYear(), today.getMonth(), 1);
+    } else if (dateRange === "custom" && (customFromDate || customToDate)) {
+      const from = customFromDate ? new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate()) : new Date(0);
+      const toBase = customToDate ? new Date(customToDate.getFullYear(), customToDate.getMonth(), customToDate.getDate()) : today;
+      currentStart = from;
+      currentEnd = new Date(toBase.getTime() + 24 * 60 * 60 * 1000);
+    }
+
+    // Previous period of equal length, immediately before currentStart
+    const durationMs = currentEnd.getTime() - currentStart.getTime();
+    const prevEnd = new Date(currentStart.getTime());
+    const prevStart = new Date(prevEnd.getTime() - durationMs);
+    return { currentStart, currentEnd, prevStart, prevEnd };
+  };
+
+  // Compute new vs returning customers for the current period and previous period totals
+  useEffect(() => {
+    const compute = async () => {
+      try {
+        const { currentStart, currentEnd, prevStart, prevEnd } = getCurrentAndPrevRanges();
+
+        // Determine location context
+        const currentLocation = user?.role === 'manager' ? user?.assigned_location : (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
+
+        // Treat vehicle_number as the customer key
+        const currentPlateLogs = (logs || []).filter((l: any) => (l.vehicle_number || '').toString().trim().length > 0);
+        const plateToAmount = currentPlateLogs.reduce((acc: Record<string, number>, l: any) => {
+          const k = (l.vehicle_number || '').toString().trim().toUpperCase();
+          acc[k] = (acc[k] || 0) + (Number(l.Amount) || 0);
+          return acc;
+        }, {} as Record<string, number>);
+        const plates = Object.keys(plateToAmount);
+
+        let newCount = 0, newAmount = 0, returningCount = 0, returningAmount = 0;
+
+        if (plates.length > 0) {
+          // Check if each vehicle had a prior approved visit before currentStart
+          let q = supabase
+            .from('logs-man')
+            .select('vehicle_number')
+            .eq('approval_status', 'approved')
+            .lt('created_at', currentStart.toISOString())
+            .in('vehicle_number', plates);
+          if (currentLocation) q = q.eq('location_id', currentLocation);
+          const { data: priorRows } = await q;
+          const priorSet = new Set<string>((priorRows || []).map((r: any) => (r.vehicle_number || '').toString().trim().toUpperCase()));
+
+          plates.forEach((p) => {
+            const amt = plateToAmount[p] || 0;
+            if (priorSet.has(p)) {
+              returningCount += 1;
+              returningAmount += amt;
+            } else {
+              newCount += 1;
+              newAmount += amt;
+            }
+          });
+        }
+
+        // Previous period totals (unique customers and total amount)
+        let prevQ = supabase
+          .from('logs-man')
+          .select('vehicle_number, Amount')
+          .eq('approval_status', 'approved')
+          .gte('created_at', prevStart.toISOString())
+          .lt('created_at', prevEnd.toISOString());
+        if (currentLocation) prevQ = prevQ.eq('location_id', currentLocation);
+        const { data: prevRows } = await prevQ;
+        const prevPhones = new Set<string>((prevRows || []).map((r: any) => (r.vehicle_number || '').toString().trim().toUpperCase()).filter(Boolean));
+        const prevTotalAmount = (prevRows || []).reduce((s: number, r: any) => s + (Number(r.Amount) || 0), 0);
+
+        setCustomerStats({
+          newCount,
+          newAmount,
+          returningCount,
+          returningAmount,
+          prevTotalCustomers: prevPhones.size,
+          prevTotalAmount,
+        });
+      } catch (e) {
+        setCustomerStats({ newCount: 0, newAmount: 0, returningCount: 0, returningAmount: 0, prevTotalCustomers: 0, prevTotalAmount: 0 });
+      }
+    };
+    if (!authLoading) compute();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, logs, dateRange, customFromDate, customToDate, selectedLocation, user?.assigned_location, user?.role]);
+
   // Debounce search term to avoid too many API calls
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -2151,6 +2278,57 @@ useEffect(() => {
             </CardContent>
           </Card>
         )}
+
+        {/* Customers Overview - New vs Returning */}
+        <Card className="metric-card bg-emerald-50 border-emerald-100 shadow-none">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-emerald-900 flex items-center gap-2">
+              <Users className="h-4 w-4" /> Customers Overview
+            </CardTitle>
+            <Badge variant="outline" className="bg-emerald-100 text-emerald-800 border-emerald-200">
+              {dateRange === "today"
+                ? "Today"
+                : dateRange === "yesterday"
+                  ? "Yesterday"
+                  : dateRange === "singleday"
+                    ? customFromDate
+                      ? format(customFromDate, "PPP")
+                      : "Single Day"
+                    : dateRange === "last7days"
+                      ? "Last 7 Days"
+                      : dateRange === "last30days"
+                        ? "Last 30 Days"
+                        : dateRange === "lastmonth"
+                          ? "Last Month"
+                          : dateRange === "last3months"
+                            ? "Last 3 Months"
+                          : dateRange === "custom" && customFromDate && customToDate
+                            ? `${format(customFromDate, "dd MMM yyyy")} - ${format(customToDate, "dd MMM yyyy")}`
+                            : "Filtered Period"}
+            </Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="p-3 rounded-lg border bg-white/70">
+                <div className="text-xs text-muted-foreground">New Customers</div>
+                <div className="mt-1 flex items-baseline gap-2">
+                  <div className="text-xl font-bold text-emerald-900">{customerStats.newCount}</div>
+                  <div className="text-sm text-emerald-800">₹{Math.round(customerStats.newAmount).toLocaleString()}</div>
+                </div>
+              </div>
+              <div className="p-3 rounded-lg border bg-white/70">
+                <div className="text-xs text-muted-foreground">Returning Customers</div>
+                <div className="mt-1 flex items-baseline gap-2">
+                  <div className="text-xl font-bold text-emerald-900">{customerStats.returningCount}</div>
+                  <div className="text-sm text-emerald-800">₹{Math.round(customerStats.returningAmount).toLocaleString()}</div>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 text-xs text-emerald-900">
+              Prev period: {customerStats.prevTotalCustomers} customers • ₹{Math.round(customerStats.prevTotalAmount).toLocaleString()}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Today's Collection - Commented out
         <Card className="metric-card-warning">
