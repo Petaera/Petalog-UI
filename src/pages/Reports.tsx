@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { useAuth } from '@/contexts/AuthContext';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, XAxis, YAxis, LabelList, CartesianGrid} from 'recharts';
 import { Switch } from "@/components/ui/switch";
+import ReactSelect from 'react-select';
 // Types for our data
 interface Vehicle {
   id: string;
@@ -87,7 +88,7 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
   const navigate = useNavigate();
   const [dateRange, setDateRange] = useState("today");
   const [vehicleType, setVehicleType] = useState("all");
-  const [service, setService] = useState("all");
+  const [servicesFilter, setServicesFilter] = useState<string[]>([]);
   const [entryType, setEntryType] = useState("all");
   const [manager, setManager] = useState("all");
   const [customFromDate, setCustomFromDate] = useState<Date>();
@@ -189,9 +190,10 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
         logsQuery = logsQuery.ilike('vehicle_type', vehicleType);
       }
 
-      // Apply service filter
-      if (service !== "all") {
-        logsQuery = logsQuery.ilike('service', service);
+      // Apply service filter (handle comma-separated services in logs)
+      if (servicesFilter.length > 0) {
+        const orClause = servicesFilter.map(s => `service.ilike.%${s}%`).join(',');
+        logsQuery = logsQuery.or(orClause);
       }
 
       // Apply entry type filter
@@ -288,6 +290,7 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
 
   const [pendingLogs, setPendingLogs] = useState([]);
   const [showSingleDayCalendar, setShowSingleDayCalendar] = useState(false);
+  const [availableServices, setAvailableServices] = useState<string[]>([]);
 
   // New vs Returning customer stats (for current range) + previous period comparison
   const [customerStats, setCustomerStats] = useState({
@@ -430,7 +433,44 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
     if (!authLoading) {
       fetchFilteredData();
     }
-  }, [authLoading, selectedLocation, dateRange, vehicleType, service, entryType, manager, customFromDate, customToDate, debouncedSearchTerm, user?.assigned_location, user?.role]);
+  }, [authLoading, selectedLocation, dateRange, vehicleType, servicesFilter, entryType, manager, customFromDate, customToDate, debouncedSearchTerm, user?.assigned_location, user?.role]);
+
+  // Load unique services from Service_prices for current location
+  useEffect(() => {
+    const loadServices = async () => {
+      if (authLoading) return;
+      try {
+        const currentLocation = user?.role === 'manager' ? user?.assigned_location : (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
+        let q = supabase
+          .from('Service_prices')
+          .select('SERVICE')
+          .not('SERVICE', 'is', null);
+        if (currentLocation) q = q.eq('locationid', currentLocation);
+        const { data } = await q.order('SERVICE', { ascending: true });
+        const uniques = Array.from(new Set((data || [])
+          .map((r: any) => (r.SERVICE || '').toString().trim())
+          .filter((v: string) => v.length > 0)))
+          .sort((a, b) => a.localeCompare(b));
+        setAvailableServices(uniques);
+      } catch (e) {
+        setAvailableServices([]);
+      }
+    };
+    loadServices();
+  }, [authLoading, selectedLocation, user?.assigned_location, user?.role]);
+
+  // Fallback: if direct fetch returns nothing but we have servicePriceOptions, derive from it
+  useEffect(() => {
+    if (availableServices.length === 0 && Array.isArray(servicePriceOptions) && servicePriceOptions.length > 0) {
+      const currentLocation = user?.role === 'manager' ? user?.assigned_location : (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
+      const fromPrices = (servicePriceOptions || [])
+        .filter((sp: any) => !currentLocation || sp.locationid === currentLocation)
+        .map((sp: any) => (sp['SERVICE'] || '').toString().trim())
+        .filter((v: string) => v.length > 0);
+      const uniques = Array.from(new Set(fromPrices)).sort((a, b) => a.localeCompare(b));
+      setAvailableServices(uniques);
+    }
+  }, [availableServices.length, servicePriceOptions, selectedLocation, user?.assigned_location, user?.role]);
 
   // Fetch all-time outstanding Pay Later for current location (approved credit only)
   useEffect(() => {
@@ -503,8 +543,9 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
         if (vehicleType !== 'all') {
           query = query.ilike('vehicle_type', vehicleType);
         }
-        if (service !== 'all') {
-          query = query.ilike('service', service);
+        if (servicesFilter.length > 0) {
+          const orClause = servicesFilter.map(s => `service.ilike.%${s}%`).join(',');
+          query = query.or(orClause);
         }
         if (entryType !== 'all') {
           query = query.ilike('entry_type', entryType);
@@ -569,7 +610,7 @@ export default function Reports({ selectedLocation }: { selectedLocation?: strin
       }
     };
     fetchComparisonLogs();
-  }, [authLoading, selectedLocation, dateRange, vehicleType, service, entryType, manager, customFromDate, customToDate, user?.assigned_location, user?.role]);
+  }, [authLoading, selectedLocation, dateRange, vehicleType, servicesFilter, entryType, manager, customFromDate, customToDate, user?.assigned_location, user?.role]);
 
 useEffect(() => {
   const fetchTodayPendingLogs = async () => {
@@ -602,7 +643,7 @@ useEffect(() => {
   // Reset page when filters change
   useEffect(() => {
     setPage(1);
-  }, [dateRange, vehicleType, service, entryType, manager, customFromDate, customToDate, vehicleRecordsSearch]);
+  }, [dateRange, vehicleType, servicesFilter, entryType, manager, customFromDate, customToDate, vehicleRecordsSearch]);
 
   // Get filtered data (now logs are already filtered at database level)
   const getFilteredData = () => {
@@ -774,7 +815,7 @@ useEffect(() => {
   const clearFilters = () => {
     setDateRange("today");
     setVehicleType("all");
-    setService("all");
+    setServicesFilter([]);
     setEntryType("all");
     setManager("all");
     setCustomFromDate(undefined);
@@ -1272,30 +1313,41 @@ useEffect(() => {
               </Select>
             </div>
 
-            {/* Service Type Filter */}
+            {/* Service Type Filter (multi-select) */}
             <div className="space-y-2">
-              <Label htmlFor="service">Service Type</Label>
-              <Select value={service} onValueChange={setService}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All Services" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Services</SelectItem>
-                  {(() => {
-                    const currentLocation = user?.role === 'manager'
-                      ? user?.assigned_location
-                      : (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
-                    const fromPrices = (servicePriceOptions || [])
-                      .filter((sp: any) => !currentLocation || sp.locationid === currentLocation)
-                      .map((sp: any) => (sp['SERVICE'] || '').toString().trim())
-                      .filter((v: string) => v.length > 0);
-                    const uniqueServices = Array.from(new Set(fromPrices)).sort((a, b) => a.localeCompare(b));
-                    return uniqueServices.map((svc, index) => (
-                      <SelectItem key={`service-type-price-${svc}-${index}`} value={svc}>{svc}</SelectItem>
-                    ));
-                  })()}
-                </SelectContent>
-              </Select>
+              <Label>Service Type</Label>
+              {(() => {
+                const source = availableServices.length > 0
+                  ? availableServices
+                  : (() => {
+                      const currentLocation = user?.role === 'manager'
+                        ? user?.assigned_location
+                        : (user?.role === 'owner' && selectedLocation ? selectedLocation : null);
+                      const fromPrices = (servicePriceOptions || [])
+                        .filter((sp: any) => !currentLocation || sp.locationid === currentLocation)
+                        .map((sp: any) => (sp['SERVICE'] || '').toString().trim())
+                        .filter((v: string) => v.length > 0);
+                      return Array.from(new Set(fromPrices)).sort((a, b) => a.localeCompare(b));
+                    })();
+                const options = source.map(s => ({ value: s, label: s }));
+                const value = servicesFilter.map(s => ({ value: s, label: s }));
+                return (
+                  <ReactSelect
+                    isMulti
+                    options={options}
+                    value={value}
+                    placeholder={options.length === 0 ? "No services available" : "All services"}
+                    noOptionsMessage={() => options.length === 0 ? 'No services available' : 'Type to search'}
+                    onChange={(selected) => {
+                      const vals = Array.isArray(selected) ? selected.map((s: any) => s.value) : [];
+                      setServicesFilter(vals);
+                    }}
+                    classNamePrefix="react-select"
+                    menuPortalTarget={typeof document !== 'undefined' ? document.body : undefined}
+                    styles={{ menuPortal: base => ({ ...base, zIndex: 9999 }) }}
+                  />
+                );
+              })()}
             </div>
 
             {/* Entry Type Filter */}
@@ -1421,11 +1473,13 @@ useEffect(() => {
                   (log.vehicle_type || '').toString().trim().toLowerCase() === vehicleType.trim().toLowerCase()
                 );
               }
-              // Service
-              if (service !== "all") {
-                baseFilteredLogs = baseFilteredLogs.filter(log =>
-                  (log.service || '').toString().trim().toLowerCase() === service.trim().toLowerCase()
-                );
+              // Service (supports multi-select; match if any selected appears in log.service)
+              if (servicesFilter.length > 0) {
+                const lowered = servicesFilter.map(s => s.toLowerCase());
+                baseFilteredLogs = baseFilteredLogs.filter(log => {
+                  const svc = (log.service || '').toString().toLowerCase();
+                  return lowered.some(s => svc.includes(s));
+                });
               }
               // Entry type
               if (entryType !== "all") {
@@ -1844,11 +1898,13 @@ useEffect(() => {
                   (log.vehicle_type || '').toString().trim().toLowerCase() === vehicleType.trim().toLowerCase()
                 );
               }
-              // Service
-              if (service !== "all") {
-                baseFilteredLogs = baseFilteredLogs.filter(log =>
-                  (log.service || '').toString().trim().toLowerCase() === service.trim().toLowerCase()
-                );
+              // Service (supports multi-select)
+              if (servicesFilter.length > 0) {
+                const lowered = servicesFilter.map(s => s.toLowerCase());
+                baseFilteredLogs = baseFilteredLogs.filter(log => {
+                  const svc = (log.service || '').toString().toLowerCase();
+                  return lowered.some(s => svc.includes(s));
+                });
               }
               // Entry type
               if (entryType !== "all") {
