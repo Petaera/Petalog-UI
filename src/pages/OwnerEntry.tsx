@@ -19,6 +19,7 @@ import { getOrCreateVehicleId } from "@/lib/utils";
 import { useUpiAccounts } from '@/hooks/useUpiAccounts';
 
 import { ChevronDown, Calendar } from 'lucide-react';
+import { DataCalendar } from '@/components/ui/DataCalendar';
 
 // Add SERVICE_PRICES fallback at the top-level
 const SERVICE_PRICES: { [key: string]: number } = {
@@ -2265,50 +2266,20 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                       </button>
 
                       {isDateDropdownOpen && (
-                        <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-background border rounded-md shadow-lg">
-                          <div className="p-3 space-y-3">
-                            {/* Quick Date Options */}
-                            <div className="space-y-2">
-                              <Label className="text-xs text-muted-foreground">Quick Select</Label>
-                              <div className="grid grid-cols-2 gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedDateOption('today');
-                                    setIsDateDropdownOpen(false);
-                                  }}
-                                  className="px-3 py-2 text-sm border rounded-md hover:bg-muted/50 transition-colors"
-                                >
-                                  Today
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedDateOption('yesterday');
-                                    setIsDateDropdownOpen(false);
-                                  }}
-                                  className="px-3 py-2 text-sm border rounded-md hover:bg-muted/50 transition-colors"
-                                >
-                                  Yesterday
-                                </button>
-                              </div>
-                            </div>
-                            
-                            {/* Custom Date Input */}
-                            <div className="space-y-2">
-                              <Label className="text-xs text-muted-foreground">Custom Date</Label>
-                              <Input
-                                type="date"
-                                value={customEntryDate}
-                                onChange={(e) => {
-                                  setCustomEntryDate(e.target.value);
-                                  setSelectedDateOption('custom');
-                                  setIsDateDropdownOpen(false);
-                                }}
-                                max={todayYMD()}
-                                className="w-full text-sm"
-                              />
-                            </div>
+                        <div className="absolute top-full left-0 right-0 z-30 mt-2 px-2">
+                          <div className="mx-auto w-full min-w-[300px] sm:min-w-[360px] max-w-[440px] rounded-xl border bg-background shadow-xl max-h-[70vh] overflow-y-auto overflow-x-hidden p-3">
+                            <DataCalendar
+                              selectedDate={customEntryDate}
+                              onDateSelect={(dateStr) => {
+                                const today = todayYMD();
+                                const finalDate = dateStr > today ? today : dateStr;
+                                setCustomEntryDate(finalDate);
+                                setSelectedDateOption(finalDate === today ? 'today' : (finalDate === yesterdayYMD() ? 'yesterday' : 'custom'));
+                                setIsDateDropdownOpen(false);
+                              }}
+                              datesWithData={[]}
+                              className="w-full"
+                            />
                           </div>
                         </div>
                       )}
