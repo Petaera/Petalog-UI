@@ -128,12 +128,14 @@ export function Layout({ children, selectedLocation, onLocationChange }: LayoutP
             // Use the IN clause to get all locations
             query = query.in('id', Array.from(allLocationIds));
             console.log('🔄 Layout: Applied comprehensive filter for', allLocationIds.size, 'locations');
+          } else if (user.own_id) {
+            // Fallback to own_id if available
+            query = query.eq('own_id', user.own_id);
+            console.log('🔄 Layout: Applied own_id fallback filter:', user.own_id);
           } else {
-            // Fallback to own_id if no locations found
-            if (user.own_id) {
-              query = query.eq('own_id', user.own_id);
-              console.log('🔄 Layout: Applied own_id fallback filter:', user.own_id);
-            }
+            // No associations: explicitly return no results
+            query = query.eq('id', 'no-access');
+            console.log('🔒 Layout: Owner has no associated locations yet; hiding all');
           }
         } else if ((user.role === 'manager' || user.role === 'worker') && user.assigned_location) {
           query = query.eq('id', user.assigned_location);

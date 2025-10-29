@@ -408,12 +408,14 @@ export default function LocationPartnershipsPage() {
             // Use the IN clause to get all locations
             locationQuery = locationQuery.in('id', Array.from(allLocationIds));
             console.log('🔄 Applied comprehensive filter for', allLocationIds.size, 'locations');
-          } else {
+          } else if (user.own_id) {
             // Fallback to own_id if no locations found
-            if (user.own_id) {
-              locationQuery = locationQuery.eq('own_id', user.own_id);
-              console.log('🔄 Applied own_id fallback filter:', user.own_id);
-            }
+            locationQuery = locationQuery.eq('own_id', user.own_id);
+            console.log('🔄 Applied own_id fallback filter:', user.own_id);
+          } else {
+            // No associations: explicitly return no results
+            locationQuery = locationQuery.eq('id', 'no-access');
+            console.log('🔒 Owner has no associated locations yet; hiding all');
           }
         } else if (user.role === 'manager' && user.assigned_location) {
           locationQuery = locationQuery.eq('id', user.assigned_location);

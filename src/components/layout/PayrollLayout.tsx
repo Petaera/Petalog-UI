@@ -171,6 +171,8 @@ const PayrollLayout: React.FC = () => {
             query = query.in('id', Array.from(allLocationIds));
           } else if (user.own_id) {
             query = query.eq('own_id', user.own_id);
+          } else {
+            query = query.eq('id', 'no-access');
           }
         } else if (user.role === 'manager' && user.assigned_location) {
           query = query.eq('id', user.assigned_location);

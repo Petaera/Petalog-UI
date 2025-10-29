@@ -187,6 +187,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         status: true, // New users are active by default
       };
 
+      // For newly created owners, set own_id to their user id for legacy filtering
+      if (role === 'owner') {
+        userInsertData.own_id = authData.user.id;
+      }
+
       // Add assigned_location for managers and workers
       if ((role === 'manager' || role === 'worker') && location) {
         userInsertData.assigned_location = location;
@@ -209,7 +214,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           email,
           role,
           assigned_location: role === 'manager' ? location : undefined,
-          own_id: undefined,
+          own_id: role === 'owner' ? authData.user.id : undefined,
           first_name: userData?.first_name,
           last_name: userData?.last_name,
           phone: userData?.phone,
