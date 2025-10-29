@@ -22,6 +22,34 @@ import {
 
 // Fallback demo data removed; data will be fetched from Supabase
 
+// Helper function to check if a user has access to a location
+const checkLocationAccess = async (userId: string, locationId: string) => {
+  try {
+    // Check if user is assigned to this location directly
+    const { data: userData } = await supabase
+      .from('users')
+      .select('assigned_location')
+      .eq('id', userId)
+      .single();
+
+    if (userData?.assigned_location === locationId) {
+      return true;
+    }
+
+    // Check if user has partnership access
+    const { data: partnershipData } = await supabase
+      .from('location_owners')
+      .select('*')
+      .eq('owner_id', userId)
+      .eq('location_id', locationId);
+
+    return partnershipData && partnershipData.length > 0;
+  } catch (error) {
+    console.error('Error checking location access:', error);
+    return false;
+  }
+};
+
 export default function ManagerAccess({ selectedLocation }: { selectedLocation?: string }) {
   const { signup, user } = useAuth();
   const [showSignupDialog, setShowSignupDialog] = useState(false);
@@ -150,8 +178,23 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
       if (!user) return;
       setListLoading(true);
       try {
-        // Build base query scoped by location if provided/selected
-        const locationId = selectedLocation || formData.assignedLocation || undefined;
+        // Enforce location-based filtering
+        const locationId = selectedLocation || formData.assignedLocation;
+        if (!locationId) {
+          toast.error('Please select a location');
+          setListLoading(false);
+          return;
+        }
+
+        // For non-owner users, validate they can access this location
+        if (user.role !== 'owner') {
+          const canAccess = await checkLocationAccess(user.id, locationId);
+          if (!canAccess) {
+            toast.error('You do not have access to this location');
+            setListLoading(false);
+            return;
+          }
+        }
 
         // Attempt to select with name columns; if they don't exist yet, fall back without them
         const runSelect = async (withNames: boolean) => {
@@ -161,8 +204,8 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
               withNames
                 ? 'id, email, role, assigned_location, status, first_name, last_name'
                 : 'id, email, role, assigned_location, status'
-            );
-          if (locationId) q = q.eq('assigned_location', locationId);
+            )
+            .eq('assigned_location', locationId); // Always filter by location
           return await q;
         };
 
@@ -235,6 +278,33 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
     if (!editForm) return;
     try {
       setEditSaving(true);
+
+      // Enforce location-based access
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      // For non-owner users, validate they can access both the current and new locations
+      if (user.role !== 'owner') {
+        const currentLocationId = selectedLocation || formData.assignedLocation;
+        if (!currentLocationId) {
+          throw new Error('No location selected');
+        }
+
+        const canAccessCurrent = await checkLocationAccess(user.id, currentLocationId);
+        if (!canAccessCurrent) {
+          throw new Error('You do not have access to modify users in this location');
+        }
+
+        // If location is being changed, check access to new location
+        if (editForm.assignedLocation && editForm.assignedLocation !== currentLocationId) {
+          const canAccessNew = await checkLocationAccess(user.id, editForm.assignedLocation);
+          if (!canAccessNew) {
+            throw new Error('You do not have access to assign users to the selected location');
+          }
+        }
+      }
+
       const updates: any = {
         role: editForm.role,
         assigned_location: editForm.assignedLocation || null,
@@ -303,6 +373,19 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
     try {
       setStatusUpdating(prev => ({ ...prev, [userId]: true }));
 
+      // Check if user has access to this location
+      const locationId = selectedLocation || formData.assignedLocation;
+      if (!locationId) {
+        throw new Error('No location selected');
+      }
+
+      if (user?.role !== 'owner') {
+        const canAccess = await checkLocationAccess(user?.id || '', locationId);
+        if (!canAccess) {
+          throw new Error('You do not have access to modify users in this location');
+        }
+      }
+
       // Optimistically update UI
       const toLabel = nextActive ? 'Active' : 'Inactive';
       setManagers(prev => prev.map(u => u.id === userId ? { ...u, status: toLabel } : u));
@@ -369,6 +452,15 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
         !formData.phone || !formData.assignedLocation || !formData.password || !formData.confirmPassword) {
       toast.error('Please fill in all required fields');
       return;
+    }
+
+    // Enforce location-based access for creating managers
+    if (user?.role !== 'owner') {
+      const canAccess = await checkLocationAccess(user?.id || '', formData.assignedLocation);
+      if (!canAccess) {
+        toast.error('You do not have permission to create managers for this location');
+        return;
+      }
     }
 
     if (formData.password !== formData.confirmPassword) {
@@ -446,14 +538,45 @@ export default function ManagerAccess({ selectedLocation }: { selectedLocation?:
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <Users className="h-6 w-6 text-primary" />
-              <h1 className="text-2xl font-bold">Manager Access Settings</h1>
+              <div>
+                <h1 className="text-2xl font-bold">Manager Access Settings</h1>
+                {selectedLocation && (
+                  <p className="text-sm text-muted-foreground">
+                    Managing staff for location: {getLocationName(selectedLocation)}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
+          {(!selectedLocation && locations.length > 0) && (
+            <div className="flex items-center gap-2">
+              <Select 
+                value={formData.assignedLocation} 
+                onValueChange={(value) => handleInputChange('assignedLocation', value)}
+              >
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Select location" />
+                </SelectTrigger>
+                <SelectContent>
+                  {locations.map((location) => (
+                    <SelectItem key={location.id} value={location.id}>
+                      {location.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           
           <div className="flex items-center gap-2">
             <Dialog open={showSignupDialog} onOpenChange={setShowSignupDialog}>
               <DialogTrigger asChild>
-                <Button variant="default" size="sm">
+                <Button 
+                  variant="default" 
+                  size="sm" 
+                  disabled={!selectedLocation && !formData.assignedLocation}
+                  title={!selectedLocation && !formData.assignedLocation ? 'Please select a location first' : ''}
+                >
                   <Plus className="h-4 w-4 mr-2" />
                   Add Manager
                 </Button>
