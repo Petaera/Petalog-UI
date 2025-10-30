@@ -357,7 +357,6 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
     }
   };
 
-  // COMMENTED OUT: Handle enhanced workshop addition (Supabase integration)
   // const handleAddWorkshop = async () => {
   //   if (!newWorkshopName.trim()) {
   //     toast.error("Please enter a workshop name");
@@ -419,23 +418,44 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
       toast.error("Please enter a workshop name");
       return;
     }
-
-    const validDiscounts = workshopVehicleDiscounts.filter(wv => {
-      const discount = parseFloat(wv.discount);
-      return !isNaN(discount);
-    });
-
-    if (validDiscounts.length === 0) {
-      toast.error("Please enter at least one valid discount");
+    if (!currentLocationId) {
+      toast.error("Location not selected");
       return;
     }
 
-    // Mock success for testing
-    toast.success(`Workshop added successfully with ${validDiscounts.length} vehicle types! (Mock data)`);
-    setAddWorkshopDialogOpen(false);
-    setNewWorkshopName('');
-    setWorkshopVehicleDiscounts([]);
-    setNewWorkshopVehicleType('');
+    setAddingWorkshop(true);
+    try {
+      const dataToInsert = validDiscounts.map(wv => ({
+        WORKSHOP: newWorkshopName.trim().toUpperCase(),
+        VEHICLE: wv.vehicle.trim().toUpperCase(),
+        Discount: parseFloat(wv.discount),
+        location_id: currentLocationId,
+        "Created at": new Date().toISOString()
+      }));
+
+      const { error } = await supabase
+        .from('workshop_prices')
+        .insert(dataToInsert);
+
+      if (error) {
+        console.error('Add workshop error:', error);
+        toast.error(`Failed to add workshop: ${error.message}`);
+        return;
+      }
+
+      toast.success(`Workshop added successfully with ${dataToInsert.length} vehicle types!`);
+      setAddWorkshopDialogOpen(false);
+      setNewWorkshopName('');
+      setWorkshopVehicleDiscounts([]);
+      setNewWorkshopVehicleType('');
+      await refreshData();
+    } catch (error) {
+      console.error('Add workshop error:', error);
+      toast.error("Failed to add workshop");
+    } finally {
+      setAddingWorkshop(false);
+    }
+
   };
 
   // Open edit dialog for service

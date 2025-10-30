@@ -241,6 +241,8 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
   const [latestVisitSummary, setLatestVisitSummary] = useState<any | null>(null);
   const [latestVisits, setLatestVisits] = useState<any[]>([]);
   const [visitsExpanded, setVisitsExpanded] = useState(false);
+  // Stats for visits
+  const [visitStats, setVisitStats] = useState<{ avgDaysBetween: number | null, totalAmount: number }>({ avgDaysBetween: null, totalAmount: 0 });
 
   // Custom entry date and time
   const [customEntryDate, setCustomEntryDate] = useState(() => {
@@ -894,74 +896,150 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
   useEffect(() => {
     let cancelled = false;
     const fetchVisits = async () => {
-      const plate = vehicleNumber.trim();
+      const normalizePlate = (plate: string) => plate.toUpperCase().replace(/\s|-/g, '');
+      const plate = normalizePlate(vehicleNumber);
+      
+      // Reset states if vehicle number is too short
       if (!plate || plate.length < 3) {
-        if (!cancelled) setVisitCount(0);
+        if (!cancelled) {
+          setVisitCount(0);
+          setVisitStats({ avgDaysBetween: null, totalAmount: 0 });
+          setLatestVisitSummary(null);
+          setLatestVisits([]);
+        }
         return;
       }
+      
       try {
+        console.log('🔍 Fetching visits for plate:', plate);
+        
         // Resolve vehicle_id; if found, count by vehicle_id, else fallback to vehicle_number
         const { data: veh, error: vehErr } = await supabase
           .from('vehicles')
           .select('id')
           .eq('number_plate', plate)
           .maybeSingle();
+          
         if (vehErr && vehErr.code !== 'PGRST116') {
           console.warn('Visit count vehicles lookup error:', vehErr);
         }
 
-        let manualCount = 0;
-        const base = supabase.from('logs-man').select('id', { count: 'exact', head: true });
-        const withLocation = selectedLocation && selectedLocation.trim() !== ''
-          ? (q: any) => q.eq('location_id', selectedLocation)
-          : (q: any) => q;
+        console.log('🚗 Found vehicle:', veh);
 
-        if (veh?.id) {
-          const { count, error } = await withLocation(base)
-            .or(`vehicle_id.eq.${veh.id},vehicle_number.ilike.%${plate}%`);
-          if (!error) manualCount = count || 0; else console.warn('Manual visit count error (by id or ilike number):', error);
-        } else {
-          const { count, error } = await withLocation(base)
-            .ilike('vehicle_number', `%${plate}%`);
-          if (!error) manualCount = count || 0; else console.warn('Manual visit count error (by ilike number):', error);
+        // Build query based on location
+        let logsQuery = supabase.from('logs-man').select('*');
+        
+        // Apply location filter if selected
+        if (selectedLocation && selectedLocation.trim() !== '') {
+          logsQuery = logsQuery.eq('location_id', selectedLocation);
         }
-
-        if (!cancelled) setVisitCount(manualCount);
-        // Also fetch latest visit summary and latest 5 visits
-        try {
-          // Query latest single visit for summary
-          const { data: latestSingle, error: singleErr } = await withLocation(
-            supabase.from('logs-man').select('created_at, service, Amount').ilike('vehicle_number', `%${plate}%`).order('created_at', { ascending: false }).limit(1)
-          );
-          if (!singleErr && latestSingle && Array.isArray(latestSingle) && latestSingle.length > 0) {
-            setLatestVisitSummary(latestSingle[0]);
-          } else {
+        
+        // Apply vehicle filter
+        if (veh?.id) {
+          logsQuery = logsQuery.or(`vehicle_id.eq.${veh.id},vehicle_number.eq.${plate}`);
+        } else {
+          logsQuery = logsQuery.eq('vehicle_number', plate);
+        }
+        
+        // Fetch all visits
+        const { data: allVisits, error: allErr } = await logsQuery.order('created_at', { ascending: false });
+        
+        if (allErr) {
+          console.warn('Error fetching visits:', allErr);
+          if (!cancelled) {
+            setVisitCount(0);
+            setVisitStats({ avgDaysBetween: null, totalAmount: 0 });
             setLatestVisitSummary(null);
-          }
-
-          // Query latest 5 visits
-          const { data: latestFive, error: fiveErr } = await withLocation(
-            supabase.from('logs-man').select('id, created_at, service, Amount, payment_mode, Location').ilike('vehicle_number', `%${plate}%`).order('created_at', { ascending: false }).limit(5)
-          );
-          if (!fiveErr && latestFive) {
-            setLatestVisits(latestFive);
-          } else {
             setLatestVisits([]);
           }
-        } catch (e) {
-          console.warn('Error fetching latest visits details:', e);
+          return;
+        }
+
+        console.log('📊 Fetched visits:', allVisits?.length || 0);
+
+        if (cancelled) return;
+
+        // Set visit count
+        const manualCount = allVisits?.length || 0;
+        setVisitCount(manualCount);
+
+        // Calculate stats
+        let avgDaysBetween: number | null = null;
+        let totalAmount = 0;
+        
+        if (allVisits && allVisits.length > 0) {
+          // Calculate total amount (works for any number of visits)
+          totalAmount = allVisits.reduce((sum, v) => {
+            const amount = typeof v.Amount === 'number' ? v.Amount : (parseFloat(v.Amount) || 0);
+            return sum + amount;
+          }, 0);
+
+          // Calculate average days between visits (only if more than 1 visit)
+          if (allVisits.length > 1) {
+            const sorted = allVisits
+              .map(v => ({ ...v, created_at: new Date(v.created_at) }))
+              .sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
+            
+            let totalDays = 0;
+            for (let i = 1; i < sorted.length; i++) {
+              const diff = Math.abs((sorted[i - 1].created_at.getTime() - sorted[i].created_at.getTime()) / (1000 * 60 * 60 * 24));
+              totalDays += diff;
+            }
+            avgDaysBetween = totalDays / (sorted.length - 1);
+          }
+          // For single visit, avgDaysBetween remains null (will show "—" in UI)
+
+          // Set latest visit summary (first item in sorted array)
+          setLatestVisitSummary({
+            created_at: allVisits[0].created_at,
+            service: allVisits[0].service,
+            Amount: allVisits[0].Amount
+          });
+
+          // Set latest 5 visits
+          setLatestVisits(allVisits.slice(0, 5).map(v => ({
+            id: v.id,
+            created_at: v.created_at,
+            service: v.service,
+            Amount: v.Amount,
+            payment_mode: v.payment_mode,
+            Location: v.Location
+          })));
+        } else {
           setLatestVisitSummary(null);
           setLatestVisits([]);
         }
+
+        console.log('📈 Stats calculated and being set:', { 
+          avgDaysBetween, 
+          totalAmount, 
+          visitCount: manualCount,
+          willSetLatestVisit: allVisits && allVisits.length > 0,
+          latestVisitsCount: allVisits?.length || 0,
+          firstVisitData: allVisits && allVisits.length > 0 ? {
+            created_at: allVisits[0].created_at,
+            service: allVisits[0].service,
+            amount: allVisits[0].Amount
+          } : null
+        });
+        setVisitStats({ avgDaysBetween, totalAmount });
+        
+        console.log('📊 State updates triggered - stats, visitCount, latestVisitSummary, and latestVisits should update');
+
       } catch (e) {
-        console.warn('Visit count error:', e);
-        if (!cancelled) setVisitCount(0);
+        console.error('❌ Visit count error:', e);
+        if (!cancelled) {
+          setVisitCount(0);
+          setVisitStats({ avgDaysBetween: null, totalAmount: 0 });
+          setLatestVisitSummary(null);
+          setLatestVisits([]);
+        }
       }
     };
 
     const t = setTimeout(fetchVisits, 300);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [vehicleNumber]);
+  }, [vehicleNumber, selectedLocation]);
 
   // Auto-fill customer and vehicle brand/model details from most recent manual log
   useEffect(() => {
@@ -2370,9 +2448,23 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                   </span>
                 </div>
               )}
-              {/* Latest visit summary and expandable list */}
+              {/* Latest visit summary, stats, and expandable list */}
               {vehicleNumber && (
                 <div className="mt-2">
+                  {/* Stats Section */}
+                  <div className="mb-2 p-3 bg-muted/10 border rounded-md flex flex-col gap-2">
+                    <div className="flex gap-6">
+                      <div className="flex flex-col">
+                        <span className="text-xs text-muted-foreground">Avg. days between visits</span>
+                        <span className="text-sm font-semibold text-foreground">{visitStats.avgDaysBetween !== null ? visitStats.avgDaysBetween.toFixed(1) : '—'}</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-xs text-muted-foreground">Total amount spent</span>
+                        <span className="text-sm font-semibold text-foreground">₹{visitStats.totalAmount.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Latest visit summary */}
                   {latestVisitSummary ? (
                     <div className="p-3 bg-background border rounded-md shadow-sm">
                       <div className="flex items-start justify-between gap-4">

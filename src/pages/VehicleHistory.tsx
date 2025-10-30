@@ -42,6 +42,7 @@ interface VehicleStats {
   totalSpent: number;
   averageService: number;
   daysSinceLast: number;
+  averageDaysBetweenVisits: number;
 }
 
 interface CustomerDetails {
@@ -69,10 +70,11 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
   const [modelLoading, setModelLoading] = useState(false);
   const [vehicleHistory, setVehicleHistory] = useState<VehicleHistory[]>([]);
   const [vehicleStats, setVehicleStats] = useState<VehicleStats>({
-    totalVisits: 7,
-    totalSpent: 3200,
-    averageService: 457,
-    daysSinceLast: 12
+    totalVisits: 0,
+    totalSpent: 0,
+    averageService: 0,
+    daysSinceLast: 0,
+    averageDaysBetweenVisits: 0
   });
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
@@ -257,6 +259,20 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
         const totalSpent = processedHistory.reduce((sum, visit) => sum + visit.amount, 0);
         const averageService = totalSpent / totalVisits;
         
+        // Sort visits by date ascending to calculate days between visits
+        const sortedVisits = [...processedHistory].sort((a, b) => 
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+
+        // Calculate average days between visits
+        let totalDaysBetweenVisits = 0;
+        for (let i = 1; i < sortedVisits.length; i++) {
+          const currentVisit = new Date(sortedVisits[i].created_at);
+          const previousVisit = new Date(sortedVisits[i - 1].created_at);
+          totalDaysBetweenVisits += Math.floor((currentVisit.getTime() - previousVisit.getTime()) / (1000 * 60 * 60 * 24));
+        }
+        const averageDaysBetweenVisits = totalVisits > 1 ? Math.round(totalDaysBetweenVisits / (totalVisits - 1)) : 0;
+        
         // Calculate days since last visit
         const lastVisit = new Date(processedHistory[0].created_at);
         const today = new Date();
@@ -266,7 +282,8 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
           totalVisits,
           totalSpent,
           averageService,
-          daysSinceLast
+          daysSinceLast,
+          averageDaysBetweenVisits
         });
 
         console.log('📊 Vehicle statistics calculated:', {
@@ -276,12 +293,13 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
           daysSinceLast
         });
       } else {
-        // If no data found, use default stats for demo
+        // If no data found, reset stats to zero
         setVehicleStats({
-          totalVisits: 7,
-          totalSpent: 3200,
-          averageService: 457,
-          daysSinceLast: 12
+          totalVisits: 0,
+          totalSpent: 0,
+          averageService: 0,
+          daysSinceLast: 0,
+          averageDaysBetweenVisits: 0
         });
       }
 
@@ -648,7 +666,7 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
       )}
 
       {/* Vehicle Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="text-center">
@@ -670,6 +688,14 @@ export default function VehicleHistory({ selectedLocation }: VehicleHistoryProps
             <div className="text-center">
               <p className="text-2xl font-bold text-success">₹{Math.round(vehicleStats.averageService)}</p>
               <p className="text-sm text-muted-foreground">Average Service</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-blue-500">{vehicleStats.averageDaysBetweenVisits}</p>
+              <p className="text-sm text-muted-foreground">Avg. Days Between Visits</p>
             </div>
           </CardContent>
         </Card>
