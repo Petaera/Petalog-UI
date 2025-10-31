@@ -127,6 +127,10 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
 
   const currentLocationId = locationId;
 
+  // Default Service Settings state
+  const [defaultServices, setDefaultServices] = useState<Record<string, string>>({});
+  const [savingDefaults, setSavingDefaults] = useState(false);
+
   // Helper: Normalize service name for deduplication
   const normalizeService = (service: string) => {
     if (!service) return '';
@@ -219,6 +223,102 @@ export default function PriceSettings({ locationId }: { locationId: string }) {
     setOriginalVehicleNames(originalNames);
     setOriginalServiceNames(originalServiceNames);
   };
+  // Fetch default services for the current location
+const fetchDefaultServices = async () => {
+  if (!currentLocationId) return;
+  
+  try {
+    const { data, error } = await supabase
+      .from('Service_prices')
+      .select('VEHICLE, SERVICE')
+      .eq('locationid', currentLocationId)
+      .eq('default_service', 1);
+
+    if (error) {
+      console.error('Error fetching default services:', error);
+      return;
+    }
+
+    console.log('Fetched default services:', data);
+
+    const defaults: Record<string, string> = {};
+    data?.forEach(item => {
+      const normVehicle = normalizeVehicle(item.VEHICLE);
+      const normService = normalizeService(item.SERVICE);
+      defaults[normVehicle] = normService;
+      
+      console.log(`Mapped: ${item.VEHICLE} -> ${normVehicle} = ${item.SERVICE} -> ${normService}`);
+    });
+  
+    setDefaultServices(defaults);
+  } catch (error) {
+    console.error('Error fetching default services:', error);
+  }
+};
+  // Save default service for a vehicle type
+const saveDefaultService = async (vehicle: string, service: string) => {
+  if (!currentLocationId) {
+    toast.error("Location not selected");
+    return;
+  }
+
+  setSavingDefaults(true);
+  try {
+    // Get the original names from the database
+    const originalVehicleName = originalVehicleNames[vehicle] || vehicle;
+    const originalServiceName = originalServiceNames[service] || service;
+
+    console.log('Setting default:', {
+      normalizedVehicle: vehicle,
+      originalVehicle: originalVehicleName,
+      normalizedService: service,
+      originalService: originalServiceName,
+      locationId: currentLocationId
+    });
+
+    // First, unset any existing default for this vehicle type and location
+    // We need to match against ALL possible vehicle name variations for this normalized vehicle
+    const { error: unsetError } = await supabase
+      .from('Service_prices')
+      .update({ default_service: 0 })
+      .ilike('VEHICLE', originalVehicleName) // Use original name with case-insensitive match
+      .eq('locationid', currentLocationId);
+
+    if (unsetError) {
+      console.error('Unset error:', unsetError);
+      throw unsetError;
+    }
+
+    // Then set the new default using original names
+    const { data: updateData, error: setError } = await supabase
+      .from('Service_prices')
+      .update({ default_service: 1 })
+      .ilike('SERVICE', originalServiceName) // Use original service name
+      .ilike('VEHICLE', originalVehicleName) // Use original vehicle name
+      .eq('locationid', currentLocationId)
+      .select(); // Return updated rows for debugging
+
+    if (setError) {
+      console.error('Set error:', setError);
+      throw setError;
+    }
+
+    console.log('Updated rows:', updateData);
+
+    if (!updateData || updateData.length === 0) {
+      toast.error("No matching records found to update");
+      return;
+    }
+
+    setDefaultServices({ ...defaultServices, [vehicle]: service });
+    toast.success(`Default service set for ${originalVehicleName}`);
+  } catch (error) {
+    console.error('Error saving default service:', error);
+    toast.error("Failed to save default service");
+  } finally {
+    setSavingDefaults(false);
+  }
+};
 
   // Process workshop prices into matrix format
   const processWorkshopPricesToMatrix = (rawData: WorkshopPrice[]) => {
@@ -1068,6 +1168,8 @@ const saveServiceEdits = async () => {
       
       setWorkshopPrices(dummyWorkshopPrices);
       processWorkshopPricesToMatrix(dummyWorkshopPrices);
+      // Fetch default services
+      await fetchDefaultServices();
     } catch (error) {
       setError('Failed to fetch data');
     } finally {
@@ -1961,6 +2063,69 @@ const saveServiceEdits = async () => {
           )}
         </CardContent>
       </Card>
+      {/* Default Service Settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Settings className="h-5 w-5" />
+              Default Service Settings
+          </CardTitle>
+          <p className="text-sm text-muted-foreground mt-2">
+            Set the default service for each vehicle type. This will be pre-selected when creating new bookings.
+          </p>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex items-center justify-center p-8">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <span className="ml-2">Loading default services...</span>
+            </div>
+          ) : vehicleList.length === 0 ? (
+            <div className="text-center p-8 text-muted-foreground">
+              <Settings className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No vehicle types found</p>
+              <p className="text-sm mt-2">Add services first to configure defaults</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {vehicleList.map(vehicle => (
+                <div key={vehicle} className="flex items-center gap-4 p-4 border rounded-lg">
+                  <div className="flex-1">
+                    <Label className="text-base font-semibold">
+                      {originalVehicleNames[vehicle] || vehicle}
+                    </Label>
+                    <p className="text-sm text-muted-foreground mt-1">
+                    Select the default service for this vehicle type
+                    </p>
+                  </div>
+                  <div className="flex-1">
+                    <select
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      value={defaultServices[vehicle] || ''}
+                      onChange={(e) => saveDefaultService(vehicle, e.target.value)}
+                      disabled={savingDefaults}
+                    >
+                    <option value="">Select default service...</option>
+                      {serviceList
+                        .filter(service => serviceMatrix[service][vehicle] > 0)
+                        .map(service => (
+                          <option key={service} value={service}>
+                            {originalServiceNames[service] || service} (₹{serviceMatrix[service][vehicle]})
+                          </option>
+                      ))}
+                    </select>
+                    </div>
+                    {defaultServices[vehicle] && (
+                      <Badge variant="secondary" className="whitespace-nowrap">
+                        Default: {originalServiceNames[defaultServices[vehicle]] || defaultServices[vehicle]}
+                      </Badge>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
     </div>
   );
 }
