@@ -274,6 +274,9 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
   const [selectedSubscription, setSelectedSubscription] = useState<any | null>(null);
   const [useSubscriptionForRedemption, setUseSubscriptionForRedemption] = useState(false);
 
+  // Add this near other state declarations (around line 130)
+  const [defaultServicesMap, setDefaultServicesMap] = useState<Record<string, string>>({});
+
   // Reset UPI account selection when payment mode changes
   useEffect(() => {
     if (paymentMode !== 'upi') {
@@ -892,6 +895,15 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
     setDiscount(String(d));
   }, [entryType, workshop, vehicleType, workshopPriceMatrix]);
 
+  // Fetch default services when location changes
+  useEffect(() => {
+    if (selectedLocation) {
+      fetchDefaultServicesForLocation();
+    } else {
+      setDefaultServicesMap({});
+    }
+  }, [selectedLocation]);
+
   // Fetch number of manual visits from logs-man for the typed vehicle number
   useEffect(() => {
     let cancelled = false;
@@ -1339,6 +1351,40 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
     } catch (error) {
       console.warn('❌ Error fetching usable subscriptions:', error);
       return [];
+    }
+  };
+
+  // Fetch default services for the current location
+  const fetchDefaultServicesForLocation = async () => {
+    if (!selectedLocation) return;
+  
+    try {
+      const { data, error } = await supabase
+        .from('Service_prices')
+        .select('VEHICLE, SERVICE')
+        .eq('locationid', selectedLocation)
+        .eq('default_service', 1);
+
+      if (error) {
+        console.error('Error fetching default services:', error);
+        return;
+      }
+
+      console.log('📋 Fetched default services for location:', data);
+
+      // Create a map of normalized vehicle type -> default service
+      const defaultsMap: Record<string, string> = {};
+      data?.forEach(item => {
+        const normalizedVehicle = item.VEHICLE.trim().toUpperCase();
+        const normalizedService = item.SERVICE.trim().toUpperCase();
+        defaultsMap[normalizedVehicle] = normalizedService;
+      
+        console.log(`Mapped default: ${normalizedVehicle} -> ${normalizedService}`);
+      });
+    
+      setDefaultServicesMap(defaultsMap);
+    } catch (error) {
+      console.error('Error fetching default services:', error);
     }
   };
 
@@ -2643,8 +2689,44 @@ export default function OwnerEntry({ selectedLocation }: OwnerEntryProps) {
                     value={vehicleType}
                     onValueChange={(val) => {
                       setVehicleType(val);
-                      // ---------- Reset services and preselect FULL WASH-----------
-                      setService(["FULL WASH"]);
+                      // Check if there's a default service for this vehicle type
+                      const normalizedVehicleType = val.trim().toUpperCase();
+                      const defaultService = defaultServicesMap[normalizedVehicleType];
+
+                      console.log('🔍 Looking for default service:', {
+                        vehicleType: normalizedVehicleType,
+                        foundDefault: defaultService,
+                        availableDefaults: Object.keys(defaultServicesMap)
+                      });
+                      if (defaultService) {
+                        // Check if the default service is available in the current service options
+                        const availableServices = priceMatrix
+                          .filter(row => row.VEHICLE && row.VEHICLE.trim().toUpperCase() === normalizedVehicleType)
+                          .filter(row => {
+                            if (!wheelCategory) return true;
+                            if (!(row as any).type) return true;
+                            return doesTypeMatchWheelCategory((row as any).type, wheelCategory);
+                          })
+                          .map(row => row.SERVICE.trim().toUpperCase());
+        
+                        if (availableServices.includes(defaultService)) {
+                          console.log('✅ Setting default service:', defaultService);
+                          // Find the original casing of the service name
+                          const originalService = priceMatrix.find(
+                            row => row.SERVICE.trim().toUpperCase() === defaultService
+                          )?.SERVICE || defaultService;
+          
+                          setService([originalService]);
+                          toast.success(`Default service selected: ${originalService}`);
+                        } else {
+                          console.log('⚠️ Default service not available for current filters');
+                          setService(["FULL WASH"]); // Fallback to FULL WASH
+                        }
+                      } else {
+                        console.log('ℹ️ No default service configured for this vehicle type');
+                        setService(["FULL WASH"]); // Fallback to FULL WASH
+                      }
+                      
                     }}
                   >
                     <SelectTrigger>
