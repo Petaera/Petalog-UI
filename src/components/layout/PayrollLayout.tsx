@@ -30,7 +30,8 @@ import {
   MapPin,
   ChevronDown,
   LogOut,
-  User
+  User,
+  Package
 } from 'lucide-react';
 
 const sidebarItems = [
@@ -64,6 +65,14 @@ const sidebarItems = [
     icon: Receipt,
     path: '/payroll/expenses',
     description: 'Track Costs',
+    roles: ['owner', 'manager']
+  },
+  {
+    id: 'stock',
+    label: 'Stock Management',
+    icon: Package,
+    path: '/payroll/stock',
+    description: 'Manage Inventory',
     roles: ['owner', 'manager']
   },
   {

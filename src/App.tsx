@@ -44,6 +44,7 @@ import PayrollDashboard from "./pages/payroll_pages/Dashboard";
 import PayrollStaffPage from "./pages/payroll_pages/StaffPage";
 import PayrollAttendancePage from "./pages/payroll_pages/AttendancePage";
 import PayrollExpensesPage from "./pages/payroll_pages/ExpensesPage";
+import PayrollStockManagementPage from "./pages/payroll_pages/StockManagementPage";
 import PayrollReportsPage from "./pages/payroll_pages/ReportsPage";
 import PayrollSettingsPage from "./pages/payroll_pages/SettingsPage";
 import { ProtectedPayrollRoute } from "./components/ProtectedPayrollRoute";
@@ -395,6 +396,7 @@ const App = () => {
                 <Route path="staff" element={<PayrollStaffPage />} />
                 <Route path="attendance" element={<PayrollAttendancePage />} />
                 <Route path="expenses" element={<PayrollExpensesPage />} />
+                <Route path="stock" element={<PayrollStockManagementPage />} />
                 <Route 
                   path="reports" 
                   element={
